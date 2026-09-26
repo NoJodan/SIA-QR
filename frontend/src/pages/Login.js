@@ -1,0 +1,30 @@
+import React from "react";
+
+export default function Login() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const error = urlParams.get("error");
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-md border border-gray-100 flex flex-col items-center space-y-6">
+        <h2 className="text-2xl font-bold text-gray-800">SIA-QR Login</h2>
+        <p className="text-sm text-gray-600 text-center">
+          Accede únicamente con tu cuenta de correo institucional (@ut.edu.co).
+        </p>
+
+        {error === "domain_not_allowed" && (
+          <div className="w-full p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded">
+            Error: Solo se permiten correos del dominio institucional autorizado.
+          </div>
+        )}
+
+        <a
+          href="http://localhost:8000/api/auth/google/login/"
+          className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-center shadow transition-colors"
+        >
+          Iniciar sesión con Google Institucional
+        </a>
+      </div>
+    </div>
+  );
+}
