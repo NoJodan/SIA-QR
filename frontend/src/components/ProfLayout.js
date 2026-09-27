@@ -9,26 +9,36 @@ export default function ProfLayout({ user, onLogout, onRefreshUser }) {
   const [activeTab, setActiveTab] = useState("mis-cursos");
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [selectedClass, setSelectedClass] = useState(null);
+  const [selectedInitialSession, setSelectedInitialSession] = useState(null);
 
   const selectGroup = (group) => {
     setSelectedGroup(group);
     setSelectedClass(null);
+    setSelectedInitialSession(null);
     setActiveTab("curso-detalle");
   };
 
-  const selectClass = (classItem) => {
+  const selectClass = (classItem, initialSession = null) => {
     setSelectedClass(classItem);
+    // Sesión B3 con attend_url mostrable (clase inmediata): se hidrata en
+    // ClaseDetalle antes del primer ensure para evitar el aviso fantasma de
+    // "otro dispositivo". Se valida attend_url + expiración al recibir.
+    const valid =
+      initialSession?.session_id && initialSession?.attend_url ? initialSession : null;
+    setSelectedInitialSession(valid);
     setActiveTab("clase-detalle");
   };
 
   const goToGroups = () => {
     setSelectedGroup(null);
     setSelectedClass(null);
+    setSelectedInitialSession(null);
     setActiveTab("mis-cursos");
   };
 
   const goToGroupDetail = () => {
     setSelectedClass(null);
+    setSelectedInitialSession(null);
     setActiveTab("curso-detalle");
   };
 
@@ -38,7 +48,10 @@ export default function ProfLayout({ user, onLogout, onRefreshUser }) {
       goToGroups();
       return;
     }
-    if (tab === "configuraciones") setSelectedClass(null);
+    if (tab === "configuraciones") {
+      setSelectedClass(null);
+      setSelectedInitialSession(null);
+    }
     setActiveTab(tab);
   };
 
@@ -56,7 +69,13 @@ export default function ProfLayout({ user, onLogout, onRefreshUser }) {
           <CursoDetalle group={selectedGroup} onBack={goToGroups} onSelectClass={selectClass} />
         )}
         {activeTab === "clase-detalle" && selectedGroup && selectedClass && (
-          <ClaseDetalle group={selectedGroup} classItem={selectedClass} onBack={goToGroupDetail} />
+          <ClaseDetalle
+            key={selectedClass.id}
+            group={selectedGroup}
+            classItem={selectedClass}
+            initialSession={selectedInitialSession}
+            onBack={goToGroupDetail}
+          />
         )}
         {activeTab === "configuraciones" && (
           <ProfConfiguraciones key={user?.employee_code} user={user} onSaved={onRefreshUser} />

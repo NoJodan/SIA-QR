@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
-from apps.authentication.models import AuthorizedProfessorEmail, Professor, User
+from apps.authentication.models import AuthorizedProfessorEmail, Professor, Student, User
 
 
 @admin.register(User)
@@ -29,3 +29,9 @@ class ProfessorAdmin(admin.ModelAdmin):
 class AuthorizedProfessorEmailAdmin(admin.ModelAdmin):
     list_display = ["email", "created_at"]
     search_fields = ["email"]
+
+
+@admin.register(Student)
+class StudentAdmin(admin.ModelAdmin):
+    list_display = ["student_code", "document_number", "first_name", "last_name", "created_at"]
+    search_fields = ["student_code", "document_number", "first_name", "last_name"]

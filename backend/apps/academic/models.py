@@ -56,7 +56,7 @@ class ScheduledClass(models.Model):
     start_time = models.DateTimeField()
     duration_minutes = models.PositiveIntegerField()
     qr_duration_minutes = models.PositiveIntegerField(
-        default=15, validators=[MinValueValidator(1), MaxValueValidator(120)]
+        default=10, validators=[MinValueValidator(1), MaxValueValidator(120)]
     )
     modality = models.CharField(max_length=20, choices=ClassModality.choices, default=ClassModality.PRESENTIAL)
     status = models.CharField(max_length=20, choices=ClassStatus.choices, default=ClassStatus.SCHEDULED)

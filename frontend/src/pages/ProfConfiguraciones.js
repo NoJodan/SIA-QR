@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import api from "../services/api";
 
 export default function ProfConfiguraciones({ user, onSaved }) {
   const [employeeCode, setEmployeeCode] = useState(user?.employee_code || "");
@@ -16,22 +17,16 @@ export default function ProfConfiguraciones({ user, onSaved }) {
     setSaved(false);
 
     try {
-      const res = await fetch("http://localhost:8000/api/auth/me/", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ employee_code: employeeCode.trim(), department: department.trim() }),
+      const { data } = await api.patch("/api/auth/me/", {
+        employee_code: employeeCode.trim(),
+        department: department.trim(),
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "No se pudo guardar el perfil");
-      }
+      void data;
 
       setSaved(true);
       if (onSaved) onSaved();
     } catch (err) {
-      setError(err.message);
+      setError(err?.response?.data?.error || err.message);
     } finally {
       setSaving(false);
     }

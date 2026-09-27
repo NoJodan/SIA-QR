@@ -84,3 +84,20 @@ class AuthorizedProfessorEmail(models.Model):
     def __str__(self):
         return self.email
 
+
+class Student(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="student_profile", db_column="user_id")
+    student_code = models.CharField(max_length=50, unique=True)
+    document_number = models.CharField(max_length=50, unique=True)
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    address = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "students"
+
+    def __str__(self):
+        return f"{self.first_name} {self.last_name} ({self.student_code})"
+

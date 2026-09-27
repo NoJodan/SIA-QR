@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+import api from "../services/api";
 
 export default function Profesores() {
   const [emails, setEmails] = useState([]);
@@ -10,16 +11,10 @@ export default function Profesores() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("http://localhost:8000/api/auth/professors-whitelist/", {
-        credentials: "include",
-      });
-      if (!res.ok) {
-        throw new Error("No se pudo cargar la lista de profesores");
-      }
-      const data = await res.json();
+      const { data } = await api.get("/api/auth/professors-whitelist/");
       setEmails(data);
     } catch (err) {
-      setError(err.message || "Error al cargar la lista");
+      setError(err?.response?.data?.error || err.message || "Error al cargar la lista");
     } finally {
       setLoading(false);
     }
@@ -35,22 +30,12 @@ export default function Profesores() {
 
     setError("");
     try {
-      const res = await fetch("http://localhost:8000/api/auth/professors-whitelist/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email: newEmail.trim() }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "No se pudo autorizar el correo");
-      }
+      await api.post("/api/auth/professors-whitelist/", { email: newEmail.trim() });
 
       setNewEmail("");
       loadEmails();
     } catch (err) {
-      setError(err.message);
+      setError(err?.response?.data?.error || err.message);
     }
   };
 
@@ -61,21 +46,11 @@ export default function Profesores() {
 
     setError("");
     try {
-      const res = await fetch("http://localhost:8000/api/auth/professors-whitelist/", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email: emailToDelete }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "No se pudo eliminar el correo");
-      }
+      await api.delete("/api/auth/professors-whitelist/", { data: { email: emailToDelete } });
 
       loadEmails();
     } catch (err) {
-      setError(err.message);
+      setError(err?.response?.data?.error || err.message);
     }
   };
 

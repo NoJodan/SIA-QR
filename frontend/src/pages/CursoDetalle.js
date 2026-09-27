@@ -43,13 +43,41 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
 
   const totalPages = Math.max(1, Math.ceil(count / 10));
 
+  // B3: TTL/título opcionales desde el frontend (el backend usa defaults).
+  const [instantTitle, setInstantTitle] = useState("");
+  const [instantTtl, setInstantTtl] = useState(10);
+
   const handleInstant = async () => {
     setInstantLoading(true);
+    setError("");
     try {
-      await createInstantClass(group.id);
-      await load();
-    } catch {
-      setError("No se pudo crear la clase inmediata.");
+      // B3: crea clase IN_PROGRESS + sesión QR en transacción atómica.
+      const payload = {};
+      if (instantTitle.trim()) payload.title = instantTitle.trim();
+      const ttlNum = Number(instantTtl);
+      if (Number.isFinite(ttlNum) && ttlNum >= 1 && ttlNum <= 120) {
+        payload.qr_duration_minutes = ttlNum;
+      }
+      const data = await createInstantClass(group.id, payload);
+      // Fix aviso fantasma: la B3 devuelve la sesión con attend_url mostrable.
+      // Se pasa al detalle para hidratar el QR antes del primer ensure
+      // (el GET current-session reusado devuelve attend_url null por hash
+      // irreversible). Navegar primero, recargar la lista en segundo plano.
+      if (data?.class && onSelectClass) {
+        const s = data?.session;
+        const initialSession =
+          s?.session_id && s?.attend_url
+            ? { session_id: s.session_id, attend_url: s.attend_url, expires_at: s.expires_at }
+            : null;
+        onSelectClass(data.class, initialSession);
+        load().catch(() => {});
+      } else {
+        await load();
+      }
+    } catch (err) {
+      setError(
+        err?.response?.data?.error || "No se pudo crear la clase inmediata."
+      );
     } finally {
       setInstantLoading(false);
     }
@@ -72,7 +100,25 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
         subtitle={`Grupo ${group.group_code} · ${group.term_period}`}
         onBack={onBack}
       />
-      <div className="flex gap-2 mb-4">
+      <div className="flex flex-wrap gap-2 mb-4 items-end">
+        <input
+          value={instantTitle}
+          onChange={(e) => setInstantTitle(e.target.value)}
+          placeholder="Título inmediata (opcional)"
+          maxLength={150}
+          className="border rounded-lg px-3 py-2 text-sm text-gray-800"
+        />
+        <label className="text-sm text-gray-600">
+          TTL QR (min)
+          <input
+            type="number"
+            min={1}
+            max={120}
+            value={instantTtl}
+            onChange={(e) => setInstantTtl(e.target.value)}
+            className="ml-2 w-20 border rounded-lg px-3 py-2 text-sm text-gray-800"
+          />
+        </label>
         <button
           onClick={handleInstant}
           disabled={instantLoading}
@@ -121,7 +167,7 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
               <button onClick={() => onSelectClass && onSelectClass(c)} className="text-left flex-1">
                 <p className="font-semibold text-gray-800 hover:text-blue-700">{c.title}</p>
                 <p className="text-sm text-gray-500">
-                  {formatBogota(c.start_time)} · {c.duration_minutes} min · QR {c.qr_duration_minutes ?? 15} min
+                  {formatBogota(c.start_time)} · {c.duration_minutes} min · QR {c.qr_duration_minutes ?? 10} min
                 </p>
               </button>
               <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600 whitespace-nowrap">

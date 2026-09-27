@@ -1,8 +1,10 @@
 import React from "react";
+import { API_BASE, googleLoginUrl } from "../services/api";
 
 export default function Login() {
   const urlParams = new URLSearchParams(window.location.search);
   const error = urlParams.get("error");
+  const next = urlParams.get("next");
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
@@ -19,11 +21,12 @@ export default function Login() {
         )}
 
         <a
-          href="http://localhost:8000/api/auth/google/login/"
+          href={googleLoginUrl(next || undefined)}
           className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-center shadow transition-colors"
         >
           Iniciar sesión con Google Institucional
         </a>
+        <p className="text-xs text-gray-400">{API_BASE}</p>
       </div>
     </div>
   );

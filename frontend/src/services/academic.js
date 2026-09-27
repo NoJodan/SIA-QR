@@ -1,5 +1,4 @@
 import api from "./api";
-import { nowBogotaISO } from "../utils/dates";
 
 const unwrap = (data) => (Array.isArray(data) ? { results: data, count: data.length } : data);
 const params = (search, page, pageSize) => {
@@ -39,19 +38,7 @@ export const adminGetGroupClasses = (groupId, search = "", page = 1) =>
 export const adminUpdateGroupClass = (groupId, classId, payload) =>
   api.patch(`/api/academic/admin/groups/${groupId}/classes/${classId}/`, payload).then((r) => r.data);
 
-// Clase al momento: usa el endpoint de creación existente.
-export const createInstantClass = (groupId) => {
-  const hm = new Intl.DateTimeFormat("es-CO", {
-    timeZone: "America/Bogota",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date());
-  return createGroupClass(groupId, {
-    title: `Clase inmediata ${hm}`,
-    start_time: nowBogotaISO(),
-    duration_minutes: 60,
-    qr_duration_minutes: 15,
-    modality: "PRESENTIAL",
-  });
-};
+// Clase al momento: B3 crea ScheduledClass IN_PROGRESS + sesión QR atómica.
+// payload opcional: { title, modality, duration_minutes, qr_duration_minutes }.
+export const createInstantClass = (groupId, payload = {}) =>
+  api.post(`/api/academic/groups/${groupId}/classes/instant/`, payload).then((r) => r.data);

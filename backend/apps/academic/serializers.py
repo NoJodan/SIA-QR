@@ -71,6 +71,12 @@ class ScheduledClassSerializer(serializers.ModelSerializer):
         return value
 
     def validate_start_time(self, value):
+        # m1: normaliza datetimes naive (asume America/Bogota) en vez de
+        # comparar naive vs aware (TypeError -> 500).
+        if value is not None and timezone.is_naive(value):
+            from zoneinfo import ZoneInfo
+
+            value = timezone.make_aware(value, ZoneInfo("America/Bogota"))
         if value < timezone.now() - timezone.timedelta(minutes=5):
             raise serializers.ValidationError("La fecha de inicio no puede estar en el pasado.")
         return value

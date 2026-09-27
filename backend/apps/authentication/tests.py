@@ -22,7 +22,7 @@ class AuthenticationIntegrationTests(TestCase):
 
     def test_me_endpoint_unauthenticated(self):
         response = self.client.get("/api/auth/me/")
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 401)
 
     def test_me_endpoint_authenticated(self):
         self.client.force_login(self.user)
@@ -115,6 +115,8 @@ class ProfessorProfileUpdateTests(TestCase):
         self.assertEqual(self.prof.employee_code, "PROV-000001")
 
     def test_patch_forbidden_for_student(self):
+        # M1: el PATCH de estudiante es el registro de perfil real
+        # (ya no 403). Sin campos de perfil válidos responde 400.
         student = User.objects.create_user(
             email="stu@ut.edu.co", google_sub="sub-stu", role="ROLE_STUDENT"
         )
@@ -124,7 +126,15 @@ class ProfessorProfileUpdateTests(TestCase):
             "/api/auth/me/", {"employee_code": "HACK-1"}, format="json"
         )
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 400)
+        # ...y con datos reales crea el perfil (200).
+        response = self.client.patch(
+            "/api/auth/me/",
+            {"student_code": "EST-1", "document_number": "DOC-1",
+             "first_name": "Est", "last_name": "Uno"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
 
 
 class LogoutRouteTests(TestCase):

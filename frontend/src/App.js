@@ -1,22 +1,20 @@
 import React, { useEffect, useState } from "react";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import Login from "./pages/Login";
+import AttendQR from "./pages/AttendQR";
 import AdminLayout from "./components/AdminLayout";
 import ProfLayout from "./components/ProfLayout";
+import api, { API_BASE } from "./services/api";
 
-function App() {
+function MainApp() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const fetchCurrentUser = () => {
-    fetch("http://localhost:8000/api/auth/me/", {
-      credentials: "include",
-    })
+    api
+      .get("/api/auth/me/")
       .then((res) => {
-        if (res.ok) return res.json();
-        throw new Error("No autenticado");
-      })
-      .then((data) => {
-        setUser(data);
+        setUser(res.data);
         setLoading(false);
       })
       .catch(() => {
@@ -31,12 +29,11 @@ function App() {
 
   const handleLogout = async () => {
     try {
-      await fetch("http://localhost:8000/api/auth/logout/", {
-        method: "POST",
-        credentials: "include",
-      });
+      // api con withXSRFToken: el POST lleva X-CSRFToken (C1).
+      await api.post("/api/auth/logout/");
     } catch (e) {
       // Ignoramos error y limpiamos estado
+      void API_BASE;
     } finally {
       setUser(null);
       window.location.href = "/";
@@ -77,5 +74,16 @@ function App() {
   );
 }
 
-export default App;
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* Ruta pública del estudiante: escaneo QR -> resolve -> login -> marcar */}
+        <Route path="/attend" element={<AttendQR />} />
+        <Route path="*" element={<MainApp />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
 
+export default App;
