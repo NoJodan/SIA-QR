@@ -11,6 +11,16 @@ export default function ProfSidebar({ activeTab, onSelectTab, onLogout, userEmai
 
         <nav className="space-y-1">
           <button
+            onClick={() => onSelectTab && onSelectTab("mis-cursos")}
+            className={`w-full text-left px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
+              activeTab === "mis-cursos" || activeTab === "curso-detalle" || activeTab === "clase-detalle"
+                ? "bg-blue-600 text-white"
+                : "text-gray-300 hover:bg-gray-800 hover:text-white"
+            }`}
+          >
+            Mis Cursos
+          </button>
+          <button
             onClick={() => onSelectTab && onSelectTab("configuraciones")}
             className={`w-full text-left px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
               activeTab === "configuraciones"

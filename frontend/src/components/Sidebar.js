@@ -1,6 +1,10 @@
 import React from "react";
 
 export default function Sidebar({ activeTab, onSelectTab, onLogout, userEmail }) {
+  const tabs = [
+    { id: "profesores", label: "Profesores" },
+    { id: "cursos", label: "Cursos" },
+  ];
   return (
     <aside className="w-64 bg-gray-900 text-gray-200 flex flex-col justify-between min-h-screen p-4">
       <div className="space-y-6">
@@ -10,16 +14,19 @@ export default function Sidebar({ activeTab, onSelectTab, onLogout, userEmail })
         </div>
 
         <nav className="space-y-1">
-          <button
-            onClick={() => onSelectTab && onSelectTab("profesores")}
-            className={`w-full text-left px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
-              activeTab === "profesores"
-                ? "bg-blue-600 text-white"
-                : "text-gray-300 hover:bg-gray-800 hover:text-white"
-            }`}
-          >
-            Profesores
-          </button>
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => onSelectTab && onSelectTab(t.id)}
+              className={`w-full text-left px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
+                activeTab === t.id || (t.id === "cursos" && activeTab === "curso-detalle-admin")
+                  ? "bg-blue-600 text-white"
+                  : "text-gray-300 hover:bg-gray-800 hover:text-white"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </nav>
       </div>
 
