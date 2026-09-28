@@ -128,7 +128,7 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
         </button>
         <button
           onClick={() => setShowCreate(true)}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
+          className="px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] text-white rounded-lg text-sm font-medium"
         >
           📅 Programar
         </button>
@@ -165,7 +165,7 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
           <li key={c.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
             <div className="flex justify-between items-start gap-2">
               <button onClick={() => onSelectClass && onSelectClass(c)} className="text-left flex-1">
-                <p className="font-semibold text-gray-800 hover:text-blue-700">{c.title}</p>
+                <p className="font-semibold text-gray-800 hover:text-[#B3200E]">{c.title}</p>
                 <p className="text-sm text-gray-500">
                   {formatBogota(c.start_time)} · {c.duration_minutes} min · QR {c.qr_duration_minutes ?? 10} min
                 </p>

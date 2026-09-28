@@ -43,7 +43,7 @@ export default function CourseForm({ initialName = "", submitLabel = "Guardar", 
         <button
           type="submit"
           disabled={saving}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
+          className="px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] disabled:opacity-50 text-white rounded-lg text-sm font-medium"
         >
           {saving ? "Guardando..." : submitLabel}
         </button>

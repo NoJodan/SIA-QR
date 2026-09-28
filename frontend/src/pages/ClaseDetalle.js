@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import ProfHeader from "../components/ProfHeader";
 import QrDisplay from "../components/QrDisplay";
 import { getCurrentSession, getSessionAttendances, rotateCurrentSession } from "../services/attendance";
 import { getGroupClass } from "../services/academic";
@@ -68,6 +67,18 @@ function formatStartsIn(totalSeconds) {
     return `${h}h ${String(m % 60).padStart(2, "0")}m`;
   }
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function formatClassStart(isoString) {
+  if (!isoString) return "";
+  return new Intl.DateTimeFormat("es-CO", {
+    timeZone: "America/Bogota",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(isoString));
 }
 
 export default function ClaseDetalle({ group, classItem, initialSession, onBack }) {
@@ -243,54 +254,108 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
   const showQr = phase === "live" && session?.attend_url;
 
   return (
-    <div>
-      <ProfHeader
-        title={classItem.title}
-        subtitle={`${group.course?.name} · Grupo ${group.group_code}`}
-        onBack={onBack}
-      />
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 space-y-2">
-          <p className="text-sm text-gray-500">Inicio</p>
-          <p className="font-semibold text-gray-800">{formatBogota(startTime)}</p>
-          <p className="text-sm text-gray-500 mt-3">Duración</p>
-          <p className="font-semibold text-gray-800">{classItem.duration_minutes} min</p>
-          <p className="text-sm text-gray-500 mt-3">Vida útil del QR</p>
-          <p className="font-semibold text-gray-800">{classItem.qr_duration_minutes ?? 10} min</p>
-          <p className="text-sm text-gray-500 mt-3">Modalidad · Estado</p>
-          <p className="font-semibold text-gray-800">{classItem.modality} · {classStatus}</p>
-          <div className="pt-4">
+    <div className="space-y-6">
+      <header>
+        <button
+          onClick={onBack}
+          className="inline-flex items-center gap-2 text-sm font-semibold text-[#B3200E] hover:text-[#941B0B] mb-4 transition-colors"
+        >
+          <span className="w-6 h-6 rounded-full bg-red-50 flex items-center justify-center text-xs">
+            <i className="fa-solid fa-arrow-left"></i>
+          </span>
+          <span>Volver</span>
+        </button>
+        <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">
+          {classItem.title}
+        </h2>
+        <p className="text-slate-500 font-medium mt-1">
+          {group.course?.name} · Grupo {group.group_code}
+        </p>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <section className="lg:col-span-7 bg-white rounded-3xl p-5 md:p-7 shadow-sm border border-slate-100/80 flex flex-col justify-between gap-6">
+          <div>
+            <div className="flex items-start gap-3 mb-5">
+              <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-[#B3200E] flex-shrink-0 mt-0.5">
+                <i className="fa-regular fa-clock text-sm"></i>
+              </div>
+              <div>
+                <span className="text-[11px] font-bold text-slate-400 tracking-wider uppercase block">
+                  Detalles de la sesión
+                </span>
+                <h3 className="text-xl font-bold text-slate-900">Información de la clase</h3>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <span className="text-[11px] font-bold text-slate-400 tracking-wider block mb-1">INICIO</span>
+                <p className="text-sm font-semibold text-slate-800">{formatClassStart(startTime)}</p>
+              </div>
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <span className="text-[11px] font-bold text-slate-400 tracking-wider block mb-1">DURACIÓN</span>
+                <p className="text-sm font-semibold text-slate-800">{classItem.duration_minutes} min</p>
+              </div>
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <span className="text-[11px] font-bold text-slate-400 tracking-wider block mb-1">VIDA ÚTIL DEL QR</span>
+                <p className="text-sm font-semibold text-slate-800">{classItem.qr_duration_minutes ?? 10} min</p>
+              </div>
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <span className="text-[11px] font-bold text-slate-400 tracking-wider block mb-1">MODALIDAD · ESTADO</span>
+                <p className="text-sm font-bold text-slate-800">{classItem.modality} · {classStatus}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
             {phase === "pending" && (
-              <p className="text-sm text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
-                La clase aún no inicia — el QR aparecerá automáticamente en {formatStartsIn(startsIn)}.
-              </p>
+              <div className="bg-amber-50 border border-amber-100 text-amber-800 text-xs md:text-sm font-medium px-4 py-3 rounded-2xl flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0"></span>
+                <span>La clase aún no inicia — el QR aparecerá automáticamente en {formatStartsIn(startsIn)}.</span>
+              </div>
             )}
             {phase === "live" && (
-              <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">
-                ● QR activo — se genera y renueva solo.
-              </p>
+              <div className="bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs md:text-sm font-medium px-4 py-3 rounded-2xl flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
+                <span><strong>QR activo</strong> — se genera y renueva solo.</span>
+              </div>
             )}
             {phase === "finished" && (
-              <p className="text-sm text-gray-600 bg-gray-100 px-3 py-2 rounded-lg">
+              <div className="bg-gray-100 border border-gray-200 text-gray-700 text-xs md:text-sm font-medium px-4 py-3 rounded-2xl">
                 La clase finalizó — ya no se generan códigos QR.
-              </p>
+              </div>
             )}
             {phase === "loading" && (
-              <p className="text-sm text-gray-500">Conectando con la sesión…</p>
+              <div className="bg-slate-50 border border-slate-100 text-slate-600 text-xs md:text-sm font-medium px-4 py-3 rounded-2xl">
+                Conectando con la sesión…
+              </div>
+            )}
+            {error && (
+              <div className="bg-red-50 border border-red-100 text-red-700 text-xs md:text-sm font-medium px-4 py-3 rounded-2xl flex items-center gap-2">
+                <i className="fa-solid fa-circle-info text-red-500 flex-shrink-0"></i>
+                <span>{error}</span>
+              </div>
             )}
           </div>
-          {error && <p className="text-sm text-red-600 pt-2">{error}</p>}
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center">
+        </section>
+
+        <section className="lg:col-span-5 bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-100/80 flex flex-col items-center justify-between text-center gap-5">
+          <div className="bg-[#B3200E] text-white text-xs font-semibold px-4 py-1.5 rounded-full inline-flex items-center gap-2 shadow-sm">
+            <i className="fa-solid fa-qrcode text-xs"></i>
+            <span>QR de asistencia</span>
+          </div>
+
           {showQr ? (
             <QrDisplay
               attendUrl={session.attend_url}
               expiresAt={session.expires_at}
+              size={180}
               onExpired={() => ensure().catch(() => {})}
             />
           ) : phase === "live" ? (
-            <div className="w-64 min-h-48 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center gap-2 p-4">
-              <p className="text-sm text-gray-500 text-center">
+            <div className="w-full min-h-56 flex flex-col items-center justify-center gap-3 p-4">
+              <p className="text-sm text-slate-500">
                 Sesión activa en otro dispositivo — el QR se muestra donde inició la clase.
               </p>
               <button
@@ -300,54 +365,54 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
               >
                 {rotating ? "Mostrando…" : "Mostrar en este dispositivo"}
               </button>
-              <p className="text-xs text-gray-400 text-center">
-                Rota el QR aquí (revoca el anterior).
-              </p>
-              {rotateError && <p className="text-xs text-red-600 text-center">{rotateError}</p>}
+              <p className="text-xs text-slate-400">Rota el QR aquí (revoca el anterior).</p>
+              {rotateError && <p className="text-xs text-red-600">{rotateError}</p>}
             </div>
           ) : phase === "pending" ? (
-            <div className="w-48 h-48 border-2 border-dashed border-amber-300 rounded-xl flex flex-col items-center justify-center gap-1">
+            <div className="w-48 h-48 border-2 border-dashed border-amber-300 rounded-3xl flex flex-col items-center justify-center gap-1">
               <p className="text-2xl font-bold text-amber-600">{formatStartsIn(startsIn)}</p>
-              <p className="text-sm text-gray-400 text-center px-4">QR pendiente</p>
+              <p className="text-sm text-slate-400 px-4">QR pendiente</p>
             </div>
           ) : phase === "finished" ? (
-            <div className="w-48 h-48 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center">
-              <p className="text-sm text-gray-400 text-center px-4">Clase finalizada</p>
+            <div className="w-48 h-48 border-2 border-dashed border-slate-300 rounded-3xl flex items-center justify-center">
+              <p className="text-sm text-slate-400 px-4">Clase finalizada</p>
             </div>
           ) : (
-            <div className="w-48 h-48 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center">
-              <p className="text-sm text-gray-400 text-center px-4">Conectando…</p>
+            <div className="w-48 h-48 border-2 border-dashed border-slate-300 rounded-3xl flex items-center justify-center">
+              <p className="text-sm text-slate-400 px-4">Conectando…</p>
             </div>
           )}
-        </div>
+        </section>
       </div>
-      <div className="mt-6 bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-semibold text-gray-800">
-            Asistencia {count > 0 && <span className="text-gray-500 font-normal">({count})</span>}
+
+      <section className="bg-white rounded-3xl p-5 md:p-7 shadow-sm border border-slate-100/80 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-lg md:text-xl font-bold text-slate-900">
+            Asistencia {count > 0 && <span className="text-slate-500 font-normal">({count})</span>}
           </h3>
           {session && (
-            <span className="text-xs text-green-700 bg-green-50 px-2 py-1 rounded-full">
-              ● en vivo (5s)
+            <span className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>en vivo (5s)</span>
             </span>
           )}
         </div>
         {!session ? (
-          <p className="text-sm text-gray-500">El QR aparecerá solo al iniciar la ventana de la clase.</p>
+          <p className="text-sm text-slate-500">El QR aparecerá solo al iniciar la ventana de la clase.</p>
         ) : rows.length === 0 ? (
-          <p className="text-sm text-gray-500">Aún no hay marcaciones registradas.</p>
+          <p className="text-sm text-slate-400 pt-2">Aún no hay marcaciones registradas.</p>
         ) : (
           <>
-            <ul className="divide-y divide-gray-100">
+            <ul className="divide-y divide-slate-100">
               {rows.map((a) => (
                 <li key={a.id} className="py-2 flex items-center justify-between gap-2 text-sm">
                   <div>
-                    <p className="font-medium text-gray-800">{a.student_name}</p>
-                    <p className="text-xs text-gray-500">{a.student_code}</p>
+                    <p className="font-medium text-slate-800">{a.student_name}</p>
+                    <p className="text-xs text-slate-500">{a.student_code}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-gray-700">{formatBogota(a.registered_at)}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-slate-700">{formatBogota(a.registered_at)}</p>
+                    <p className="text-xs text-slate-500">
                       {a.has_location ? "📍 con ubicación" : "sin ubicación"}
                     </p>
                   </div>
@@ -362,7 +427,7 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
               >
                 Anterior
               </button>
-              <span className="text-xs text-gray-500">Página {page}</span>
+              <span className="text-xs text-slate-500">Página {page}</span>
               <button
                 onClick={() => setPage((p) => p + 1)}
                 disabled={rows.length < 10}
@@ -373,7 +438,7 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
             </div>
           </>
         )}
-      </div>
+      </section>
     </div>
   );
 }

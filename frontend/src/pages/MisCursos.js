@@ -65,7 +65,7 @@ export default function MisCursos({ onSelectGroup }) {
         {!showForm && (
           <button
             onClick={() => setShowForm(true)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
+            className="px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] text-white rounded-lg text-sm font-medium"
           >
             + Nuevo curso
           </button>
@@ -94,7 +94,7 @@ export default function MisCursos({ onSelectGroup }) {
             ) : (
               <>
                 <button onClick={() => onSelectGroup && onSelectGroup(g)} className="text-left w-full">
-                  <h3 className="text-lg font-bold text-gray-800 hover:text-blue-700">{g.course?.name}</h3>
+                  <h3 className="text-lg font-bold text-gray-800 hover:text-[#B3200E]">{g.course?.name}</h3>
                   <p className="text-sm text-gray-500 mt-1">{g.classes_count ?? 0} clase(s)</p>
                 </button>
                 <div className="flex gap-2 mt-3">

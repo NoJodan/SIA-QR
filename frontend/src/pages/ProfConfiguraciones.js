@@ -116,7 +116,7 @@ export default function ProfConfiguraciones({ user, onSaved }) {
           <button
             type="submit"
             disabled={!dirty || saving}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium rounded-lg shadow-sm transition-colors"
+            className="px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium rounded-lg shadow-sm transition-colors"
           >
             {saving ? "Guardando..." : "Guardar Cambios"}
           </button>
