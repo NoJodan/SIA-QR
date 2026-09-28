@@ -1,43 +1,55 @@
 import React from "react";
 
 export default function ProfSidebar({ activeTab, onSelectTab, onLogout, userEmail }) {
+  const updatePointerPosition = (event) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    event.currentTarget.style.setProperty("--pointer-x", `${event.clientX - bounds.left}px`);
+    event.currentTarget.style.setProperty("--pointer-y", `${event.clientY - bounds.top}px`);
+  };
+
   return (
-    <aside className="w-64 bg-gray-900 text-gray-200 flex flex-col justify-between min-h-screen p-4">
+    <aside
+      onPointerMove={updatePointerPosition}
+      className="w-64 sidebar-gradient sidebar-pointer-glow text-white flex-shrink-0 flex flex-col justify-between min-h-screen p-5 shadow-xl rounded-r-3xl z-10"
+    >
       <div className="space-y-6">
-        <div className="px-2">
+        <div className="mb-8 pt-2 px-1">
           <h1 className="text-xl font-bold tracking-tight text-white">SIA-QR Profesor</h1>
-          <p className="text-xs text-gray-400 truncate mt-1">{userEmail}</p>
+          <p className="text-xs text-red-200 opacity-80 mt-0.5 truncate">{userEmail}</p>
         </div>
 
-        <nav className="space-y-1">
+        <nav className="space-y-2">
           <button
             onClick={() => onSelectTab && onSelectTab("mis-cursos")}
-            className={`w-full text-left px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
               activeTab === "mis-cursos" || activeTab === "curso-detalle" || activeTab === "clase-detalle"
-                ? "bg-blue-600 text-white"
-                : "text-gray-300 hover:bg-gray-800 hover:text-white"
+                ? "sidebar-active-item text-white shadow-sm"
+                : "sidebar-hover-item text-red-100 opacity-80 hover:opacity-100"
             }`}
           >
+            <i className="fa-solid fa-book-open text-base w-5 text-center"></i>
             Mis Cursos
           </button>
           <button
             onClick={() => onSelectTab && onSelectTab("configuraciones")}
-            className={`w-full text-left px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
               activeTab === "configuraciones"
-                ? "bg-blue-600 text-white"
-                : "text-gray-300 hover:bg-gray-800 hover:text-white"
+                ? "sidebar-active-item text-white shadow-sm"
+                : "sidebar-hover-item text-red-100 opacity-80 hover:opacity-100"
             }`}
           >
+            <i className="fa-solid fa-gear text-base w-5 text-center"></i>
             Configuraciones
           </button>
         </nav>
       </div>
 
-      <div className="pt-4 border-t border-gray-800">
+      <div className="pt-6 mt-auto border-t border-red-800/40">
         <button
           onClick={onLogout}
-          className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium rounded-lg text-red-300 hover:bg-red-950/40 hover:text-red-200 transition-colors"
+          className="w-full sidebar-hover-item flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-100 opacity-80 hover:opacity-100 transition-all"
         >
+          <i className="fa-solid fa-arrow-right-from-bracket text-base w-5 text-center"></i>
           Cerrar Sesión
         </button>
       </div>

@@ -11,7 +11,27 @@
 
 @layer components {
   .sidebar-gradient {
-    background: linear-gradient(180deg, #A81B11 0%, #83120B 50%, #5E0804 100%);
+    background: linear-gradient(180deg, #70100A 0%, #4B0804 52%, #200201 100%);
+  }
+  .sidebar-gradient::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 200%;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(115, 13, 7, 0.22) 24%,
+      rgba(179, 32, 14, 0.64) 70%,
+      rgba(95, 8, 4, 0.18) 88%,
+      transparent 100%
+    );
+    background-size: 50% 100%;
+    background-repeat: repeat-x;
+    filter: blur(22px);
+    animation: sidebar-cylinder-roll 15s linear infinite;
   }
   .sidebar-pointer-glow {
     position: relative;
@@ -22,10 +42,10 @@
     content: "";
     position: absolute;
     inset: 0;
-    z-index: 0;
+    z-index: 1;
     pointer-events: none;
     opacity: 0;
-    background: radial-gradient(160px circle at var(--pointer-x, 50%) var(--pointer-y, 50%), rgba(255, 255, 255, 0.2), transparent 75%);
+    background: radial-gradient(160px circle at var(--pointer-x, 50%) var(--pointer-y, 50%), rgba(255, 255, 255, 0.1), transparent 75%);
     transition: opacity 220ms ease;
   }
   .sidebar-pointer-glow:hover::before {
@@ -33,7 +53,7 @@
   }
   .sidebar-pointer-glow > * {
     position: relative;
-    z-index: 1;
+    z-index: 2;
   }
   .sidebar-active-item {
     background: rgba(255, 255, 255, 0.15);
@@ -44,7 +64,20 @@
   }
 }
 
+@keyframes sidebar-cylinder-roll {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .sidebar-gradient::after {
+    animation: none;
+  }
+
   .sidebar-pointer-glow::before {
     transition: none;
   }
