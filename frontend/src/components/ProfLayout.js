@@ -67,8 +67,8 @@ export default function ProfLayout({ user, onLogout, onRefreshUser }) {
       />
       <main
         className={isClassDetail
-          ? "min-h-0 min-w-0 w-full max-w-7xl flex-1 overflow-y-auto p-4 mx-auto md:p-8"
-          : "min-h-0 min-w-0 w-full max-w-5xl flex-1 overflow-y-auto p-4 mx-auto md:p-8"}
+          ? "min-h-0 min-w-0 w-full max-w-7xl flex-1 overflow-y-auto p-4 pb-24 mx-auto md:p-8 md:pb-8"
+          : "min-h-0 min-w-0 w-full max-w-5xl flex-1 overflow-y-auto p-4 pb-24 mx-auto md:p-8 md:pb-8"}
       >
         {activeTab === "mis-cursos" && <MisCursos onSelectGroup={selectGroup} />}
         {activeTab === "curso-detalle" && selectedGroup && (
