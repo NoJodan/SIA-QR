@@ -10,7 +10,7 @@ export default function ProfSidebar({ activeTab, onSelectTab, onLogout, userEmai
   return (
     <aside
       onPointerMove={updatePointerPosition}
-      className="w-64 h-dvh min-h-0 sidebar-gradient sidebar-pointer-glow text-white flex-shrink-0 flex flex-col justify-between p-5 shadow-xl rounded-r-3xl z-10"
+      className="w-full h-auto min-h-0 md:w-64 md:h-dvh sidebar-gradient sidebar-pointer-glow text-white flex-shrink-0 flex flex-col justify-between p-4 md:p-5 shadow-xl rounded-b-3xl md:rounded-b-none md:rounded-r-3xl z-10"
     >
       <div className="space-y-6">
         <div className="mb-8 pt-2 px-1">

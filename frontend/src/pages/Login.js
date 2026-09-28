@@ -7,8 +7,8 @@ export default function Login() {
   const next = urlParams.get("next");
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-md border border-gray-100 flex flex-col items-center space-y-6">
+    <div className="min-h-dvh flex items-center justify-center bg-gray-50 p-4">
+      <div className="max-w-md w-full bg-white p-5 sm:p-8 rounded-xl shadow-md border border-gray-100 flex flex-col items-center space-y-6">
         <h2 className="text-2xl font-bold text-gray-800">SIA-QR Login</h2>
         <p className="text-sm text-gray-600 text-center">
           Accede únicamente con tu cuenta de correo institucional (@ut.edu.co).

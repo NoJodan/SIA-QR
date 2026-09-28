@@ -43,7 +43,7 @@ export default function AdminCursos({ onSelectGroup }) {
             onClick={() => onSelectGroup && onSelectGroup(g)}
             className="text-left bg-white p-5 rounded-xl shadow border border-gray-100 hover:border-blue-300"
           >
-            <h3 className="text-lg font-bold text-gray-800">{g.course?.name}</h3>
+            <h3 className="text-lg font-bold text-gray-800 break-words">{g.course?.name}</h3>
             <p className="text-sm text-gray-500 mt-1">
               {g.professor?.full_name} · {g.professor?.employee_code} · {g.professor?.email}
             </p>

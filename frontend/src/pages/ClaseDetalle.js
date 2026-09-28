@@ -15,6 +15,22 @@ import { formatBogota } from "../utils/dates";
 // entre sesiones como localStorage); se limpia al finalizar/expirar.
 const ENSURE_MS = 10000;
 const LIST_MS = 5000;
+const MODALITY_LABELS = {
+  PRESENTIAL: "Presencial",
+  VIRTUAL: "Virtual",
+};
+const CLASS_STATUS_LABELS = {
+  SCHEDULED: "Programada",
+  IN_PROGRESS: "En progreso",
+  COMPLETED: "Finalizada",
+  CANCELLED: "Cancelada",
+};
+const CLASS_STATUS_COLORS = {
+  SCHEDULED: "bg-amber-50 text-amber-700 border-amber-100",
+  IN_PROGRESS: "bg-emerald-50 text-emerald-700 border-emerald-100",
+  COMPLETED: "bg-red-50 text-red-700 border-red-100",
+  CANCELLED: "bg-red-50 text-red-700 border-red-100",
+};
 
 const cacheKey = (classId) => `siaqr:current-session:${classId}`;
 const isExpired = (cached) => {
@@ -252,6 +268,9 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
   }, [session?.session_id, page, loadList]);
 
   const showQr = phase === "live" && session?.attend_url;
+  const modalityLabel = MODALITY_LABELS[classItem.modality] || classItem.modality;
+  const statusLabel = CLASS_STATUS_LABELS[classStatus] || classStatus;
+  const statusColor = CLASS_STATUS_COLORS[classStatus] || "bg-slate-100 text-slate-600 border-slate-200";
 
   return (
     <div className="space-y-6">
@@ -303,7 +322,12 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
               </div>
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                 <span className="text-[11px] font-bold text-slate-400 tracking-wider block mb-1">MODALIDAD · ESTADO</span>
-                <p className="text-sm font-bold text-slate-800">{classItem.modality} · {classStatus}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-bold text-slate-800">{modalityLabel}</span>
+                  <span className={`inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold ${statusColor}`}>
+                    {statusLabel}
+                  </span>
+                </div>
               </div>
             </div>
           </div>

@@ -116,7 +116,7 @@ function StudentProfileForm({ initial, onSaved }) {
         <input className={inputCls} value={form.document_number} onChange={set("document_number")} maxLength={50} />
         {errors.document_number && <p className="text-xs text-red-600 mt-1">{errors.document_number}</p>}
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <div>
           <label className="text-xs text-gray-600">Nombres *</label>
           <input className={inputCls} value={form.first_name} onChange={set("first_name")} maxLength={100} />
@@ -272,8 +272,8 @@ export default function AttendQR() {
 
   if (phase === "no-token") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <div className="max-w-md w-full bg-white p-8 rounded-xl shadow border border-gray-100 text-center space-y-3">
+      <div className="min-h-dvh flex items-center justify-center bg-gray-50 p-4">
+        <div className="max-w-md w-full bg-white p-5 sm:p-8 rounded-xl shadow border border-gray-100 text-center space-y-3">
           <h1 className="text-2xl font-bold text-gray-800">SIA-QR</h1>
           <p className="text-sm text-gray-600">Falta el token del código QR. Escanea el QR proyectado por tu profesor.</p>
         </div>
@@ -283,8 +283,8 @@ export default function AttendQR() {
 
   if (phase === "login") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <div className="max-w-md w-full bg-white p-8 rounded-xl shadow border border-gray-100 flex flex-col items-center space-y-4">
+      <div className="min-h-dvh flex items-center justify-center bg-gray-50 p-4">
+        <div className="max-w-md w-full bg-white p-5 sm:p-8 rounded-xl shadow border border-gray-100 flex flex-col items-center space-y-4">
           <h1 className="text-2xl font-bold text-gray-800">SIA-QR</h1>
           <p className="text-sm text-gray-600 text-center">
             Inicia sesión con tu correo institucional (@ut.edu.co) para marcar tu asistencia.
@@ -310,7 +310,7 @@ export default function AttendQR() {
 
   if (phase === "resolving") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="min-h-dvh flex items-center justify-center bg-gray-50 p-4">
         <p className="text-gray-500">Validando código QR…</p>
       </div>
     );
@@ -318,8 +318,8 @@ export default function AttendQR() {
 
   if (phase === "error") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <div className="max-w-md w-full bg-white p-8 rounded-xl shadow border border-gray-100 text-center space-y-4">
+      <div className="min-h-dvh flex items-center justify-center bg-gray-50 p-4">
+        <div className="max-w-md w-full bg-white p-5 sm:p-8 rounded-xl shadow border border-gray-100 text-center space-y-4">
           <h1 className="text-xl font-bold text-red-700">No se pudo continuar</h1>
           <p className="text-sm text-gray-600">{error}</p>
           <button
@@ -335,8 +335,8 @@ export default function AttendQR() {
 
   if (phase === "done" || phase === "already") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-green-50 p-4">
-        <div className="max-w-md w-full bg-white p-8 rounded-xl shadow border border-green-200 text-center space-y-3">
+      <div className="min-h-dvh flex items-center justify-center bg-green-50 p-4">
+        <div className="max-w-md w-full bg-white p-5 sm:p-8 rounded-xl shadow border border-green-200 text-center space-y-3">
           <div className="text-5xl">✅</div>
           <h1 className="text-2xl font-bold text-green-700">
             {phase === "already" ? "Asistencia ya registrada" : "¡Asistencia registrada!"}
@@ -359,8 +359,8 @@ export default function AttendQR() {
 
   // phase === "ready"
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="max-w-md w-full bg-white p-8 rounded-xl shadow border border-gray-100 space-y-4">
+    <div className="min-h-dvh flex items-center justify-center bg-gray-50 p-4">
+      <div className="max-w-md w-full bg-white p-5 sm:p-8 rounded-xl shadow border border-gray-100 space-y-4">
         <h1 className="text-2xl font-bold text-gray-800 text-center">Marcar asistencia</h1>
         {session && (
           <div className="bg-gray-50 rounded-lg p-4 text-sm space-y-1">

@@ -15,7 +15,7 @@ export default function Sidebar({ activeTab, onSelectTab, onLogout, userEmail })
   return (
     <aside
       onPointerMove={updatePointerPosition}
-      className="w-full md:w-64 sidebar-gradient sidebar-pointer-glow text-white flex-shrink-0 flex flex-col justify-between p-5 md:h-dvh md:min-h-0 shadow-xl rounded-r-3xl z-10"
+      className="w-full md:w-64 sidebar-gradient sidebar-pointer-glow text-white flex-shrink-0 flex flex-col justify-between p-4 md:p-5 md:h-dvh md:min-h-0 shadow-xl rounded-b-3xl md:rounded-b-none md:rounded-r-3xl z-10"
     >
       <div className="space-y-6">
         <div className="mb-8 pt-2 px-1">

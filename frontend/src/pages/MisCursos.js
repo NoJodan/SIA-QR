@@ -94,7 +94,7 @@ export default function MisCursos({ onSelectGroup }) {
             ) : (
               <>
                 <button onClick={() => onSelectGroup && onSelectGroup(g)} className="text-left w-full">
-                  <h3 className="text-lg font-bold text-gray-800 hover:text-[#B3200E]">{g.course?.name}</h3>
+                  <h3 className="text-lg font-bold text-gray-800 hover:text-[#B3200E] break-words">{g.course?.name}</h3>
                   <p className="text-sm text-gray-500 mt-1">{g.classes_count ?? 0} clase(s)</p>
                 </button>
                 <div className="flex gap-2 mt-3">

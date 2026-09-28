@@ -8,6 +8,25 @@ import { createInstantClass, deleteGroupClass, getGroupClasses } from "../servic
 import { formatBogota } from "../utils/dates";
 import useDebounce from "../utils/useDebounce";
 
+const modalityLabels = {
+  PRESENTIAL: "Presencial",
+  VIRTUAL: "Virtual",
+};
+
+const classStatusLabels = {
+  SCHEDULED: "Programada",
+  IN_PROGRESS: "En progreso",
+  COMPLETED: "Finalizada",
+  CANCELLED: "Cancelada",
+};
+
+const classStatusColors = {
+  SCHEDULED: "bg-amber-50 text-amber-700",
+  IN_PROGRESS: "bg-emerald-50 text-emerald-700",
+  COMPLETED: "bg-red-50 text-red-700",
+  CANCELLED: "bg-red-50 text-red-700",
+};
+
 export default function CursoDetalle({ group, onBack, onSelectClass }) {
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -163,15 +182,17 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
       <ul className="mt-4 space-y-3">
         {classes.map((c) => (
           <li key={c.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-            <div className="flex justify-between items-start gap-2">
-              <button onClick={() => onSelectClass && onSelectClass(c)} className="text-left flex-1">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
+              <button onClick={() => onSelectClass && onSelectClass(c)} className="text-left w-full min-w-0 flex-1">
                 <p className="font-semibold text-gray-800 hover:text-[#B3200E]">{c.title}</p>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500 break-words">
                   {formatBogota(c.start_time)} · {c.duration_minutes} min · QR {c.qr_duration_minutes ?? 10} min
                 </p>
               </button>
-              <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600 whitespace-nowrap">
-                {c.modality} · {c.status}
+              <span className={`inline-flex flex-wrap items-center gap-1 text-xs px-2 py-1 rounded-full self-start ${classStatusColors[c.status] || "bg-gray-100 text-gray-600"}`}>
+                <span>{modalityLabels[c.modality] || c.modality}</span>
+                <span aria-hidden="true">·</span>
+                <span>{classStatusLabels[c.status] || c.status}</span>
               </span>
             </div>
             <div className="flex gap-2 mt-2">

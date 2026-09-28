@@ -47,7 +47,7 @@ export default function ProfConfiguraciones({ user, onSaved }) {
           <h3 className="text-base font-semibold text-gray-800">Datos Personales</h3>
         </div>
 
-        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">
               Nombre
@@ -112,7 +112,7 @@ export default function ProfConfiguraciones({ user, onSaved }) {
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex items-center gap-3">
+        <div className="px-4 sm:px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex flex-wrap items-center gap-3">
           <button
             type="submit"
             disabled={!dirty || saving}

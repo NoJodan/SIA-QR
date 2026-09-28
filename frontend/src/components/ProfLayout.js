@@ -58,7 +58,7 @@ export default function ProfLayout({ user, onLogout, onRefreshUser }) {
   const isClassDetail = activeTab === "clase-detalle";
 
   return (
-    <div className="fixed inset-0 flex h-dvh overflow-hidden bg-gray-100">
+    <div className="fixed inset-0 flex h-dvh flex-col overflow-hidden bg-gray-100 md:flex-row">
       <ProfSidebar
         activeTab={activeTab}
         onSelectTab={handleSelectTab}
@@ -67,8 +67,8 @@ export default function ProfLayout({ user, onLogout, onRefreshUser }) {
       />
       <main
         className={isClassDetail
-          ? "min-h-0 w-full max-w-7xl flex-1 overflow-y-auto p-4 mx-auto md:p-8"
-          : "min-h-0 w-full max-w-5xl flex-1 overflow-y-auto p-8"}
+          ? "min-h-0 min-w-0 w-full max-w-7xl flex-1 overflow-y-auto p-4 mx-auto md:p-8"
+          : "min-h-0 min-w-0 w-full max-w-5xl flex-1 overflow-y-auto p-4 mx-auto md:p-8"}
       >
         {activeTab === "mis-cursos" && <MisCursos onSelectGroup={selectGroup} />}
         {activeTab === "curso-detalle" && selectedGroup && (
