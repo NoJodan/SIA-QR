@@ -1,3 +1,23 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+    body {
+        @apply font-sans antialiased text-slate-600;
+        background-color: #f3f5f9;
+    }
+}
+
+@layer components {
+  .sidebar-gradient {
+    background: linear-gradient(180deg, #A81B11 0%, #83120B 50%, #5E0804 100%);
+  }
+  .sidebar-active-item {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(4px);
+  }
+  .sidebar-hover-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
