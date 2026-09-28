@@ -13,11 +13,39 @@
   .sidebar-gradient {
     background: linear-gradient(180deg, #A81B11 0%, #83120B 50%, #5E0804 100%);
   }
+  .sidebar-pointer-glow {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+  .sidebar-pointer-glow::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(160px circle at var(--pointer-x, 50%) var(--pointer-y, 50%), rgba(255, 255, 255, 0.2), transparent 75%);
+    transition: opacity 220ms ease;
+  }
+  .sidebar-pointer-glow:hover::before {
+    opacity: 1;
+  }
+  .sidebar-pointer-glow > * {
+    position: relative;
+    z-index: 1;
+  }
   .sidebar-active-item {
     background: rgba(255, 255, 255, 0.15);
     backdrop-filter: blur(4px);
   }
   .sidebar-hover-item:hover {
     background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-pointer-glow::before {
+    transition: none;
   }
 }

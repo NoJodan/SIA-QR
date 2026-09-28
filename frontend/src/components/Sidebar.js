@@ -5,8 +5,18 @@ export default function Sidebar({ activeTab, onSelectTab, onLogout, userEmail })
     { id: "profesores", label: "Profesores", icon: "fa-solid fa-chalkboard-user" },
     { id: "cursos", label: "Cursos", icon: "fa-regular fa-bookmark" },
   ];
+
+  const updatePointerPosition = (event) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    event.currentTarget.style.setProperty("--pointer-x", `${event.clientX - bounds.left}px`);
+    event.currentTarget.style.setProperty("--pointer-y", `${event.clientY - bounds.top}px`);
+  };
+
   return (
-    <aside className="w-full md:w-64 sidebar-gradient text-white flex-shrink-0 flex flex-col justify-between p-5 md:min-h-screen shadow-xl rounded-r-3xl z-10">
+    <aside
+      onPointerMove={updatePointerPosition}
+      className="w-full md:w-64 sidebar-gradient sidebar-pointer-glow text-white flex-shrink-0 flex flex-col justify-between p-5 md:h-dvh md:min-h-0 shadow-xl rounded-r-3xl z-10"
+    >
       <div className="space-y-6">
         <div className="mb-8 pt-2 px-1">
           <h1 className="text-xl font-bold tracking-tight text-white">SIA-QR Admin</h1>

@@ -111,7 +111,7 @@ export default function CreateClassForm({ groupId, initial = null, onCreated, on
       <div className="flex gap-2">
         <button
           type="submit" disabled={saving}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
+          className="px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] disabled:opacity-50 text-white rounded-lg text-sm font-medium"
         >
           {saving ? "Guardando..." : editing ? "Guardar cambios" : "Crear clase"}
         </button>

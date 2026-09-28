@@ -80,7 +80,7 @@ export default function Profesores() {
         />
         <button
           type="submit"
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors"
+          className="px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] text-white font-medium rounded-lg shadow-sm transition-colors"
         >
           Añadir Correo
         </button>

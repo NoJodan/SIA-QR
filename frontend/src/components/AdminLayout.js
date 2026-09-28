@@ -14,14 +14,14 @@ export default function AdminLayout({ user, onLogout }) {
   };
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-brand-lightBg">
+    <div className="fixed inset-0 flex h-dvh flex-col overflow-hidden bg-brand-lightBg md:flex-row">
       <Sidebar
         activeTab={activeTab}
         onSelectTab={selectTab}
         onLogout={onLogout}
         userEmail={user?.email}
       />
-      <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full">
+      <main className="min-h-0 w-full max-w-7xl flex-1 overflow-y-auto p-4 mx-auto md:p-8">
         {activeTab === "profesores" && <Profesores />}
         {activeTab === "cursos" && !selectedGroup && (
           <AdminCursos
