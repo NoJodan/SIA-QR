@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
 from django.urls import resolve
 from rest_framework.test import APIClient
@@ -6,7 +6,8 @@ from allauth.socialaccount.models import SocialAccount, SocialLogin
 from allauth.core.exceptions import ImmediateHttpResponse
 from apps.attendance.models import SystemConfig
 from apps.authentication.adapters import InstitutionalGoogleAdapter
-from apps.authentication.models import Professor
+from apps.authentication.models import AuthorizedProfessorEmail, Professor, UserRole
+from apps.authentication.views import reconcile_professor_role
 
 User = get_user_model()
 
@@ -146,3 +147,169 @@ class LogoutRouteTests(TestCase):
         self.assertEqual(
             resolve("/api/auth/logout/").func.__module__, "apps.authentication.views"
         )
+
+
+class ProfessorWhitelistAdapterTests(TestCase):
+    """FIX FK huérfano: pre_social_login() confundía el transient (pk UUID
+    truthy) con existente y hacía INSERT de Professor antes que User."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.adapter = InstitutionalGoogleAdapter()
+        SystemConfig.objects.create(
+            config_key="ALLOWED_DOMAIN", config_value="ut.edu.co"
+        )
+
+    def _sociallogin(self, email, uid="sub-test", persisted_user=None):
+        account = SocialAccount(
+            uid=uid,
+            provider="google",
+            extra_data={
+                "email": email,
+                "given_name": "Profe",
+                "family_name": "Test",
+            },
+        )
+        user = persisted_user if persisted_user is not None else User(email=email)
+        return SocialLogin(user=user, account=account)
+
+    def test_whitelist_transient_no_crea_professor_solo_setea_rol(self):
+        AuthorizedProfessorEmail.objects.create(email="nuevo@ut.edu.co")
+        users_before = User.objects.count()
+        sociallogin = self._sociallogin("nuevo@ut.edu.co", uid="sub-nuevo")
+
+        self.adapter.pre_social_login(None, sociallogin)
+
+        # Solo muta en memoria: rol asignado, sin INSERT alguno.
+        self.assertEqual(sociallogin.user.role, UserRole.ROLE_PROFESSOR)
+        self.assertEqual(User.objects.count(), users_before)
+        self.assertEqual(Professor.objects.count(), 0)
+        self.assertFalse(
+            Professor.objects.filter(
+                user_id=sociallogin.user.pk
+            ).exists()
+        )
+
+    def test_transient_pk_truthy_no_se_confunde_con_existente(self):
+        # El transient trae pk truthy por default=uuid.uuid4: regresión
+        # directa del bug (getattr(existing, "pk", None) siempre truthy).
+        AuthorizedProfessorEmail.objects.create(email="otro@ut.edu.co")
+        sociallogin = self._sociallogin("otro@ut.edu.co", uid="sub-otro")
+        self.assertIsNotNone(sociallogin.user.pk)
+
+        self.adapter.pre_social_login(None, sociallogin)
+
+        self.assertEqual(sociallogin.user.role, UserRole.ROLE_PROFESSOR)
+        self.assertEqual(Professor.objects.count(), 0)
+
+    def test_save_user_crea_user_y_professor_en_orden_valido(self):
+        AuthorizedProfessorEmail.objects.create(email="save@ut.edu.co")
+        request = self.factory.get("/")
+        # allauth save_user() toca request.session (unstash_verified_email).
+        from django.contrib.sessions.middleware import SessionMiddleware
+
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        sociallogin = self._sociallogin("save@ut.edu.co", uid="sub-save")
+        # Flujo real allauth: populate_user() corre antes que save_user().
+        self.adapter.populate_user(
+            request, sociallogin, {"email": "save@ut.edu.co"}
+        )
+        user = self.adapter.save_user(request, sociallogin)
+
+        # User persistido primero, Professor después con FK válida.
+        self.assertIsNotNone(user.pk)
+        user.refresh_from_db()
+        self.assertEqual(user.role, UserRole.ROLE_PROFESSOR)
+        prof = Professor.objects.get(user=user)
+        self.assertEqual(prof.user_id, user.pk)
+        self.assertTrue(prof.employee_code)
+
+    def test_reconciliacion_existente_student_whitelist_promueve(self):
+        student = User.objects.create_user(
+            email="viejo@ut.edu.co",
+            google_sub="sub-viejo",
+            role=UserRole.ROLE_STUDENT,
+        )
+        AuthorizedProfessorEmail.objects.create(email="viejo@ut.edu.co")
+        sociallogin = self._sociallogin(
+            "viejo@ut.edu.co", uid="sub-viejo", persisted_user=student
+        )
+
+        self.adapter.pre_social_login(None, sociallogin)
+
+        student.refresh_from_db()
+        self.assertEqual(student.role, UserRole.ROLE_PROFESSOR)
+        prof = Professor.objects.get(user=student)
+        self.assertEqual(prof.user_id, student.pk)
+
+    def test_reconcile_professor_role_solo_promueve_no_degrada(self):
+        prof_user = User.objects.create_user(
+            email="nodeg@ut.edu.co",
+            google_sub="sub-nodeg",
+            role=UserRole.ROLE_PROFESSOR,
+        )
+        Professor.objects.create(
+            user=prof_user,
+            employee_code="UT-NODEG",
+            first_name="N",
+            last_name="D",
+        )
+        # Sin whitelist: no degrada a STUDENT.
+        reconcile_professor_role(prof_user)
+        prof_user.refresh_from_db()
+        self.assertEqual(prof_user.role, UserRole.ROLE_PROFESSOR)
+
+    def test_relogin_idempotente_doble_pre_social_login_un_professor(self):
+        # QA: re-login idempotente — doble pre_social_login persistido
+        # debe dejar exactamente 1 Professor y rol PROFESSOR.
+        student = User.objects.create_user(
+            email="relogin@ut.edu.co",
+            google_sub="sub-relogin",
+            role=UserRole.ROLE_STUDENT,
+        )
+        AuthorizedProfessorEmail.objects.create(email="relogin@ut.edu.co")
+        sl1 = self._sociallogin(
+            "relogin@ut.edu.co", uid="sub-relogin", persisted_user=student
+        )
+        self.adapter.pre_social_login(None, sl1)
+        student.refresh_from_db()
+        self.assertEqual(student.role, UserRole.ROLE_PROFESSOR)
+        # Segundo login: refresca el objeto persistido desde BD.
+        student.refresh_from_db()
+        sl2 = self._sociallogin(
+            "relogin@ut.edu.co", uid="sub-relogin", persisted_user=student
+        )
+        self.adapter.pre_social_login(None, sl2)
+        student.refresh_from_db()
+        self.assertEqual(student.role, UserRole.ROLE_PROFESSOR)
+        self.assertEqual(
+            Professor.objects.filter(user=student).count(), 1
+        )
+
+    def test_doble_save_user_mismo_email_no_revienta(self):
+        # QA: doble save_user (carrera email/google_sub UNIQUE) debe
+        # reconciliar al existente en lugar de IntegrityError 500.
+        from django.contrib.sessions.middleware import SessionMiddleware
+
+        AuthorizedProfessorEmail.objects.create(email="doble@ut.edu.co")
+
+        def _req():
+            req = self.factory.get("/")
+            SessionMiddleware(lambda r: None).process_request(req)
+            req.session.save()
+            return req
+
+        sl1 = self._sociallogin("doble@ut.edu.co", uid="sub-doble")
+        self.adapter.populate_user(_req(), sl1, {"email": "doble@ut.edu.co"})
+        user1 = self.adapter.save_user(_req(), sl1)
+        self.assertIsNotNone(user1.pk)
+
+        # Segundo callback con mismo email+uid (reintento concurrente).
+        sl2 = self._sociallogin("doble@ut.edu.co", uid="sub-doble")
+        self.adapter.populate_user(_req(), sl2, {"email": "doble@ut.edu.co"})
+        user2 = self.adapter.save_user(_req(), sl2)
+
+        self.assertEqual(str(user2.pk), str(user1.pk))
+        self.assertEqual(User.objects.filter(email__iexact="doble@ut.edu.co").count(), 1)
+        self.assertEqual(Professor.objects.filter(user_id=user1.pk).count(), 1)

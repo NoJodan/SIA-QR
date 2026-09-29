@@ -1,6 +1,7 @@
 import uuid
 
 from django.contrib.auth import logout as django_logout
+from django.db import IntegrityError, transaction
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
@@ -37,7 +38,11 @@ class IsAdminUserRole(BasePermission):
 
 
 def _ensure_professor_profile(user, email=""):
-    """Crea el perfil Professor si falta (usado al promover tardíamente)."""
+    """Crea el perfil Professor si falta (usado al promover tardíamente).
+
+    Idempotente: get_or_create + atomic; ante IntegrityError por carrera
+    reintenta el get en lugar de create() directo.
+    """
     try:
         return user.professor_profile
     except Exception:
@@ -47,13 +52,30 @@ def _ensure_professor_profile(user, email=""):
     except Professor.DoesNotExist:
         pass
     base = (email or user.email or "Profesor").split("@")[0].strip() or "Profesor"
-    return Professor.objects.create(
-        user=user,
-        employee_code=f"PROV-{uuid.uuid4().hex[:6].upper()}",
-        first_name=base[:100],
-        last_name="Docente",
-        department=None,
-    )
+    for _ in range(3):
+        code = f"PROV-{uuid.uuid4().hex[:6].upper()}"
+        try:
+            with transaction.atomic():
+                prof, _ = Professor.objects.get_or_create(
+                    user=user,
+                    defaults={
+                        "employee_code": code,
+                        "first_name": base[:100],
+                        "last_name": "Docente",
+                        "department": None,
+                    },
+                )
+                return prof
+        except IntegrityError:
+            try:
+                return Professor.objects.get(user=user)
+            except Professor.DoesNotExist:
+                continue
+    # 🟢 BAJA (DoesNotExist→500): lectura final tolerante.
+    try:
+        return Professor.objects.get(user=user)
+    except Professor.DoesNotExist:
+        return None
 
 
 def reconcile_professor_role(user):
@@ -72,12 +94,28 @@ def reconcile_professor_role(user):
         return False
     if not whitelisted:
         return False
+    # Solo promueve STUDENT -> PROFESSOR; nunca degrada PROFESSOR -> STUDENT.
     changed = False
-    if user.role != UserRole.ROLE_PROFESSOR:
-        user.role = UserRole.ROLE_PROFESSOR
-        user.save(update_fields=["role", "updated_at"])
-        changed = True
-    _ensure_professor_profile(user, email=user.email)
+    if user.role == UserRole.ROLE_STUDENT:
+        # En la práctica solo STUDENT llega aquí; nunca degrada.
+        try:
+            with transaction.atomic():
+                user.role = UserRole.ROLE_PROFESSOR
+                user.save(update_fields=["role", "updated_at"])
+            changed = True
+        except IntegrityError:
+            user.refresh_from_db()
+            changed = user.role == UserRole.ROLE_PROFESSOR
+    try:
+        _ensure_professor_profile(user, email=user.email)
+    except Exception:
+        # 🟢 BAJA: IntegrityError (carrera) o DoesNotExist (perfil
+        # borrado entre get/create) nunca deben reventar con 500;
+        # último intento de lectura idempotente.
+        try:
+            Professor.objects.get(user=user)
+        except Exception:
+            pass
     return changed
 
 
@@ -315,12 +353,13 @@ def professors_whitelist(request):
         if not email:
             return Response({"error": "Email requerido para eliminar"}, status=status.HTTP_400_BAD_REQUEST)
 
-        deleted_count, _ = AuthorizedProfessorEmail.objects.filter(email=email).delete()
+        deleted_count, _ = AuthorizedProfessorEmail.objects.filter(email__iexact=email).delete()
         if deleted_count == 0:
             return Response({"error": "Correo no encontrado en la lista blanca"}, status=status.HTTP_404_NOT_FOUND)
 
         # Regla: Cuando se elimine un correo (DELETE), busca al User asociado.
         # Si existe, cámbiale el role a ROLE_STUDENT y guarda.
-        User.objects.filter(email__iexact=email).update(role=UserRole.ROLE_STUDENT)
+        # 🟡 MEDIA: nunca degradar ADMIN; 🟢 BAJA: match __iexact arriba.
+        User.objects.filter(email__iexact=email).exclude(role=UserRole.ROLE_ADMIN).update(role=UserRole.ROLE_STUDENT)
 
         return Response({"detail": "Correo eliminado y rol actualizado si correspondía"}, status=status.HTTP_200_OK)
