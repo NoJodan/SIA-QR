@@ -1,14 +1,17 @@
 import uuid
 
+from django.contrib.auth import authenticate
+from django.contrib.auth import login as django_login
 from django.contrib.auth import logout as django_logout
 from django.db import IntegrityError, transaction
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
+from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 
 from apps.authentication.models import (
     AuthorizedProfessorEmail,
@@ -35,6 +38,57 @@ class IsAdminUserRole(BasePermission):
             and request.user.is_authenticated
             and request.user.role == UserRole.ROLE_ADMIN
         )
+
+
+class AdminLoginThrottle(AnonRateThrottle):
+    """Throttle bajo anti-fuerza-bruta para el login admin (scope admin_login)."""
+
+    scope = "admin_login"
+
+
+_GENERIC_ADMIN_LOGIN_ERROR = {"error": "Credenciales inválidas"}
+
+
+@api_view(["POST"])
+@authentication_classes([SessionAuthentication401])
+@permission_classes([AllowAny])
+@throttle_classes([AdminLoginThrottle])
+def admin_login_view(request):
+    """POST /api/auth/admin/login/ — login admin por sesión Django (NO JWT).
+
+    AllowAny + SessionAuthentication401 (CON enforcement CSRF, SIN csrf_exempt).
+    El CSRF se exige vía enforce_csrf explícito porque DRF exime el middleware
+    y SessionAuthentication solo lo verifica cuando ya hay sesión.
+    """
+    # Enforce CSRF explícito: POST sin X-CSRFToken válido → 403.
+    SessionAuthentication401().enforce_csrf(request)
+
+    raw_email = request.data.get("email", "") if hasattr(request.data, "get") else ""
+    raw_password = request.data.get("password", "") if hasattr(request.data, "get") else ""
+    email = str(raw_email or "").strip().lower()
+    password = str(raw_password or "")
+
+    if not email or not password:
+        return Response(
+            {"error": "El correo electrónico y la contraseña son obligatorios"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    # Topes de longitud (modelo: email 255; password Django ≤ 128 útil).
+    if len(email) > 255 or len(password) > 128:
+        return Response(_GENERIC_ADMIN_LOGIN_ERROR, status=status.HTTP_401_UNAUTHORIZED)
+
+    user = authenticate(request, email=email, password=password)
+    if user is None:
+        return Response(_GENERIC_ADMIN_LOGIN_ERROR, status=status.HTTP_401_UNAUTHORIZED)
+    if not user.is_active:
+        return Response(_GENERIC_ADMIN_LOGIN_ERROR, status=status.HTTP_401_UNAUTHORIZED)
+    if getattr(user, "role", None) != UserRole.ROLE_ADMIN:
+        return Response(_GENERIC_ADMIN_LOGIN_ERROR, status=status.HTTP_401_UNAUTHORIZED)
+    if not user.has_usable_password():
+        return Response(_GENERIC_ADMIN_LOGIN_ERROR, status=status.HTTP_401_UNAUTHORIZED)
+
+    django_login(request, user)
+    return Response(_me_payload(user), status=status.HTTP_200_OK)
 
 
 def _ensure_professor_profile(user, email=""):

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import Login from "./pages/Login";
+import AdminLogin from "./pages/AdminLogin";
 import AttendQR from "./pages/AttendQR";
 import AdminLayout from "./components/AdminLayout";
 import ProfLayout from "./components/ProfLayout";
@@ -80,6 +81,10 @@ function App() {
       <Routes>
         {/* Ruta pública del estudiante: escaneo QR -> resolve -> login -> marcar */}
         <Route path="/attend" element={<AttendQR />} />
+        <Route
+          path="/admin-login"
+          element={<AdminLogin onSuccess={() => (window.location.href = "/")} />}
+        />
         <Route path="*" element={<MainApp />} />
       </Routes>
     </BrowserRouter>

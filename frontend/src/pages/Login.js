@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { API_BASE, googleLoginUrl } from "../services/api";
 
 export default function Login() {
@@ -7,8 +8,8 @@ export default function Login() {
   const next = urlParams.get("next");
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-md border border-gray-100 flex flex-col items-center space-y-6">
+    <div className="relative min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="relative max-w-md w-full bg-white p-8 rounded-xl shadow-md border border-gray-100 flex flex-col items-center space-y-6">
         <h2 className="text-2xl font-bold text-gray-800">SIA-QR Login</h2>
         <p className="text-sm text-gray-600 text-center">
           Accede únicamente con tu cuenta de correo institucional (@ut.edu.co).
@@ -28,6 +29,14 @@ export default function Login() {
         </a>
         <p className="text-xs text-gray-400">{API_BASE}</p>
       </div>
+
+      <Link
+        to="/admin-login"
+        aria-label="Acceso de administrador"
+        className="absolute bottom-2 right-4 p-2 text-[11px] text-gray-300 hover:text-gray-500 focus-visible:text-gray-500 hover:underline"
+      >
+        Administrador
+      </Link>
     </div>
   );
 }

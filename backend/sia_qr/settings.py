@@ -127,6 +127,9 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
     ],
+    "DEFAULT_THROTTLE_RATES": {
+        "admin_login": "5/min",
+    },
 }
 
 # Configuración de Sesiones y Cookies (C1: sin eximir CSRF; cookies
