@@ -52,6 +52,16 @@ function fieldError(data, key) {
   return Array.isArray(v) ? v[0] : String(v);
 }
 
+// RNF-06: la geo es opcional y NO bloqueante. El navegador entrega
+// 13-16 decimales; se redondea en el cliente (lat/lon 8, accuracy 2)
+// como primera barrera (el backend también tolera/redondea).
+function toFixedOrNull(v, dec) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return Number(n.toFixed(dec));
+}
+
 // M1: registro inicial real del estudiante (RF-EST-03). El nombre viene de
 // Google (solo lectura); se exigen código/documento/teléfono/dirección
 // reales; el backend valida unicidad con 409 legible.
@@ -226,13 +236,17 @@ export default function AttendQR() {
   const handleMark = async () => {
     setMarking(true);
     setError("");
-    try {
-      const { data } = await markAttendance({
-        token,
-        latitude: geo.latitude,
-        longitude: geo.longitude,
-        accuracy: geo.accuracy,
-      });
+    // Solo se envía ubicación si el GPS resolvió (ready); en cualquier
+    // otro estado se fuerza null (no bloqueante). El botón NO se
+    // deshabilita en pending: se puede firmar sin ubicación.
+    const geoReady = geoState === "ready";
+    const payload = {
+      token,
+      latitude: geoReady ? toFixedOrNull(geo.latitude, 8) : null,
+      longitude: geoReady ? toFixedOrNull(geo.longitude, 8) : null,
+      accuracy: geoReady ? toFixedOrNull(geo.accuracy, 2) : null,
+    };
+    const finishOk = (data) => {
       try {
         localStorage.removeItem(PENDING_TOKEN_KEY);
       } catch {
@@ -240,6 +254,11 @@ export default function AttendQR() {
       }
       setResult(data);
       setPhase(data.already_marked ? "already" : "done");
+    };
+    const markOnce = (body) => markAttendance(body);
+    try {
+      const { data } = await markOnce(payload);
+      finishOk(data);
     } catch (err) {
       const st = err?.response?.status;
       if (st === 401) {
@@ -247,6 +266,67 @@ export default function AttendQR() {
       } else if (st === 404) {
         setError("El código QR no es válido.");
         setPhase("error");
+      } else if (st === 400) {
+        // Red de seguridad RNF-06: si el backend rechazó el payload
+        // (p. ej. ubicación con formato inesperado), reintentar UNA vez
+        // sin ubicación antes de mostrar error.
+        const sentGeo =
+          payload.latitude !== null ||
+          payload.longitude !== null ||
+          payload.accuracy !== null;
+        if (sentGeo) {
+          try {
+            const { data } = await markOnce({
+              token,
+              latitude: null,
+              longitude: null,
+              accuracy: null,
+            });
+            finishOk(data);
+            return;
+          } catch (retryErr) {
+            const rst = retryErr?.response?.status;
+            const rdata = retryErr?.response?.data || {};
+            if (rst === 412 || rdata?.needs_profile) {
+              setError(
+                rdata?.error ||
+                  "Completa tu perfil de estudiante para marcar asistencia."
+              );
+              setShowProfileForm(true);
+              setPhase("ready");
+              return;
+            }
+            if (rst === 404) {
+              setError("El código QR no es válido.");
+              setPhase("error");
+              return;
+            }
+            if (rst === 409 || rst === 410) {
+              setError(
+                rdata?.error ||
+                  "El código expiró o ya registraste tu asistencia."
+              );
+              setPhase("error");
+              return;
+            }
+            // El reintento sin ubicación también falló: mensaje legible
+            // (RNF-06) y se queda en "ready" para reintentar.
+            setError(
+              rdata?.error ||
+                "Ubicación inválida, reintentando sin ubicación."
+            );
+            setPhase("ready");
+            return;
+          }
+        } else {
+          const d = err?.response?.data || {};
+          setError(
+            d.error ||
+              fieldError(d, "token") ||
+              "No se pudo registrar la asistencia, intenta de nuevo."
+          );
+          setPhase("error");
+        }
       } else if (st === 412 || err?.response?.data?.needs_profile) {
         setError(
           err?.response?.data?.error ||

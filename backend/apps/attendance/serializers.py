@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+
 from rest_framework import serializers
 
 from apps.attendance.models import Attendance
@@ -24,20 +26,52 @@ class AttendanceListSerializer(serializers.ModelSerializer):
         return obj.latitude is not None and obj.longitude is not None
 
 
+class TolerantGeoField(serializers.Field):
+    """Geo opcional y NO bloqueante (RNF-06): nunca genera 400.
+
+    Acepta str/float/int/Decimal/None/"" y redondea con quantize a
+    `decimal_places` en vez de rechazar por exceso de decimales (el
+    navegador envía 13-16 decimales). Si el valor es inparseable
+    (NaN/Infinity/texto) o queda fuera de rango, coerciona a None.
+    """
+
+    def __init__(self, *, decimal_places, min_value, max_value, **kwargs):
+        kwargs.setdefault("required", False)
+        kwargs.setdefault("allow_null", True)
+        kwargs.setdefault("default", None)
+        super().__init__(**kwargs)
+        self.decimal_places = decimal_places
+        self.min_value = Decimal(str(min_value))
+        self.max_value = Decimal(str(max_value))
+        self._quantum = Decimal(1).scaleb(-decimal_places)
+
+    def to_internal_value(self, data):
+        if data is None:
+            return None
+        if isinstance(data, str):
+            if not data.strip():
+                return None
+            data = data.strip()
+        try:
+            value = Decimal(str(data))
+            if value.is_nan() or value.is_infinite():
+                return None
+            rounded = value.quantize(self._quantum, rounding=ROUND_HALF_UP)
+            if rounded < self.min_value or rounded > self.max_value:
+                return None
+            return rounded
+        except (InvalidOperation, ValueError, AttributeError):
+            return None
+
+    def to_representation(self, value):
+        return value
+
+
 class MarkAttendanceSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=512)
-    latitude = serializers.DecimalField(
-        max_digits=10, decimal_places=8, required=False, allow_null=True,
-        min_value=-90, max_value=90,
-    )
-    longitude = serializers.DecimalField(
-        max_digits=11, decimal_places=8, required=False, allow_null=True,
-        min_value=-180, max_value=180,
-    )
-    accuracy = serializers.DecimalField(
-        max_digits=8, decimal_places=2, required=False, allow_null=True,
-        min_value=0, max_value=100000,
-    )
+    latitude = TolerantGeoField(decimal_places=8, min_value=-90, max_value=90)
+    longitude = TolerantGeoField(decimal_places=8, min_value=-180, max_value=180)
+    accuracy = TolerantGeoField(decimal_places=2, min_value=0, max_value=100000)
 
     def validate_token(self, value):
         value = (value or "").strip()

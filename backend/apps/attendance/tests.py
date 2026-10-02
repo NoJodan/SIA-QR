@@ -56,6 +56,183 @@ def _make_session(clase, active=True):
     ), raw
 
 
+def _make_student(email, code="EST-QA", doc="DOC-QA"):
+    user = User.objects.create_user(
+        email=email, google_sub=f"sub-{email}", role="ROLE_STUDENT"
+    )
+    student = Student.objects.create(
+        user=user, student_code=code, document_number=doc,
+        first_name="Est", last_name="QA",
+        phone_number="+57 300 123 4567", address="Calle 1 #2-3",
+    )
+    return user, student
+
+
+class MarkGeoToleranceTests(TestCase):
+    """RNF-06: la geo nunca bloquea la marcación (no 400 por decimales)."""
+
+    def test_serializer_rounds_15_decimals(self):
+        from apps.attendance.serializers import MarkAttendanceSerializer
+
+        ser = MarkAttendanceSerializer(data={
+            "token": "tok",
+            "latitude": 4.123456789012345,
+            "longitude": -75.123456789012345,
+            "accuracy": 12.3456789,
+        })
+        self.assertTrue(ser.is_valid(), ser.errors)
+        self.assertEqual(str(ser.validated_data["latitude"]), "4.12345679")
+        self.assertEqual(str(ser.validated_data["longitude"]), "-75.12345679")
+        self.assertEqual(str(ser.validated_data["accuracy"]), "12.35")
+
+    def test_serializer_accepts_str_geo(self):
+        from apps.attendance.serializers import MarkAttendanceSerializer
+
+        ser = MarkAttendanceSerializer(data={
+            "token": "tok",
+            "latitude": "4.123456789012345",
+            "longitude": "-75.123456789012345",
+            "accuracy": "3.14159",
+        })
+        self.assertTrue(ser.is_valid(), ser.errors)
+        self.assertEqual(str(ser.validated_data["latitude"]), "4.12345679")
+        self.assertEqual(str(ser.validated_data["accuracy"]), "3.14")
+
+    def test_serializer_null_empty_missing_pass(self):
+        from apps.attendance.serializers import MarkAttendanceSerializer
+
+        for geo in (
+            {"latitude": None, "longitude": None, "accuracy": None},
+            {"latitude": "", "longitude": "", "accuracy": ""},
+            {},
+        ):
+            ser = MarkAttendanceSerializer(data={"token": "tok", **geo})
+            self.assertTrue(ser.is_valid(), ser.errors)
+            self.assertIsNone(ser.validated_data.get("latitude"))
+            self.assertIsNone(ser.validated_data.get("longitude"))
+            self.assertIsNone(ser.validated_data.get("accuracy"))
+
+    def test_serializer_out_of_range_coerces_to_none(self):
+        from apps.attendance.serializers import MarkAttendanceSerializer
+
+        ser = MarkAttendanceSerializer(data={
+            "token": "tok", "latitude": 91, "longitude": 200, "accuracy": -5,
+        })
+        self.assertTrue(ser.is_valid(), ser.errors)
+        self.assertIsNone(ser.validated_data.get("latitude"))
+        self.assertIsNone(ser.validated_data.get("longitude"))
+        self.assertIsNone(ser.validated_data.get("accuracy"))
+
+    def test_serializer_garbage_coerces_to_none(self):
+        from apps.attendance.serializers import MarkAttendanceSerializer
+
+        ser = MarkAttendanceSerializer(data={
+            "token": "tok", "latitude": "NaN", "longitude": "abc", "accuracy": "Infinity",
+        })
+        self.assertTrue(ser.is_valid(), ser.errors)
+        self.assertIsNone(ser.validated_data.get("latitude"))
+        self.assertIsNone(ser.validated_data.get("longitude"))
+        self.assertIsNone(ser.validated_data.get("accuracy"))
+
+    def test_serializer_token_still_strict(self):
+        from apps.attendance.serializers import MarkAttendanceSerializer
+
+        for bad in ("", "   "):
+            ser = MarkAttendanceSerializer(data={"token": bad})
+            self.assertFalse(ser.is_valid())
+            self.assertIn("token", ser.errors)
+        ser = MarkAttendanceSerializer(data={})
+        self.assertFalse(ser.is_valid())
+        self.assertIn("token", ser.errors)
+
+
+class MarkAttendanceGeoMatrixTests(TestCase):
+    """Matriz POST /api/attendance/mark/ con/sin geo y códigos de estado."""
+
+    def _mark(self, email, raw, payload_extra=None, code="EST-M", doc="DOC-M"):
+        user, _ = _make_student(email, code=code, doc=doc)
+        client = APIClient()
+        client.force_login(user)
+        body = {"token": raw}
+        if payload_extra:
+            body.update(payload_extra)
+        return client.post("/api/attendance/mark/", body, format="json")
+
+    def test_mark_with_precise_geo_is_201(self):
+        _, _, group = _make_prof_group(email="geoprof@ut.edu.co")
+        _, raw = _make_session(_make_class(group))
+        resp = self._mark("geo1@ut.edu.co", raw, {
+            "latitude": 4.123456789012345,
+            "longitude": -75.1234567890123,
+            "accuracy": 12.3456789,
+        }, code="EST-G1", doc="DOC-G1")
+        self.assertEqual(resp.status_code, 201)
+        self.assertFalse(resp.data.get("already_marked"))
+
+    def test_mark_without_geo_is_201(self):
+        _, _, group = _make_prof_group(email="nogeo@ut.edu.co")
+        _, raw = _make_session(_make_class(group))
+        resp = self._mark("geo2@ut.edu.co", raw,
+                          {"latitude": None, "longitude": None, "accuracy": None},
+                          code="EST-G2", doc="DOC-G2")
+        self.assertEqual(resp.status_code, 201)
+
+    def test_mark_with_long_accuracy_is_201(self):
+        _, _, group = _make_prof_group(email="accprof@ut.edu.co")
+        _, raw = _make_session(_make_class(group))
+        resp = self._mark("geo3@ut.edu.co", raw, {
+            "latitude": 4.5, "longitude": -75.5, "accuracy": 9.87654321,
+        }, code="EST-G3", doc="DOC-G3")
+        self.assertEqual(resp.status_code, 201)
+
+    def test_mark_invalid_token_is_404(self):
+        resp = self._mark("geo4@ut.edu.co", "token-inexistente",
+                          code="EST-G4", doc="DOC-G4")
+        # Sin sesión existente el flujo llega a token->404 (el perfil existe).
+        self.assertEqual(resp.status_code, 404)
+
+    def test_mark_expired_is_410(self):
+        _, _, group = _make_prof_group(email="expprof@ut.edu.co")
+        session, raw = _make_session(_make_class(group))
+        session.expires_at = timezone.now() - timedelta(minutes=1)
+        session.save(update_fields=["expires_at"])
+        resp = self._mark("geo5@ut.edu.co", raw, code="EST-G5", doc="DOC-G5")
+        self.assertEqual(resp.status_code, 410)
+
+    def test_mark_without_profile_is_412(self):
+        _, _, group = _make_prof_group(email="noprof@ut.edu.co")
+        _, raw = _make_session(_make_class(group))
+        user = User.objects.create_user(
+            email="sinperfil@ut.edu.co", google_sub="sub-sinperfil",
+            role="ROLE_STUDENT",
+        )
+        client = APIClient()
+        client.force_login(user)
+        resp = client.post("/api/attendance/mark/", {"token": raw}, format="json")
+        self.assertEqual(resp.status_code, 412)
+
+    def test_mark_duplicate_is_200_already_marked(self):
+        _, _, group = _make_prof_group(email="dupprof@ut.edu.co")
+        _, raw = _make_session(_make_class(group))
+        user, _ = _make_student("geo6@ut.edu.co", code="EST-G6", doc="DOC-G6")
+        client = APIClient()
+        client.force_login(user)
+        first = client.post("/api/attendance/mark/",
+                            {"token": raw, "latitude": 4.123456789012345,
+                             "longitude": -75.1234567890123, "accuracy": 5.55555},
+                            format="json")
+        self.assertEqual(first.status_code, 201)
+        second = client.post("/api/attendance/mark/", {"token": raw}, format="json")
+        self.assertEqual(second.status_code, 200)
+        self.assertTrue(second.data.get("already_marked"))
+
+    def test_mark_closed_class_is_409(self):
+        _, _, group = _make_prof_group(email="closedprof@ut.edu.co")
+        _, raw = _make_session(_make_class(group, status=ClassStatus.COMPLETED))
+        resp = self._mark("geo7@ut.edu.co", raw, code="EST-G7", doc="DOC-G7")
+        self.assertEqual(resp.status_code, 409)
+
+
 class SingleActiveConstraintTests(TestCase):
     def test_two_active_sessions_same_class_violates_constraint(self):
         _, _, group = _make_prof_group()
