@@ -21,6 +21,10 @@ db.sqlite3-journal
 /media/
 /staticfiles/
 
+# Backups DB (host persistente, fuera de /tmp efímero)
+backups/*.dump
+!backups/.gitkeep
+
 # Node
 node_modules/
 npm-debug.log*

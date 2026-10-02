@@ -121,6 +121,10 @@ class ProfessorProfileUpdateTests(TestCase):
         student = User.objects.create_user(
             email="stu@ut.edu.co", google_sub="sub-stu", role="ROLE_STUDENT"
         )
+        SocialAccount.objects.create(
+            user=student, provider="google", uid="sub-stu",
+            extra_data={"given_name": "Est", "family_name": "Uno"},
+        )
         self.client.force_login(student)
 
         response = self.client.patch(
@@ -132,6 +136,7 @@ class ProfessorProfileUpdateTests(TestCase):
         response = self.client.patch(
             "/api/auth/me/",
             {"student_code": "EST-1", "document_number": "DOC-1",
+             "phone_number": "+57 300 123 4567", "address": "Calle 1 #2-3",
              "first_name": "Est", "last_name": "Uno"},
             format="json",
         )

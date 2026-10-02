@@ -490,3 +490,70 @@ Veredicto **APROBADO**. Deuda menor registrada para no perderla:
 - [ ] Suite completa en Docker: suites `attendance` + `authentication` + `academic` (base 45 tests OK pre-fix; re-ejecutar post-fix solo-frontend para confirmar sin regresión).
 - [ ] E2E navegador post-fix: inmediata (< 3 s, 0 rotate) + reload (mismo `session_id`) + segundo dispositivo (aviso + Rotar) + programada `pending → live`.
 - [ ] Deuda menor QA §7.8 (comentario orden efecto, valid `expires`, helper `loadCached`) — no bloqueante.
+
+## 8. Re-auditoría QA 2026-10-02 — TTL instantánea, perfil estudiante, purga DB (APROBADO, 61 tests OK)
+
+**Estado:** implementado · **Veredicto QA:** APROBADO.
+**Verificación reportada:** `python manage.py check` 0 errores · `migrate` verde · **61 tests OK** (9 nuevos en `backend/apps/authentication/test_qa_reaudit.py`: B2×3, B4×2, B1×2, B3×1, m2×1) · `npm run build` OK.
+**Docs de esta entrega:** contrato perfil en [`docs/API-perfil-estudiante.md`](API-perfil-estudiante.md) · backup/restore en [`docs/Backup-restore.md`](Backup-restore.md) · entrada dated en [`CHANGELOG.md`](../CHANGELOG.md).
+
+### 8.1 Fix TTL instantánea (backend persiste + frontend reconcilia, defaults a 10)
+
+**Problema:** B3 con `qr_duration_minutes` distinto del default devolvía `session.ttl_minutes` correcto pero dejaba `class.qr_duration_minutes` en el default viejo (divergencia clase↔sesión; el frontend mostraba el default).
+
+**Backend** (`backend/apps/academic/views.py`, `InstantClassCreateView.post`, Opción B):
+
+1. `generate_session(clase, ttl_override)` resuelve el TTL (prioridad: body 1–120 > `clase.qr_duration_minutes` > `SystemConfig[QR_DEFAULT_MINUTES]` > `settings` > `10`).
+2. Tras generar, persiste `clase.qr_duration_minutes = int(result["ttl_minutes"])` + `save(update_fields=["qr_duration_minutes", "updated_at"])` dentro del mismo `transaction.atomic()` y hace `refresh_from_db()` antes de serializar.
+3. Si el `save` falla (m1) → `set_rollback(True)` + **503** `{"error": "Servicio no disponible, intenta de nuevo."}` con log — nunca serializa un TTL en memoria divergente de la BD. Colisión/carrera → **409** reintentable; fallo inesperado del claim → **503** con log (M3/m3 intactos).
+
+**Frontend:**
+
+- `CursoDetalle.js`: tras B3 reconcilia `cls.qr_duration_minutes = session.ttl_minutes` si difieren, y propaga `initialSession` (fix §7.8 vigente).
+- `ClaseDetalle.js`: `qrMinutes` se reconcilia desde la sesión vigente (`GET current-session` y `POST rotate` → `ttl_minutes` con guard `Number.isFinite`) en vez de solo `classItem.qr_duration_minutes`; la tarjeta muestra `{qrMinutes} min`.
+- Defaults unificados a **10** (`ClaseDetalle useState(... ?? 10)`, `CursoDetalle instantTtl=10`, `CreateClassForm ?? 10`, modelo).
+
+**Verificar:** `POST .../classes/instant/ {"qr_duration_minutes": 5}` → `201` con `session.ttl_minutes == 5` y `class.qr_duration_minutes == 5`; `ClaseDetalle` muestra `5 min`; reload conserva; `rotate` actualiza el contador.
+
+### 8.2 Texto QR profesor
+
+`ClaseDetalle.js` fase `live` muestra el badge verde exacto:
+
+```text
+● QR activo - escanea el código para tomar asistencia.
+```
+
+**Verificar:** abrir clase en ventana → badge verde con ese texto; `pending`/`finished` intactos (§7.4).
+
+### 8.3 Formulario estudiante sin nombre + PATCH atómico (fixes B1–B4/m1–m5)
+
+**Formulario** (`frontend/src/pages/AttendQR.js`, sin `first/last` inputs):
+
+- Banner `Completa tu perfil de estudiante para marcar asistencia` + línea `Registrado como: <suggested_first suggested_last> (<email>)` + nota `Nombre tomado de tu cuenta de Google (solo lectura)`.
+- Solo 4 campos, todos `*`: **Número de documento** (`maxLength=50`), **Código estudiantil** (`maxLength=50`), **Teléfono** (`type=tel`, `maxLength=20`), **Dirección** (`maxLength=500`). Errores 400/409 por campo; `Guardar perfil y continuar` re-resuelve (B1) y reintenta la marcación (B2).
+
+**Backend** (`backend/apps/authentication/views.py`):
+
+- `GET /api/auth/me/` expone `suggested_first_name/last_name` (desde `SocialAccount.extra_data`: `given_name`/`family_name`, fallback `name` partido) + `needs_profile`. Contrato completo con ejemplos en [`docs/API-perfil-estudiante.md`](API-perfil-estudiante.md).
+- **B3 monónimo:** `Madonna` (una sola palabra en `name` o `given_name` sin `family_name`) → `first = last = "Madonna"`; sin nombre obtenible → `PATCH` 400 (no bloquea para siempre).
+- **B2 teléfono:** regex + conteo de dígitos ≥ 7 (`_PHONE_RE` + `_phone_has_digits`); `"       "` y `"-------"` → 400.
+- **m2 dirección:** tope 500 (coherente con `maxLength=500`); 501 chars → 400.
+- **B4 incompleto:** `needs_profile=True` si no hay `Student` **o** `phone/address` vacíos (`NULL`/`""`/espacios) — cubre perfiles pre-migración; `mark` con perfil incompleto → **412 + `needs_profile`**.
+- **B1 atomicidad:** `PATCH` en `transaction.atomic()` (check `iexact` excluyendo la propia fila + create/update); ante `IntegrityError` por carrera → re-chequeo y **409 legible, nunca 500** (incluye colisión de `user_id` por doble create concurrente).
+
+**Tests nuevos** (`backend/apps/authentication/test_qa_reaudit.py`, 9): B2 teléfono espacios/guiones → 400 + teléfono válido → 200; B3 monónimo → 200 con `first/last` duplicados; B4 `phone=NULL` → `needs_profile` en `GET /me` + 412 en `mark`; B1 doble create mismo código → segundo 409 nunca 500 + doble patch mismo usuario nunca 500; m2 `address` 501 → 400.
+
+```bash
+docker compose exec backend python manage.py test apps.authentication.test_qa_reaudit -v 2
+```
+
+### 8.4 Purga DB + backup (scripts/Backup-Db.ps1)
+
+- Purgados datos de prueba: `students` → **0 filas**, `users` con `role = ROLE_STUDENT` → **0 filas** (post-backup).
+- Backup previo: `backups/sia_qr_20261002.dump` (formato custom `pg_dump -F c`) + script `scripts/Backup-Db.ps1` (destino host `backups/sia_qr_<timestamp>.dump`, verificación `role/count` + `students count`).
+- Guía backup/restore + SQL de purga (solo pruebas): [`docs/Backup-restore.md`](Backup-restore.md).
+
+```powershell
+.\scripts\Backup-Db.ps1
+docker exec sia_qr_db psql -U sia_qr -d sia_qr -c "SELECT role, count(*) FROM users GROUP BY role ORDER BY role;" -c "SELECT count(*) AS students_total FROM students;"
+```

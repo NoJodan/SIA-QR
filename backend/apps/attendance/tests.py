@@ -131,14 +131,21 @@ class StudentProfileTests(TestCase):
         self.assertTrue(resp.data.get("needs_profile"))
 
     def test_patch_student_profile_creates_real_profile(self):
+        from allauth.socialaccount.models import SocialAccount
+
         student_user = User.objects.create_user(
             email="newstu@ut.edu.co", google_sub="sub-new", role="ROLE_STUDENT"
+        )
+        SocialAccount.objects.create(
+            user=student_user, provider="google", uid="sub-new",
+            extra_data={"given_name": "Real", "family_name": "Estudiante"},
         )
         client = APIClient()
         client.force_login(student_user)
         resp = client.patch(
             "/api/auth/me/",
             {"student_code": "EST-REAL-1", "document_number": "123456",
+             "phone_number": "+57 300 123 4567", "address": "Calle 1 #2-3",
              "first_name": "Real", "last_name": "Estudiante"},
             format="json",
         )
@@ -147,17 +154,25 @@ class StudentProfileTests(TestCase):
         self.assertEqual(Student.objects.get(user=student_user).document_number, "123456")
 
     def test_patch_student_duplicate_is_409(self):
+        from allauth.socialaccount.models import SocialAccount
+
         u1 = User.objects.create_user(email="s1@ut.edu.co", google_sub="s1", role="ROLE_STUDENT")
         Student.objects.create(
             user=u1, student_code="EST-DUP", document_number="DOC-DUP",
-            first_name="A", last_name="B",
+            first_name="A", last_name="B", phone_number="+57 300 111 1111",
+            address="Dir 1",
         )
         u2 = User.objects.create_user(email="s2@ut.edu.co", google_sub="s2", role="ROLE_STUDENT")
+        SocialAccount.objects.create(
+            user=u2, provider="google", uid="s2",
+            extra_data={"given_name": "C", "family_name": "D"},
+        )
         client = APIClient()
         client.force_login(u2)
         resp = client.patch(
             "/api/auth/me/",
             {"student_code": "EST-DUP", "document_number": "DOC-OTHER",
+             "phone_number": "+57 300 222 2222", "address": "Dir 2",
              "first_name": "C", "last_name": "D"},
             format="json",
         )

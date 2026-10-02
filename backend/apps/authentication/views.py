@@ -1,3 +1,4 @@
+import re
 import uuid
 
 from django.contrib.auth import authenticate
@@ -47,6 +48,65 @@ class AdminLoginThrottle(AnonRateThrottle):
 
 
 _GENERIC_ADMIN_LOGIN_ERROR = {"error": "Credenciales inválidas"}
+
+_PHONE_RE = re.compile(r"^(?=(?:\D*\d){7,})\+?[\d\s\-()]{7,20}$")
+
+
+def _phone_has_digits(value):
+    """B2: exige >=7 dígitos (la regex sola aceptaba '       ' o '-------')."""
+    import re as _re
+
+    return len(_re.sub(r"\D", "", value or "")) >= 7
+
+
+def get_google_names(user):
+    """Nombres sugeridos desde Google (SocialAccount.extra_data).
+
+    Lee given_name/family_name/name con fallbacks como en adapters.py.
+    Retorna (first_name, last_name) o (None, None) si no es obtenible.
+    No crea ningún perfil.
+
+    Fallback monónimo (B3): si Google solo trae una palabra
+    (ej. extra_data={'name': 'Madonna'} o given_name='Madonna' sin
+    family_name), se duplica en first/last (first=parts[0],
+    last=parts[0]) para no bloquear el registro para siempre con 400.
+    """
+    extra = {}
+    try:
+        from allauth.socialaccount.models import SocialAccount
+
+        sa = SocialAccount.objects.filter(user=user).order_by("-last_login", "-id").first()
+        if sa is not None:
+            extra = sa.extra_data or {}
+    except Exception:
+        extra = {}
+    if not isinstance(extra, dict):
+        extra = {}
+    given = str(extra.get("given_name") or "").strip()
+    family = str(extra.get("family_name") or "").strip()
+    full = str(extra.get("name") or "").strip()
+    first = given or ""
+    last = family or ""
+    if not first and full:
+        parts = full.split()
+        if len(parts) == 1:
+            first = parts[0]
+            # B3 monónimo: duplicar para no bloquear (ej. 'Madonna').
+            if not last:
+                last = parts[0]
+        elif len(parts) >= 2:
+            first = parts[0]
+            if not last:
+                last = " ".join(parts[1:])
+    # B3 monónimo por given_name sin family_name (ej. given='Madonna'):
+    # si solo hay first, duplicarlo en last antes del corte final.
+    if first and not last:
+        last = first
+    first = (first or "")[:100].strip()
+    last = (last or "")[:100].strip()
+    if not first or not last:
+        return None, None
+    return first, last
 
 
 @api_view(["POST"])
@@ -204,6 +264,17 @@ def me(request):
     return Response(_me_payload(user))
 
 
+def _student_profile_incomplete(student):
+    """B4: perfil incompleto si phone/address vacíos (pre-migración con
+    phone=NULL o address=NULL/'' eludía el requisito mirando solo
+    existencia). Retorna True si falta teléfono o dirección."""
+    if student is None:
+        return True
+    phone = str(getattr(student, "phone_number", None) or "").strip()
+    address = str(getattr(student, "address", None) or "").strip()
+    return (not phone) or (not address)
+
+
 def _me_payload(user):
     data = {
         "id": str(user.id),
@@ -227,6 +298,7 @@ def _me_payload(user):
         })
 
     if user.role == UserRole.ROLE_STUDENT:
+        suggested_first, suggested_last = get_google_names(user)
         try:
             student = user.student_profile
             data.update({
@@ -234,7 +306,13 @@ def _me_payload(user):
                 "document_number": student.document_number,
                 "first_name": student.first_name,
                 "last_name": student.last_name,
-                "needs_profile": False,
+                "phone_number": getattr(student, "phone_number", None),
+                "address": student.address,
+                "suggested_first_name": suggested_first,
+                "suggested_last_name": suggested_last,
+                # B4: pre-migración con phone/address NULL/'' cuenta como
+                # incompleto aunque el perfil exista.
+                "needs_profile": _student_profile_incomplete(student),
             })
         except Exception:
             try:
@@ -244,7 +322,11 @@ def _me_payload(user):
                     "document_number": student.document_number,
                     "first_name": student.first_name,
                     "last_name": student.last_name,
-                    "needs_profile": False,
+                    "phone_number": getattr(student, "phone_number", None),
+                    "address": student.address,
+                    "suggested_first_name": suggested_first,
+                    "suggested_last_name": suggested_last,
+                    "needs_profile": _student_profile_incomplete(student),
                 })
             except Student.DoesNotExist:
                 data.update({
@@ -252,6 +334,10 @@ def _me_payload(user):
                     "document_number": None,
                     "first_name": "",
                     "last_name": "",
+                    "phone_number": None,
+                    "address": None,
+                    "suggested_first_name": suggested_first,
+                    "suggested_last_name": suggested_last,
                     # M1: el perfil NO se autocrea; el estudiante debe
                     # completarlo vía PATCH antes de marcar (412 si falta).
                     "needs_profile": True,
@@ -307,11 +393,17 @@ def _patch_professor(request, user):
 
 def _patch_student(request, user):
     """M1: registro inicial real del estudiante (RF-EST-03). Crea o actualiza
-    el perfil con documento/código reales; unicidad con 409 legible."""
+    el perfil con código/documento/teléfono/dirección reales; el nombre se
+    deriva de Google (SocialAccount) y se ignoran first/last entrantes.
+    Unicidad con 409 legible.
+
+    B1: check+create/update envueltos en transaction.atomic(); ante
+    IntegrityError por carrera se re-chequea iexact y se responde 409
+    legible (nunca 500)."""
     student_code = str(request.data.get("student_code") or "").strip()
     document_number = str(request.data.get("document_number") or "").strip()
-    first_name = str(request.data.get("first_name") or "").strip()
-    last_name = str(request.data.get("last_name") or "").strip()
+    phone_number = str(request.data.get("phone_number") or "").strip()
+    address = str(request.data.get("address") or "").strip()
 
     errors = {}
     if not student_code:
@@ -322,48 +414,90 @@ def _patch_student(request, user):
         errors["document_number"] = "El número de documento es obligatorio."
     elif len(document_number) > 50:
         errors["document_number"] = "No puede superar 50 caracteres."
-    if not first_name:
-        errors["first_name"] = "El nombre es obligatorio."
-    elif len(first_name) > 100:
-        errors["first_name"] = "No puede superar 100 caracteres."
-    if not last_name:
-        errors["last_name"] = "El apellido es obligatorio."
-    elif len(last_name) > 100:
-        errors["last_name"] = "No puede superar 100 caracteres."
+    if not phone_number:
+        errors["phone_number"] = "El teléfono es obligatorio."
+    elif len(phone_number) > 20:
+        errors["phone_number"] = "No puede superar 20 caracteres."
+    elif not _PHONE_RE.match(phone_number) or not _phone_has_digits(phone_number):
+        # B2: exige >=7 dígitos (rechaza '       ' y '-------').
+        errors["phone_number"] = "Formato de teléfono inválido."
+    if not address:
+        errors["address"] = "La dirección es obligatoria."
+    elif len(address) > 500:
+        # m2: tope coherente con maxLength=500 del frontend.
+        errors["address"] = "La dirección no puede superar 500 caracteres."
     if errors:
         return Response(errors, status=status.HTTP_400_BAD_REQUEST)
 
-    try:
-        existing = Student.objects.get(user=user)
-        me_qs = Student.objects.exclude(pk=existing.pk)
-    except Student.DoesNotExist:
-        existing = None
-        me_qs = Student.objects.all()
-    if me_qs.filter(student_code__iexact=student_code).exists():
+    # Nombre derivado de Google; 400 si no es obtenible.
+    first_name, last_name = get_google_names(user)
+    if not first_name or not last_name:
         return Response(
-            {"student_code": "Ese código estudiantil ya está registrado por otra cuenta."},
-            status=status.HTTP_409_CONFLICT,
-        )
-    if me_qs.filter(document_number__iexact=document_number).exists():
-        return Response(
-            {"document_number": "Ese número de documento ya está registrado por otra cuenta."},
-            status=status.HTTP_409_CONFLICT,
+            {"error": "No se pudo obtener tu nombre desde Google, intenta de nuevo."},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if existing is None:
-        Student.objects.create(
-            user=user,
-            student_code=student_code,
-            document_number=document_number,
-            first_name=first_name,
-            last_name=last_name,
+    try:
+        with transaction.atomic():
+            try:
+                existing = Student.objects.get(user=user)
+                me_qs = Student.objects.exclude(pk=existing.pk)
+            except Student.DoesNotExist:
+                existing = None
+                me_qs = Student.objects.all()
+            if me_qs.filter(student_code__iexact=student_code).exists():
+                return Response(
+                    {"student_code": "Ese código estudiantil ya está registrado por otra cuenta."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if me_qs.filter(document_number__iexact=document_number).exists():
+                return Response(
+                    {"document_number": "Ese número de documento ya está registrado por otra cuenta."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            if existing is None:
+                Student.objects.create(
+                    user=user,
+                    student_code=student_code,
+                    document_number=document_number,
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone_number=phone_number,
+                    address=address,
+                )
+            else:
+                existing.student_code = student_code
+                existing.document_number = document_number
+                existing.first_name = first_name
+                existing.last_name = last_name
+                existing.phone_number = phone_number
+                existing.address = address
+                existing.save(update_fields=["student_code", "document_number", "first_name", "last_name", "phone_number", "address"])
+    except IntegrityError:
+        # B1: carrera entre check y create/update (UNIQUE) -> re-chequear
+        # iexact y responder 409 legible, nunca 500.
+        if Student.objects.filter(student_code__iexact=student_code).exclude(user=user).exists():
+            return Response(
+                {"student_code": "Ese código estudiantil ya está registrado por otra cuenta."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if Student.objects.filter(document_number__iexact=document_number).exclude(user=user).exists():
+            return Response(
+                {"document_number": "Ese número de documento ya está registrado por otra cuenta."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        # Colisión de user_id (doble create concurrente del mismo usuario):
+        # el perfil ya existe -> 409 legible en lugar de 500.
+        if Student.objects.filter(user=user).exists():
+            return Response(
+                {"error": "Tu perfil ya fue registrado, recarga e intenta de nuevo."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(
+            {"error": "No se pudo guardar el perfil, intenta de nuevo."},
+            status=status.HTTP_409_CONFLICT,
         )
-    else:
-        existing.student_code = student_code
-        existing.document_number = document_number
-        existing.first_name = first_name
-        existing.last_name = last_name
-        existing.save(update_fields=["student_code", "document_number", "first_name", "last_name"])
     user.refresh_from_db()
     return Response(_me_payload(user))
 

@@ -111,6 +111,13 @@ Entregado y aprobado por QA (auto-QR con residuales menores no bloqueantes R1–
 - **Verificación:** `check` 0 errores · `migrate` (sin migraciones nuevas en v2.1) · 45 tests OK · `npm run build` OK. Post-fix §7.8: `check` OK + `build` OK; `migrate`/tests completos **pendientes en Docker**.
 - Detalle completo (guía profesor/estudiante auto-QR, request/response, tabla de errores 401/403/404/409/410/503, env `EARLY_QR_GRACE_SECONDS`, ventana/gracia, E2E, residuales R1–R5, **bugfix inmediata §7.8 y pendientes §7.9**): [`docs/SPRINT-asistencia-qr.md`](docs/SPRINT-asistencia-qr.md).
 
+## Re-auditoría QA 2026-10-02 (APROBADA, 61 tests OK)
+
+- **Fix TTL instantánea:** B3 persiste `qr_duration_minutes` tras `generate_session` (rollback + 503 si falla el save); `ClaseDetalle`/`CursoDetalle` reconcilian `qrMinutes` desde `session.ttl_minutes`; defaults a 10. Texto QR en vivo: `QR activo - escanea el código para tomar asistencia.`
+- **Perfil estudiante:** formulario sin nombre (solo-lectura desde Google, fallback monónimo `first=last`); solo Documento/Código/Teléfono (≥ 7 dígitos, máx 20)/Dirección (máx 500). `needs_profile` si `phone/address` vacíos; `PATCH /api/auth/me/` atómico con 409 nunca 500.
+- **Purga + backup:** `students` 0, `ROLE_STUDENT` 0, backup `./backups/sia_qr_20261002.dump` + `scripts/Backup-Db.ps1`.
+- Detalle: [`docs/SPRINT-asistencia-qr.md §8`](docs/SPRINT-asistencia-qr.md) · contrato perfil [`docs/API-perfil-estudiante.md`](docs/API-perfil-estudiante.md) · backup/restore [`docs/Backup-restore.md`](docs/Backup-restore.md) · [`CHANGELOG.md`](CHANGELOG.md).
+
 ## Notas
 
 - El `.env` vive en la raíz del repo (ignorado por git). `POSTGRES_*` solo se aplican al crear el contenedor de Postgres; cambiarlos después requiere `docker compose down -v`.

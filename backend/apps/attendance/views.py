@@ -43,19 +43,36 @@ def _client_ip(request):
     return (request.META.get("REMOTE_ADDR") or "")[:45]
 
 
+def _student_profile_complete(student):
+    """B4: completo solo si phone y address no vacíos (pre-migración con
+    phone=NULL/address=NULL eludía el requisito mirando solo existencia)."""
+    if student is None:
+        return False
+    phone = str(getattr(student, "phone_number", None) or "").strip()
+    address = str(getattr(student, "address", None) or "").strip()
+    return bool(phone and address)
+
+
 def _get_student_profile(user):
-    """M1: retorna el perfil Student existente o None (sin autocrear
-    datos sintéticos). Si falta, el mark responde 412 needs_profile."""
+    """M1: retorna el perfil Student existente y completo o None (sin autocrear
+    datos sintéticos). Si falta o está incompleto (B4: phone/address vacíos),
+    el mark responde 412 needs_profile."""
     profile = getattr(user, "student_profile", None)
     if profile is not None:
         try:
-            return Student.objects.get(pk=profile.pk)
+            candidate = Student.objects.get(pk=profile.pk)
+            if _student_profile_complete(candidate):
+                return candidate
+            return None
         except Student.DoesNotExist:
             pass
     try:
-        return Student.objects.get(user=user)
+        candidate = Student.objects.get(user=user)
     except Student.DoesNotExist:
         return None
+    if not _student_profile_complete(candidate):
+        return None
+    return candidate
 
 
 def _class_is_closed(clase):
@@ -206,7 +223,7 @@ class MarkAttendanceView(Auth401Mixin, APIView):
         if student is None:
             return Response(
                 {
-                    "error": "Completa tu perfil de estudiante (código, documento y nombre) antes de marcar asistencia.",
+                    "error": "Completa tu perfil de estudiante (código, documento, teléfono y dirección) antes de marcar asistencia.",
                     "needs_profile": True,
                 },
                 status=status.HTTP_412_PRECONDITION_FAILED,

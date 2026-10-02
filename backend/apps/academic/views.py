@@ -356,6 +356,26 @@ class InstantClassCreateView(generics.GenericAPIView):
                     {"error": "Servicio no disponible, intenta de nuevo."},
                     status=status.HTTP_503_SERVICE_UNAVAILABLE,
                 )
+            # Fix TTL instantánea (Opción B): persistir el ttl resuelto en la
+            # clase antes de serializar, para no caer al default 10 cuando
+            # ttl_override (1..120) difiere del default de system config.
+            # m1: si el save falla, rollback + 503 (nunca serializar un TTL
+            # en memoria divergente de la BD).
+            try:
+                clase.qr_duration_minutes = int(result["ttl_minutes"])
+                clase.save(update_fields=["qr_duration_minutes", "updated_at"])
+            except Exception:
+                logger.exception("No se pudo persistir qr_duration_minutes (B3 group=%s)", group_id)
+                transaction.set_rollback(True)
+                return Response(
+                    {"error": "Servicio no disponible, intenta de nuevo."},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            # Releer lo persistido antes de serializar (evita divergencia).
+            try:
+                clase.refresh_from_db()
+            except Exception:
+                logger.exception("refresh_from_db falló tras persistir TTL (B3 group=%s)", group_id)
 
         return Response(
             {
