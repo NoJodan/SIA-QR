@@ -3,6 +3,7 @@ import Sidebar from "./Sidebar";
 import AdminCursoDetalle from "../pages/AdminCursoDetalle";
 import AdminCursos from "../pages/AdminCursos";
 import Profesores from "../pages/Profesores";
+import Reportes from "../pages/Reportes";
 
 export default function AdminLayout({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState("profesores");
@@ -23,6 +24,7 @@ export default function AdminLayout({ user, onLogout }) {
       />
       <main className="min-h-0 min-w-0 w-full max-w-7xl flex-1 overflow-y-auto p-4 pb-24 mx-auto md:p-8 md:pb-8">
         {activeTab === "profesores" && <Profesores />}
+        {activeTab === "reportes" && <Reportes isAdmin />}
         {activeTab === "cursos" && !selectedGroup && (
           <AdminCursos
             onSelectGroup={(g) => {

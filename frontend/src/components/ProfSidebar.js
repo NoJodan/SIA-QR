@@ -32,6 +32,17 @@ export default function ProfSidebar({ activeTab, onSelectTab, onLogout, userEmai
               Mis Cursos
             </button>
             <button
+              onClick={() => onSelectTab && onSelectTab("reportes")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                activeTab === "reportes"
+                  ? "sidebar-active-item text-white shadow-sm"
+                  : "sidebar-hover-item text-red-100 opacity-80 hover:opacity-100"
+              }`}
+            >
+              <i className="fa-solid fa-file-export text-base w-5 text-center"></i>
+              Reportes
+            </button>
+            <button
               onClick={() => onSelectTab && onSelectTab("configuraciones")}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                 activeTab === "configuraciones"
@@ -75,6 +86,19 @@ export default function ProfSidebar({ activeTab, onSelectTab, onLogout, userEmai
           }`}></span>
           <i className="fa-solid fa-book-open text-xl" aria-hidden="true"></i>
           <span className="truncate">Mis Cursos</span>
+        </button>
+        <button
+          onClick={() => onSelectTab && onSelectTab("reportes")}
+          aria-current={activeTab === "reportes" ? "page" : undefined}
+          className={`relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-t-xl px-1 text-xs transition-colors ${
+            activeTab === "reportes"
+              ? "sidebar-active-item text-white"
+              : "text-red-100/80 hover:text-white"
+          }`}
+        >
+          <span className={`absolute inset-x-4 top-0 h-1 rounded-b-full ${activeTab === "reportes" ? "bg-white/80" : "bg-transparent"}`}></span>
+          <i className="fa-solid fa-file-export text-xl" aria-hidden="true"></i>
+          <span className="truncate">Reportes</span>
         </button>
         <button
           onClick={() => onSelectTab && onSelectTab("configuraciones")}

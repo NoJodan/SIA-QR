@@ -39,3 +39,14 @@ class IsOwnerProfessor(BasePermission):
         session = getattr(obj, "session", obj)
         professor = session.scheduled_class.group.professor
         return professor.user_id == request.user.id
+
+
+class IsProfessorOrAdmin(BasePermission):
+    """Profesor o administrador (reportes y listados agregados)."""
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.role in (UserRole.ROLE_PROFESSOR, UserRole.ROLE_ADMIN)
+        )

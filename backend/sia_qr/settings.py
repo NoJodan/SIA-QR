@@ -130,6 +130,9 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "admin_login": "5/min",
     },
+    # Reportes: `format` (json/xlsx/pdf) es filtro propio, no override de
+    # renderer (si no, ?format=xlsx daría 404 en la negociación de DRF).
+    "URL_FORMAT_OVERRIDE": None,
 }
 
 # Configuración de Sesiones y Cookies (C1: sin eximir CSRF; cookies

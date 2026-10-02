@@ -5,6 +5,7 @@ from apps.attendance.views import (
     ResolveTokenView,
     SessionAttendanceListView,
 )
+from apps.attendance.views_reports import AttendanceReportView
 
 app_name = "attendance"
 
@@ -19,4 +20,6 @@ urlpatterns = [
     path("resolve/", ResolveTokenView.as_view(), name="resolve"),
     # B2: marcar asistencia (estudiante autenticado).
     path("mark/", MarkAttendanceView.as_view(), name="mark"),
+    # Reportes agregados (profesor dueño / admin global): JSON + XLSX + PDF.
+    path("reports/", AttendanceReportView.as_view(), name="reports"),
 ]
