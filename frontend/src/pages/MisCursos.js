@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import CourseForm from "../components/CourseForm";
+import Modal from "../components/Modal";
 import Pagination from "../components/Pagination";
 import ProfHeader from "../components/ProfHeader";
 import SearchBar from "../components/SearchBar";
@@ -59,31 +60,62 @@ export default function MisCursos({ onSelectGroup }) {
 
   return (
     <div>
-      <ProfHeader title="Mis Cursos" subtitle={`${count} curso(s)`} />
-      {error && <p className="text-red-600 mb-4">{error}</p>}
-      <div className="flex flex-wrap gap-2 mb-4 items-center">
+      <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-4">
+        <ProfHeader title="Mis Cursos" subtitle={`${count} curso(s)`} />
         {!showForm && (
           <button
             onClick={() => setShowForm(true)}
-            className="px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] text-white rounded-lg text-sm font-medium"
+            className="px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] text-white rounded-xl text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             + Nuevo curso
           </button>
         )}
-        <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Buscar curso..." />
+      </section>
+      <div className="sticky top-0 z-10 bg-[#F8FAFC]/95 backdrop-blur rounded-xl p-3 mb-4">
+        <div className="w-full md:max-w-sm">
+          <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Buscar curso..." />
+        </div>
       </div>
+      {error && (
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 mb-4">
+          {error}
+        </p>
+      )}
       {showForm && (
-        <div className="mb-4">
+        <Modal title="Nuevo curso" onClose={() => setShowForm(false)}>
           <CourseForm submitLabel="Crear curso" onSubmit={handleCreate} onCancel={() => setShowForm(false)} />
+        </Modal>
+      )}
+      {loading && (
+        <div className="grid gap-4 md:grid-cols-2" aria-hidden="true">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="animate-pulse bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <div className="h-4 w-2/3 rounded bg-slate-200" />
+              <div className="mt-2 h-3 w-1/3 rounded bg-slate-100" />
+            </div>
+          ))}
         </div>
       )}
-      {loading && <p className="text-gray-500">Cargando cursos...</p>}
       {!loading && groups.length === 0 && !showForm && (
-        <p className="text-gray-500">No tienes cursos. Crea el primero.</p>
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+          <p aria-hidden="true" className="text-3xl">
+            📚
+          </p>
+          <p className="mt-2 text-sm text-slate-600">No tienes cursos. Crea el primero.</p>
+          <button
+            onClick={() => setShowForm(true)}
+            className="mt-3 px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] text-white rounded-xl text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40"
+          >
+            Programar primera clase
+          </button>
+        </div>
       )}
       <div className="grid gap-4 md:grid-cols-2">
         {groups.map((g) => (
-          <div key={g.id} className="bg-white p-5 rounded-xl shadow border border-gray-100">
+          <div
+            key={g.id}
+            className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md hover:border-[#B3200E]/30 transition"
+          >
             {editingId === g.id ? (
               <CourseForm
                 initialName={g.course?.name || ""}
@@ -93,22 +125,35 @@ export default function MisCursos({ onSelectGroup }) {
               />
             ) : (
               <>
-                <button onClick={() => onSelectGroup && onSelectGroup(g)} className="text-left w-full">
-                  <h3 className="text-lg font-bold text-gray-800 hover:text-[#B3200E] break-words">{g.course?.name}</h3>
-                  <p className="text-sm text-gray-500 mt-1">{g.classes_count ?? 0} clase(s)</p>
+                <button
+                  onClick={() => onSelectGroup && onSelectGroup(g)}
+                  aria-label={`Ver ${g.course?.name}`}
+                  className="text-left w-full rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40"
+                >
+                  <h3 className="text-lg font-bold text-slate-800 hover:text-[#B3200E] break-words">{g.course?.name}</h3>
+                  <p className="text-sm text-slate-500 mt-1">{g.classes_count ?? 0} clase(s)</p>
                 </button>
-                <div className="flex gap-2 mt-3">
+                <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100">
                   <button
                     onClick={() => setEditingId(g.id)}
-                    className="px-3 py-1 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg"
+                    aria-label={`Editar ${g.course?.name}`}
+                    className="px-3 py-1 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40"
                   >
                     Editar
                   </button>
                   <button
                     onClick={() => handleDelete(g.id)}
-                    className="px-3 py-1 text-xs font-medium bg-red-50 hover:bg-red-100 text-red-600 rounded-lg"
+                    aria-label={`Eliminar ${g.course?.name}`}
+                    className="px-3 py-1 text-xs font-medium bg-red-50 hover:bg-red-100 text-red-700 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
                   >
                     Eliminar
+                  </button>
+                  <button
+                    onClick={() => onSelectGroup && onSelectGroup(g)}
+                    aria-label={`Ver ${g.course?.name}`}
+                    className="px-3 py-1 text-xs font-medium bg-white border border-slate-200 hover:bg-slate-50 text-[#B3200E] rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40"
+                  >
+                    Ver
                   </button>
                 </div>
               </>
@@ -116,7 +161,7 @@ export default function MisCursos({ onSelectGroup }) {
           </div>
         ))}
       </div>
-      <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+      <Pagination page={page} totalPages={totalPages} onChange={setPage} countLabel={`${count} curso(s)`} />
     </div>
   );
 }

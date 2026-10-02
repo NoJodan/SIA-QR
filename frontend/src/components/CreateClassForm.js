@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useId, useState } from "react";
 import { adminUpdateGroupClass, createGroupClass, updateGroupClass } from "../services/academic";
 import { combineDateTimeToISO, todayISODate } from "../utils/dates";
 
@@ -31,6 +31,8 @@ export default function CreateClassForm({ groupId, initial = null, onCreated, on
   });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const baseId = useId();
+  const errorId = `${baseId}-error`;
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const editing = Boolean(initial);
@@ -72,57 +74,174 @@ export default function CreateClassForm({ groupId, initial = null, onCreated, on
     }
   };
 
+  const titleId = `${baseId}-title`;
+  const dateId = `${baseId}-date`;
+  const timeId = `${baseId}-time`;
+  const durationId = `${baseId}-duration`;
+  const ttlId = `${baseId}-ttl`;
+  const hasError = Boolean(error);
+
   return (
-    <form onSubmit={submit} className="space-y-3">
-      <div className="grid gap-3 md:grid-cols-2">
-        <label className="text-sm text-gray-600">Fecha
-          <input type="date" value={form.date} onChange={set("date")} title="Fecha de la clase" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm text-gray-800" />
+    <form onSubmit={submit} className="space-y-4" noValidate={false}>
+      <div>
+        <label htmlFor={titleId} className="block text-sm font-medium text-slate-700">
+          Título
         </label>
-        <label className="text-sm text-gray-600">Hora (Bogotá)
-          <input type="time" value={form.time} onChange={set("time")} title="Hora de inicio (Bogotá)" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm text-gray-800" />
-        </label>
-        <label className="text-sm text-gray-600 md:col-span-2">Título
-          <input
-            type="text" placeholder="Ej. Repaso parcial 2" title="Título de la clase" value={form.title} onChange={set("title")}
-            className="mt-1 w-full border rounded-lg px-3 py-2 text-sm text-gray-800" maxLength={150}
-          />
-        </label>
-        <label className="text-sm text-gray-600">Duración (min)
-          <input
-            type="number" min={1} value={form.duration_minutes} onChange={set("duration_minutes")}
-            placeholder="90" title="Duración de la clase en minutos" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm text-gray-800"
-          />
-        </label>
-        <label className="text-sm text-gray-600">Vida útil del QR (min)
-          <input
-            type="number" min={1} max={120} value={form.qr_duration_minutes} onChange={set("qr_duration_minutes")}
-            placeholder="10" title="Vida útil del QR en minutos (1-120)" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm text-gray-800"
-          />
-          <span className="text-xs text-gray-400">Vida útil del QR</span>
-        </label>
-        <label className="text-sm text-gray-600 md:col-span-2">Modalidad
-          <select value={form.modality} onChange={set("modality")} title="Modalidad de la clase" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm text-gray-800">
-            <option value="PRESENTIAL">Presencial</option>
-            <option value="VIRTUAL">Virtual</option>
-          </select>
-        </label>
+        <input
+          id={titleId}
+          type="text"
+          placeholder="Ej. Repaso parcial 2"
+          title="Título de la clase"
+          value={form.title}
+          onChange={set("title")}
+          aria-invalid={hasError}
+          aria-describedby={hasError ? errorId : undefined}
+          className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
+          maxLength={150}
+        />
+        <p className="mt-1 text-xs text-slate-500">Nombre visible para los estudiantes.</p>
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="submit" disabled={saving}
-          className="px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] disabled:opacity-50 text-white rounded-lg text-sm font-medium"
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <label htmlFor={dateId} className="block text-sm font-medium text-slate-700">
+            Fecha
+          </label>
+          <input
+            id={dateId}
+            type="date"
+            value={form.date}
+            onChange={set("date")}
+            title="Fecha de la clase"
+            aria-invalid={hasError}
+            aria-describedby={hasError ? errorId : undefined}
+            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
+          />
+          <p className="mt-1 text-xs text-slate-500">Día de la clase (Bogotá).</p>
+        </div>
+        <div>
+          <label htmlFor={timeId} className="block text-sm font-medium text-slate-700">
+            Hora (Bogotá)
+          </label>
+          <input
+            id={timeId}
+            type="time"
+            value={form.time}
+            onChange={set("time")}
+            title="Hora de inicio (Bogotá)"
+            aria-invalid={hasError}
+            aria-describedby={hasError ? errorId : undefined}
+            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
+          />
+          <p className="mt-1 text-xs text-slate-500">Hora de inicio (Bogotá).</p>
+        </div>
+        <div>
+          <label htmlFor={durationId} className="block text-sm font-medium text-slate-700">
+            Duración (min)
+          </label>
+          <input
+            id={durationId}
+            type="number"
+            min={1}
+            value={form.duration_minutes}
+            onChange={set("duration_minutes")}
+            placeholder="90"
+            title="Duración de la clase en minutos"
+            aria-invalid={hasError}
+            aria-describedby={hasError ? errorId : undefined}
+            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
+          />
+          <p className="mt-1 text-xs text-slate-500">Duración total de la clase.</p>
+        </div>
+        <div>
+          <label htmlFor={ttlId} className="block text-sm font-medium text-slate-700">
+            Vida útil del QR (min)
+          </label>
+          <input
+            id={ttlId}
+            type="number"
+            min={1}
+            max={120}
+            value={form.qr_duration_minutes}
+            onChange={set("qr_duration_minutes")}
+            placeholder="10"
+            title="Vida útil del QR en minutos (1-120)"
+            aria-invalid={hasError}
+            aria-describedby={hasError ? errorId : undefined}
+            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
+          />
+          <p className="mt-1 text-xs text-slate-500">Vida útil del QR (1–120 min).</p>
+        </div>
+      </div>
+      <fieldset>
+        <legend className="block text-sm font-medium text-slate-700">Modalidad</legend>
+        <div
+          role="radiogroup"
+          aria-label="Modalidad"
+          className="mt-1 grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1"
         >
-          {saving ? "Guardando..." : editing ? "Guardar cambios" : "Crear clase"}
-        </button>
+          <label
+            htmlFor={`${baseId}-mod-pres`}
+            className={`cursor-pointer rounded-lg px-3 py-2 text-center text-sm font-medium transition ${
+              form.modality === "PRESENTIAL"
+                ? "bg-white text-[#B3200E] shadow-sm border border-[#B3200E]/20"
+                : "text-slate-600 hover:text-slate-800"
+            }`}
+          >
+            <input
+              id={`${baseId}-mod-pres`}
+              type="radio"
+              name={`${baseId}-modality`}
+              value="PRESENTIAL"
+              checked={form.modality === "PRESENTIAL"}
+              onChange={set("modality")}
+              className="sr-only"
+            />
+            Presencial
+          </label>
+          <label
+            htmlFor={`${baseId}-mod-virt`}
+            className={`cursor-pointer rounded-lg px-3 py-2 text-center text-sm font-medium transition ${
+              form.modality === "VIRTUAL"
+                ? "bg-white text-[#B3200E] shadow-sm border border-[#B3200E]/20"
+                : "text-slate-600 hover:text-slate-800"
+            }`}
+          >
+            <input
+              id={`${baseId}-mod-virt`}
+              type="radio"
+              name={`${baseId}-modality`}
+              value="VIRTUAL"
+              checked={form.modality === "VIRTUAL"}
+              onChange={set("modality")}
+              className="sr-only"
+            />
+            Virtual
+          </label>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">Define si la clase es presencial o virtual.</p>
+      </fieldset>
+      {error && (
+        <p id={errorId} role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+      <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
         {onCancel && (
           <button
-            type="button" onClick={onCancel}
-            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium"
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancelar
           </button>
         )}
+        <button
+          type="submit"
+          disabled={saving}
+          className="px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40"
+        >
+          {saving ? "Guardando..." : editing ? "Guardar cambios" : "Crear clase"}
+        </button>
       </div>
     </form>
   );

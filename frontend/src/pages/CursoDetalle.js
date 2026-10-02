@@ -21,10 +21,10 @@ const classStatusLabels = {
 };
 
 const classStatusColors = {
-  SCHEDULED: "bg-amber-50 text-amber-700",
-  IN_PROGRESS: "bg-emerald-50 text-emerald-700",
-  COMPLETED: "bg-red-50 text-red-700",
-  CANCELLED: "bg-red-50 text-red-700",
+  SCHEDULED: "bg-amber-50 text-amber-700 border border-amber-200",
+  IN_PROGRESS: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+  COMPLETED: "bg-slate-100 text-slate-600 border border-slate-200",
+  CANCELLED: "bg-red-50 text-red-700 border border-red-200",
 };
 
 export default function CursoDetalle({ group, onBack, onSelectClass }) {
@@ -37,6 +37,7 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [count, setCount] = useState(0);
+  const [statusView, setStatusView] = useState("ALL");
   const debounced = useDebounce(search, 300);
 
   const load = (s = debounced, p = page) =>
@@ -118,48 +119,96 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
     }
   };
 
+  const visibleClasses =
+    statusView === "ALL" ? classes : classes.filter((c) => c.status === statusView);
+
   return (
     <div>
-      <ProfHeader
-        title={group.course?.name}
-        subtitle={`Grupo ${group.group_code} · ${group.term_period}`}
-        onBack={onBack}
-      />
-      <div className="flex flex-wrap gap-2 mb-4 items-end">
-        <input
-          value={instantTitle}
-          onChange={(e) => setInstantTitle(e.target.value)}
-          placeholder="Título inmediata (opcional)"
-          maxLength={150}
-          className="border rounded-lg px-3 py-2 text-sm text-gray-800"
+      <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-4">
+        <ProfHeader
+          title={group.course?.name}
+          subtitle={`Grupo ${group.group_code} · ${group.term_period}`}
+          onBack={onBack}
         />
-        <label className="text-sm text-gray-600">
-          TTL QR (min)
-          <input
-            type="number"
-            min={1}
-            max={120}
-            value={instantTtl}
-            onChange={(e) => setInstantTtl(e.target.value)}
-            className="ml-2 w-20 border rounded-lg px-3 py-2 text-sm text-gray-800"
-          />
-        </label>
-        <button
-          onClick={handleInstant}
-          disabled={instantLoading}
-          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
-        >
-          {instantLoading ? "Creando..." : "⚡ inmediata"}
-        </button>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] text-white rounded-lg text-sm font-medium"
-        >
-          📅 Programar
-        </button>
-      </div>
-      <div className="mb-4">
-        <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Buscar clase..." />
+        <div className="flex flex-wrap items-center gap-2">
+          <details className="group">
+            <summary
+              className="inline-flex cursor-pointer list-none items-center gap-2 rounded-xl bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40 disabled:opacity-50 disabled:cursor-not-allowed [&::-webkit-details-marker]:hidden"
+              aria-label="Opciones de clase inmediata"
+            >
+              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-amber-500" />
+              {instantLoading ? "Creando..." : "⚡ Inmediata"}
+              <span aria-hidden="true" className="text-xs text-slate-400 group-open:rotate-180 transition-transform">
+                ▾
+              </span>
+            </summary>
+            <div className="mt-2 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div>
+                <label htmlFor="instant-title" className="block text-xs font-medium text-slate-600">
+                  Título inmediata (opcional)
+                </label>
+                <input
+                  id="instant-title"
+                  value={instantTitle}
+                  onChange={(e) => setInstantTitle(e.target.value)}
+                  placeholder="Título inmediata (opcional)"
+                  maxLength={150}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
+                />
+              </div>
+              <div>
+                <label htmlFor="instant-ttl" className="block text-xs font-medium text-slate-600">
+                  TTL QR (min)
+                </label>
+                <input
+                  id="instant-ttl"
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={instantTtl}
+                  onChange={(e) => setInstantTtl(e.target.value)}
+                  className="mt-1 w-24 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
+                />
+              </div>
+              <button
+                onClick={handleInstant}
+                disabled={instantLoading}
+                className="inline-flex items-center gap-2 rounded-xl bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span aria-hidden="true" className="h-2 w-2 rounded-full bg-amber-500" />
+                {instantLoading ? "Creando..." : "Crear ahora"}
+              </button>
+            </div>
+          </details>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] text-white rounded-xl text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            📅 Programar
+          </button>
+        </div>
+      </section>
+      <div className="sticky top-0 z-10 bg-[#F8FAFC]/95 backdrop-blur rounded-xl p-3 mb-4 flex flex-col md:flex-row md:items-center gap-2">
+        <div className="w-full md:max-w-sm">
+          <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Buscar clase..." />
+        </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor="filtro-estado" className="text-xs font-medium text-slate-600">
+            Filtrar vista
+          </label>
+          <select
+            id="filtro-estado"
+            value={statusView}
+            onChange={(e) => setStatusView(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
+          >
+            <option value="ALL">Todas</option>
+            <option value="SCHEDULED">Programadas</option>
+            <option value="IN_PROGRESS">En progreso</option>
+            <option value="COMPLETED">Finalizadas</option>
+            <option value="CANCELLED">Canceladas</option>
+          </select>
+        </div>
       </div>
       {showCreate && (
         <Modal title="Programar clase" onClose={() => setShowCreate(false)}>
@@ -180,45 +229,94 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
           />
         </Modal>
       )}
-      {loading && <p className="text-gray-500 mt-4">Cargando clases...</p>}
-      {error && <p className="text-red-600 mt-4">{error}</p>}
-      {!loading && !error && classes.length === 0 && (
-        <p className="text-gray-500 mt-4">No hay clases programadas.</p>
+      {loading && (
+        <div className="grid gap-4 md:grid-cols-2 mt-4" aria-hidden="true">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="animate-pulse bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+              <div className="h-4 w-2/3 rounded bg-slate-200" />
+              <div className="mt-2 h-3 w-1/2 rounded bg-slate-100" />
+              <div className="mt-3 flex gap-2">
+                <div className="h-6 w-16 rounded-full bg-slate-100" />
+                <div className="h-6 w-16 rounded-full bg-slate-100" />
+              </div>
+            </div>
+          ))}
+        </div>
       )}
-      <ul className="mt-4 space-y-3">
-        {classes.map((c) => (
-          <li key={c.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+      {error && (
+        <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+      {!loading && !error && visibleClasses.length === 0 && (
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+          <p aria-hidden="true" className="text-3xl">
+            📅
+          </p>
+          <p className="mt-2 text-sm text-slate-600">No hay clases programadas.</p>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="mt-3 px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] text-white rounded-xl text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40"
+          >
+            Programar primera clase
+          </button>
+        </div>
+      )}
+      <ul className="mt-4 grid gap-4 md:grid-cols-2">
+        {visibleClasses.map((c) => (
+          <li
+            key={c.id}
+            className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md hover:border-[#B3200E]/20 transition"
+          >
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
-              <button onClick={() => onSelectClass && onSelectClass(c)} className="text-left w-full min-w-0 flex-1">
-                <p className="font-semibold text-gray-800 hover:text-[#B3200E]">{c.title}</p>
-                <p className="text-sm text-gray-500 break-words">
+              <button
+                onClick={() => onSelectClass && onSelectClass(c)}
+                aria-label={`Ver ${c.title}`}
+                className="text-left w-full min-w-0 flex-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40"
+              >
+                <p className="font-semibold text-slate-800 hover:text-[#B3200E] break-words">{c.title}</p>
+                <p className="text-sm text-slate-500 break-words">
                   {formatBogota(c.start_time)} · {c.duration_minutes} min · QR {c.qr_duration_minutes ?? 10} min
                 </p>
               </button>
-              <span className={`inline-flex flex-wrap items-center gap-1 text-xs px-2 py-1 rounded-full self-start ${classStatusColors[c.status] || "bg-gray-100 text-gray-600"}`}>
-                <span>{modalityLabels[c.modality] || c.modality}</span>
-                <span aria-hidden="true">·</span>
-                <span>{classStatusLabels[c.status] || c.status}</span>
+              <span className="inline-flex flex-wrap items-center gap-1 self-start">
+                <span className="inline-flex items-center text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                  {modalityLabels[c.modality] || c.modality}
+                </span>
+                <span
+                  className={`inline-flex items-center text-xs px-2 py-1 rounded-full ${classStatusColors[c.status] || "bg-slate-100 text-slate-600 border border-slate-200"}`}
+                >
+                  {classStatusLabels[c.status] || c.status}
+                </span>
               </span>
             </div>
-            <div className="flex gap-2 mt-2">
+            <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100">
               <button
                 onClick={() => setEditing(c)}
-                className="px-3 py-1 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg"
+                aria-label={`Editar ${c.title}`}
+                className="px-3 py-1 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40"
               >
                 Editar
               </button>
               <button
                 onClick={() => handleDelete(c.id)}
-                className="px-3 py-1 text-xs font-medium bg-red-50 hover:bg-red-100 text-red-600 rounded-lg"
+                aria-label={`Eliminar ${c.title}`}
+                className="px-3 py-1 text-xs font-medium bg-red-50 hover:bg-red-100 text-red-700 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
               >
                 Eliminar
+              </button>
+              <button
+                onClick={() => onSelectClass && onSelectClass(c)}
+                aria-label={`Ver ${c.title}`}
+                className="px-3 py-1 text-xs font-medium bg-white border border-slate-200 hover:bg-slate-50 text-[#B3200E] rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40"
+              >
+                Ver
               </button>
             </div>
           </li>
         ))}
       </ul>
-      <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+      <Pagination page={page} totalPages={totalPages} onChange={setPage} countLabel={`${count} clase(s)`} />
     </div>
   );
 }
