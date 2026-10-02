@@ -116,23 +116,23 @@ export default function CreateClassForm({ groupId, initial = null, onCreated, on
             aria-describedby={hasError ? errorId : undefined}
             className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
           />
-          <p className="mt-1 text-xs text-slate-500">Día de la clase (Bogotá).</p>
+          <p className="mt-1 text-xs text-slate-500">Día de la clase.</p>
         </div>
         <div>
           <label htmlFor={timeId} className="block text-sm font-medium text-slate-700">
-            Hora (Bogotá)
+            Hora
           </label>
           <input
             id={timeId}
             type="time"
             value={form.time}
             onChange={set("time")}
-            title="Hora de inicio (Bogotá)"
+            title="Hora de inicio"
             aria-invalid={hasError}
             aria-describedby={hasError ? errorId : undefined}
             className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
           />
-          <p className="mt-1 text-xs text-slate-500">Hora de inicio (Bogotá).</p>
+          <p className="mt-1 text-xs text-slate-500">Hora de inicio.</p>
         </div>
         <div>
           <label htmlFor={durationId} className="block text-sm font-medium text-slate-700">

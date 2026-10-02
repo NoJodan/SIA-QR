@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import api, { ensureCsrf, googleLoginUrl } from "../services/api";
 import { markAttendance, resolveToken } from "../services/attendance";
 import { formatBogota } from "../utils/dates";
+import logo from "../assets/logo.png";
 
 const GEO_TIMEOUT_MS = 8000;
 const PENDING_TOKEN_KEY = "siaqr_pending_token";
@@ -100,50 +101,62 @@ function StudentProfileForm({ initial, onSaved }) {
   };
 
   const inputCls =
-    "mt-1 w-full border rounded-lg px-3 py-2 text-sm text-gray-800";
+    "mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20";
 
   return (
-    <form onSubmit={submit} className="space-y-3 bg-amber-50 border border-amber-200 rounded-lg p-4">
-      <p className="text-sm font-semibold text-amber-800">
-        Completa tu perfil de estudiante para marcar asistencia
+    <form onSubmit={submit} className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <p className="text-sm font-semibold text-slate-800">
+        Completa tu perfil de estudiante para firmar asistencia
       </p>
       {(suggestedName || initial?.email) && (
-        <p className="text-xs text-gray-600 bg-white border border-amber-100 rounded-lg px-3 py-2">
+        <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
           Registrado como: {suggestedName || "—"}{initial?.email ? ` (${initial.email})` : ""}
         </p>
       )}
       {suggestedName && (
-        <p className="text-xs text-gray-500">Nombre tomado de tu cuenta de Google (solo lectura).</p>
+        <p className="text-xs text-slate-500">Nombre tomado de tu cuenta de Google (solo lectura).</p>
       )}
       <div>
-        <label className="text-xs text-gray-600">Número de documento *</label>
+        <label className="text-xs font-medium text-slate-700">Número de documento *</label>
         <input className={inputCls} value={form.document_number} onChange={set("document_number")} maxLength={50} />
-        {errors.document_number && <p className="text-xs text-red-600 mt-1">{errors.document_number}</p>}
+        {errors.document_number && <p className="mt-1 text-xs text-red-600">{errors.document_number}</p>}
       </div>
       <div>
-        <label className="text-xs text-gray-600">Código estudiantil *</label>
+        <label className="text-xs font-medium text-slate-700">Código estudiantil *</label>
         <input className={inputCls} value={form.student_code} onChange={set("student_code")} maxLength={50} />
-        {errors.student_code && <p className="text-xs text-red-600 mt-1">{errors.student_code}</p>}
+        {errors.student_code && <p className="mt-1 text-xs text-red-600">{errors.student_code}</p>}
       </div>
       <div>
-        <label className="text-xs text-gray-600">Teléfono *</label>
+        <label className="text-xs font-medium text-slate-700">Teléfono *</label>
         <input type="tel" className={inputCls} value={form.phone_number} onChange={set("phone_number")} maxLength={20} />
-        {errors.phone_number && <p className="text-xs text-red-600 mt-1">{errors.phone_number}</p>}
+        {errors.phone_number && <p className="mt-1 text-xs text-red-600">{errors.phone_number}</p>}
       </div>
       <div>
-        <label className="text-xs text-gray-600">Dirección *</label>
+        <label className="text-xs font-medium text-slate-700">Dirección *</label>
         <input className={inputCls} value={form.address} onChange={set("address")} maxLength={500} />
-        {errors.address && <p className="text-xs text-red-600 mt-1">{errors.address}</p>}
+        {errors.address && <p className="mt-1 text-xs text-red-600">{errors.address}</p>}
       </div>
       {errors._global && <p className="text-xs text-red-600">{errors._global}</p>}
       <button
         type="submit"
         disabled={saving}
-        className="w-full py-2 px-4 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-medium rounded-lg text-sm"
+        className="w-full rounded-xl bg-[#B3200E] px-4 py-2 text-sm font-medium text-white hover:bg-[#941B0B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {saving ? "Guardando…" : "Guardar perfil y continuar"}
       </button>
     </form>
+  );
+}
+
+function AttendHeader() {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl bg-[#B3200E] px-5 py-4 text-white shadow-sm">
+      <img src={logo} alt="Universidad del Tolima" className="h-10 w-10 rounded-full bg-white p-1" />
+      <div>
+        <p className="text-base font-bold leading-tight">SIA-QR</p>
+        <p className="text-xs text-white/85">Universidad del Tolima</p>
+      </div>
+    </div>
   );
 }
 
@@ -275,14 +288,23 @@ export default function AttendQR() {
       ? "Ubicación registrada"
       : geoState === "pending"
         ? "Obteniendo ubicación (opcional)…"
-        : "Sin ubicación — igual puedes marcar";
+        : "Sin ubicación — igual puedes firmar";
+  const geoBadgeCls =
+    geoState === "ready"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : geoState === "pending"
+        ? "border-slate-200 bg-slate-50 text-slate-500"
+        : "border-slate-200 bg-slate-50 text-slate-500";
 
   if (phase === "no-token") {
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-gray-50 p-4">
-        <div className="max-w-md w-full bg-white p-5 sm:p-8 rounded-xl shadow border border-gray-100 text-center space-y-3">
-          <h1 className="text-2xl font-bold text-gray-800">SIA-QR</h1>
-          <p className="text-sm text-gray-600">Falta el token del código QR. Escanea el QR proyectado por tu profesor.</p>
+      <div className="flex min-h-dvh items-center justify-center bg-[#F8FAFC] p-4">
+        <div className="w-full max-w-md space-y-4">
+          <AttendHeader />
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm">
+            <h1 className="text-xl font-bold text-slate-900">Firma tu asistencia</h1>
+            <p className="text-sm text-slate-600">Falta el token del código QR. Escanea el QR proyectado por tu profesor.</p>
+          </div>
         </div>
       </div>
     );
@@ -290,26 +312,29 @@ export default function AttendQR() {
 
   if (phase === "login") {
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-gray-50 p-4">
-        <div className="max-w-md w-full bg-white p-5 sm:p-8 rounded-xl shadow border border-gray-100 flex flex-col items-center space-y-4">
-          <h1 className="text-2xl font-bold text-gray-800">SIA-QR</h1>
-          <p className="text-sm text-gray-600 text-center">
-            Inicia sesión con tu correo institucional (@ut.edu.co) para marcar tu asistencia.
-          </p>
-          <a
-            href={googleLoginUrl(attendUrl)}
-            onClick={() => {
-              // M4: respaldo local por si el ?next= no sobrevive al OAuth.
-              try {
-                localStorage.setItem(PENDING_TOKEN_KEY, token);
-              } catch {
-                // sin almacenamiento: el ?next= sigue siendo el camino principal
-              }
-            }}
-            className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-center"
-          >
-            Iniciar sesión con Google Institucional
-          </a>
+      <div className="flex min-h-dvh items-center justify-center bg-[#F8FAFC] p-4">
+        <div className="w-full max-w-md space-y-4">
+          <AttendHeader />
+          <div className="flex flex-col items-center space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h1 className="text-xl font-bold text-slate-900">Firma tu asistencia</h1>
+            <p className="text-center text-sm text-slate-600">
+              Inicia sesión con tu correo institucional (@ut.edu.co) para firmar tu asistencia.
+            </p>
+            <a
+              href={googleLoginUrl(attendUrl)}
+              onClick={() => {
+                // M4: respaldo local por si el ?next= no sobrevive al OAuth.
+                try {
+                  localStorage.setItem(PENDING_TOKEN_KEY, token);
+                } catch {
+                  // sin almacenamiento: el ?next= sigue siendo el camino principal
+                }
+              }}
+              className="w-full rounded-xl bg-[#B3200E] px-4 py-3 text-center font-medium text-white hover:bg-[#941B0B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40"
+            >
+              Continuar con Google
+            </a>
+          </div>
         </div>
       </div>
     );
@@ -317,24 +342,35 @@ export default function AttendQR() {
 
   if (phase === "resolving") {
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-gray-50 p-4">
-        <p className="text-gray-500">Validando código QR…</p>
+      <div className="flex min-h-dvh items-center justify-center bg-[#F8FAFC] p-4">
+        <div className="w-full max-w-md space-y-4">
+          <AttendHeader />
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm">
+            <p className="animate-pulse text-sm text-slate-500">Validando código QR…</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (phase === "error") {
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-gray-50 p-4">
-        <div className="max-w-md w-full bg-white p-5 sm:p-8 rounded-xl shadow border border-gray-100 text-center space-y-4">
-          <h1 className="text-xl font-bold text-red-700">No se pudo continuar</h1>
-          <p className="text-sm text-gray-600">{error}</p>
-          <button
-            onClick={resolve}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
-          >
-            Reintentar
-          </button>
+      <div className="flex min-h-dvh items-center justify-center bg-[#F8FAFC] p-4">
+        <div className="w-full max-w-md space-y-4">
+          <AttendHeader />
+          <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm">
+            <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+              Revisa e intenta de nuevo
+            </span>
+            <h1 className="text-xl font-bold text-red-700">No se pudo continuar</h1>
+            <p className="text-sm text-slate-600">{error}</p>
+            <button
+              onClick={resolve}
+              className="rounded-xl bg-[#B3200E] px-4 py-2 text-sm font-medium text-white hover:bg-[#941B0B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40"
+            >
+              Reintentar
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -342,23 +378,29 @@ export default function AttendQR() {
 
   if (phase === "done" || phase === "already") {
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-green-50 p-4">
-        <div className="max-w-md w-full bg-white p-5 sm:p-8 rounded-xl shadow border border-green-200 text-center space-y-3">
-          <div className="text-5xl">✅</div>
-          <h1 className="text-2xl font-bold text-green-700">
-            {phase === "already" ? "Asistencia ya registrada" : "¡Asistencia registrada!"}
-          </h1>
-          {session && (
-            <p className="text-sm text-gray-600">
-              {session.class?.title} · {session.group?.course_name}
-            </p>
-          )}
-          {result?.registered_at && (
-            <p className="text-sm font-semibold text-gray-800">
-              Hora: {formatBogota(result.registered_at)} (Bogotá)
-            </p>
-          )}
-          {user?.email && <p className="text-xs text-gray-400">{user.email}</p>}
+      <div className="flex min-h-dvh items-center justify-center bg-[#F8FAFC] p-4">
+        <div className="w-full max-w-md space-y-4">
+          <AttendHeader />
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              {phase === "already" ? "Ya firmada" : "Firma exitosa"}
+            </span>
+            <h1 className="text-2xl font-bold text-slate-900">
+              {phase === "already" ? "Asistencia ya registrada" : "¡Asistencia registrada!"}
+            </h1>
+            {session && (
+              <p className="text-sm text-slate-600">
+                {session.class?.title} · {session.group?.course_name}
+              </p>
+            )}
+            {result?.registered_at && (
+              <p className="text-sm font-semibold text-slate-800">
+                Hora: {formatBogota(result.registered_at)}
+              </p>
+            )}
+            {user?.email && <p className="text-xs text-slate-400">{user.email}</p>}
+          </div>
         </div>
       </div>
     );
@@ -366,31 +408,39 @@ export default function AttendQR() {
 
   // phase === "ready"
   return (
-    <div className="min-h-dvh flex items-center justify-center bg-gray-50 p-4">
-      <div className="max-w-md w-full bg-white p-5 sm:p-8 rounded-xl shadow border border-gray-100 space-y-4">
-        <h1 className="text-2xl font-bold text-gray-800 text-center">Marcar asistencia</h1>
-        {session && (
-          <div className="bg-gray-50 rounded-lg p-4 text-sm space-y-1">
-            <p className="font-semibold text-gray-800">{session.class?.title}</p>
-            <p className="text-gray-600">
-              {session.group?.course_name} · Grupo {session.group?.group_code}
-            </p>
-            <p className="text-gray-500">Expira: {formatBogota(session.expires_at)}</p>
-          </div>
-        )}
-        {(showProfileForm || user?.needs_profile || session?.needs_profile) && (
-          <StudentProfileForm initial={user} onSaved={handleProfileSaved} />
-        )}
-        <p className="text-xs text-gray-500 text-center">📍 {geoLabel}</p>
-        {error && <p className="text-sm text-red-600 text-center">{error}</p>}
-        <button
-          onClick={handleMark}
-          disabled={marking}
-          className="w-full py-3 px-4 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold rounded-lg"
-        >
-          {marking ? "Registrando…" : "MARCAR ASISTENCIA"}
-        </button>
-        {user?.email && <p className="text-xs text-gray-400 text-center">{user.email}</p>}
+    <div className="flex min-h-dvh items-center justify-center bg-[#F8FAFC] p-4">
+      <div className="w-full max-w-md space-y-4">
+        <AttendHeader />
+        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h1 className="text-center text-xl font-bold text-slate-900">Firma tu asistencia</h1>
+          {session && (
+            <div className="space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+              <p className="font-semibold text-slate-800">{session.class?.title}</p>
+              <p className="text-slate-600">
+                {session.group?.course_name} · Grupo {session.group?.group_code}
+              </p>
+              <p className="text-slate-500">Expira: {formatBogota(session.expires_at)}</p>
+            </div>
+          )}
+          {(showProfileForm || user?.needs_profile || session?.needs_profile) && (
+            <StudentProfileForm initial={user} onSaved={handleProfileSaved} />
+          )}
+          <p className="text-center">
+            <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${geoBadgeCls}`}>
+              <span className="h-1.5 w-1.5 rounded-full bg-current" />
+              {geoLabel}
+            </span>
+          </p>
+          {error && <p className="text-center text-sm text-red-600">{error}</p>}
+          <button
+            onClick={handleMark}
+            disabled={marking}
+            className="w-full rounded-xl bg-[#B3200E] px-4 py-3 font-semibold text-white hover:bg-[#941B0B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {marking ? "Registrando…" : "Firmar asistencia"}
+          </button>
+          {user?.email && <p className="text-center text-xs text-slate-400">{user.email}</p>}
+        </div>
       </div>
     </div>
   );

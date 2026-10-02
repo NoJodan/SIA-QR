@@ -354,7 +354,7 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
             {phase === "live" && (
               <div className="bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs md:text-sm font-medium px-4 py-3 rounded-2xl flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
-                <span><strong>QR activo</strong> — se genera y renueva solo.</span>
+                <span><strong>QR activo</strong> - Escanea para firmar asistencia.</span>
               </div>
             )}
             {phase === "finished" && (
