@@ -9,11 +9,11 @@ export default function Modal({ title, onClose, children }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 transition-opacity duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4 transition-opacity duration-200"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-xl w-full max-w-lg p-5 transform transition-transform duration-200 scale-100"
+        className="w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain bg-white rounded-xl shadow-xl p-4 sm:p-5 transform transition-transform duration-200 scale-100"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-4">

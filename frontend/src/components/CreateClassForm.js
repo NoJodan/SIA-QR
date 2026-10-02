@@ -26,7 +26,7 @@ export default function CreateClassForm({ groupId, initial = null, onCreated, on
     time: seed?.time || "08:00",
     title: initial?.title || "",
     duration_minutes: initial?.duration_minutes || 90,
-    qr_duration_minutes: initial?.qr_duration_minutes ?? 10,
+    qr_duration_minutes: initial?.qr_duration_minutes || 15,
     modality: initial?.modality || "PRESENTIAL",
   });
   const [error, setError] = useState("");
@@ -96,7 +96,7 @@ export default function CreateClassForm({ groupId, initial = null, onCreated, on
         <label className="text-sm text-gray-600">Vida útil del QR (min)
           <input
             type="number" min={1} max={120} value={form.qr_duration_minutes} onChange={set("qr_duration_minutes")}
-            placeholder="10" title="Vida útil del QR en minutos (1-120)" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm text-gray-800"
+            placeholder="15" title="Vida útil del QR en minutos (1-120)" className="mt-1 w-full border rounded-lg px-3 py-2 text-sm text-gray-800"
           />
           <span className="text-xs text-gray-400">Vida útil del QR</span>
         </label>
@@ -108,10 +108,10 @@ export default function CreateClassForm({ groupId, initial = null, onCreated, on
         </label>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           type="submit" disabled={saving}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
+          className="px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] disabled:opacity-50 text-white rounded-lg text-sm font-medium"
         >
           {saving ? "Guardando..." : editing ? "Guardar cambios" : "Crear clase"}
         </button>

@@ -43,7 +43,7 @@ function MainApp() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-dvh flex items-center justify-center">
         <p className="text-gray-500">Cargando...</p>
       </div>
     );
@@ -62,7 +62,7 @@ function MainApp() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center space-y-4 bg-gray-50">
+    <div className="min-h-dvh flex flex-col items-center justify-center space-y-4 bg-gray-50 p-4 text-center">
       <h1 className="text-3xl font-bold text-gray-800">SIA-QR</h1>
       <p className="text-gray-600">Bienvenido, {user.email} ({user.role})</p>
       <button

@@ -42,8 +42,8 @@ export default function AdminLogin({ onSuccess }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-md border border-gray-100 flex flex-col items-center space-y-6">
+    <div className="min-h-dvh flex items-center justify-center bg-gray-50 p-4">
+      <div className="max-w-md w-full bg-white p-5 sm:p-8 rounded-xl shadow-md border border-gray-100 flex flex-col items-center space-y-6">
         <h2 className="text-2xl font-bold text-gray-800">Acceso de administrador</h2>
         <p className="text-sm text-gray-600 text-center">
           Uso interno. Inicia sesión con tu correo y contraseña de administrador.
@@ -67,7 +67,7 @@ export default function AdminLogin({ onSuccess }) {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B3200E]"
               placeholder="correo"
             />
           </div>
@@ -82,20 +82,20 @@ export default function AdminLogin({ onSuccess }) {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B3200E]"
               placeholder="••••••••"
             />
           </div>
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium rounded-lg text-center shadow transition-colors"
+            className="w-full py-3 px-4 bg-[#B3200E] hover:bg-[#941B0B] disabled:opacity-60 text-white font-medium rounded-lg text-center shadow transition-colors"
           >
             {loading ? "Verificando..." : "Iniciar sesión"}
           </button>
         </form>
 
-        <Link to="/" className="text-sm text-blue-600 hover:text-blue-800 hover:underline">
+        <Link to="/" className="text-sm text-[#B3200E] hover:text-[#941B0B] hover:underline">
           Volver al inicio
         </Link>
       </div>

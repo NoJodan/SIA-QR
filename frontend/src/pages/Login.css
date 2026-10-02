@@ -1,0 +1,1074 @@
+.login-page {
+  height: 100vh;
+  height: 100svh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: clamp(10px, 2.5vh, 24px);
+  color: #1f2937;
+  background:
+    radial-gradient(ellipse at 14% 12%, rgba(183, 22, 45, 0.12), transparent 34%),
+    radial-gradient(ellipse at 88% 82%, rgba(110, 145, 128, 0.17), transparent 38%),
+    linear-gradient(135deg, #e5ebe8 0%, #f0f1ed 52%, #e5e9e7 100%);
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+.login-shell {
+  width: min(100%, 1080px);
+  height: min(100%, 760px);
+  display: grid;
+  grid-template-columns: 0.92fr 1.08fr;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(127, 18, 32, 0.16);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 32px 70px rgba(18, 25, 38, 0.16);
+  animation: login-enter 500ms ease-out both;
+}
+
+.login-brand {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  padding: clamp(18px, 4vh, 34px) 30px clamp(14px, 3vh, 25px);
+  color: #fff;
+  text-align: center;
+  background: linear-gradient(155deg, #b7162d 0%, #8b1220 62%, #70101d 100%);
+}
+
+.login-brand::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  content: "";
+  opacity: 0.19;
+  background: repeating-linear-gradient(132deg, transparent 0 34px, rgba(255, 255, 255, 0.12) 35px, transparent 36px 70px);
+  mask-image: linear-gradient(145deg, #000 0%, transparent 76%);
+}
+
+.login-circle {
+  position: absolute;
+  z-index: -1;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.025);
+  pointer-events: none;
+}
+
+.login-circle--one {
+  top: -105px;
+  right: -80px;
+  width: 265px;
+  aspect-ratio: 1;
+  animation: login-drift-one 10s ease-in-out infinite alternate;
+}
+
+.login-circle--two {
+  bottom: -82px;
+  left: -72px;
+  width: 218px;
+  aspect-ratio: 1;
+  animation: login-drift-two 12s ease-in-out infinite alternate;
+}
+
+.login-circle--three {
+  right: 15%;
+  bottom: 12%;
+  width: 126px;
+  aspect-ratio: 1;
+  border-color: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.018);
+  animation: login-drift-three 14s ease-in-out infinite alternate;
+}
+
+.login-brand-content,
+.login-brand-footer {
+  position: relative;
+}
+
+.login-crest {
+  width: clamp(90px, 21vh, 164px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  margin: 0 auto clamp(12px, 2.6vh, 24px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: inset 0 0 25px rgba(255, 255, 255, 0.05);
+}
+
+.login-logo {
+  display: block;
+  width: 86%;
+  height: 86%;
+  object-fit: contain;
+}
+
+.login-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.login-chip::before {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  content: "";
+  border-radius: 50%;
+  background: #d8b36a;
+}
+
+.login-brand-title {
+  margin: 0 0 10px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.4rem, 5vw, 3.2rem);
+  line-height: 1.05;
+}
+
+.login-brand-copy {
+  max-width: 410px;
+  margin: 0 auto;
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.login-brand-footer {
+  margin-top: 30px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+}
+
+.login-brand-footer p {
+  margin: 0;
+}
+
+.login-brand-footer p + p {
+  margin-top: 4px;
+}
+
+.login-form-panel {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  padding: clamp(24px, 5vh, 48px) clamp(26px, 5vw, 58px);
+  background:
+    radial-gradient(ellipse at 95% 5%, rgba(183, 22, 45, 0.08), transparent 36%),
+    radial-gradient(ellipse at 0% 100%, rgba(106, 145, 125, 0.15), transparent 40%),
+    linear-gradient(145deg, #edf2ef 0%, #e2ebe6 100%);
+}
+
+.login-form-panel::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  content: "";
+  opacity: 0.45;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent 0 47px, rgba(86, 110, 98, 0.035) 48px, transparent 49px);
+}
+
+.login-eyebrow {
+  margin-bottom: 11px;
+  color: #b7162d;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.login-form-panel h2 {
+  margin: 0;
+  color: #1f2937;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.9rem, 4vw, 2.55rem);
+  line-height: 1.12;
+}
+
+.login-lead {
+  max-width: 480px;
+  margin: 13px 0 25px;
+  color: #586574;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.login-access-card {
+  position: relative;
+  overflow: hidden;
+  padding: 22px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: rgba(251, 252, 249, 0.76);
+  box-shadow: 0 16px 28px rgba(31, 54, 43, 0.07);
+  backdrop-filter: blur(8px);
+}
+
+.login-access-card::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(183, 22, 45, 0.055), rgba(216, 179, 106, 0.075), transparent 62%);
+}
+
+.login-chip {
+  position: relative;
+  padding: 7px 11px;
+  border: 1px solid rgba(183, 22, 45, 0.13);
+  border-radius: 999px;
+  color: #7f1220;
+  background: rgba(183, 22, 45, 0.06);
+}
+
+.login-chip::before {
+  width: 6px;
+  height: 6px;
+  background: #b7162d;
+}
+
+.login-error {
+  position: relative;
+  margin-top: 16px;
+  padding: 11px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  color: #991b1b;
+  background: #fef2f2;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.login-google-button {
+  position: relative;
+  width: 100%;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 14px 16px;
+  border: 1px solid #dfe3e8;
+  border-radius: 6px;
+  color: #1f2937;
+  background: #fff;
+  box-shadow: 0 8px 16px rgba(31, 41, 55, 0.04);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+.login-google-button:hover {
+  transform: translateY(-2px);
+  background: #fafbfc;
+  box-shadow: 0 13px 24px rgba(31, 41, 55, 0.09);
+}
+
+.login-google-button:focus-visible {
+  outline: 3px solid rgba(183, 22, 45, 0.35);
+  outline-offset: 3px;
+}
+
+.login-google-button svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.login-helper {
+  position: relative;
+  margin: 15px 0 0;
+  color: #586574;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.login-helper strong {
+  color: #7f1220;
+}
+
+@keyframes login-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes login-drift-one {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(-18px, 16px) scale(1.06); }
+}
+
+@keyframes login-drift-two {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(18px, -14px) scale(1.07); }
+}
+
+@keyframes login-drift-three {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(-12px, -9px) scale(1.08); }
+}
+
+@media (min-width: 760px) {
+  .login-shell {
+    grid-template-columns: 0.92fr 1.08fr;
+  }
+
+  .login-brand {
+    padding: clamp(18px, 4vh, 34px) 30px clamp(14px, 3vh, 25px);
+  }
+
+  .login-crest {
+    width: clamp(100px, 21vh, 164px);
+  }
+
+  .login-form-panel {
+    padding: clamp(24px, 5vh, 48px) clamp(30px, 5vw, 58px);
+  }
+}
+
+@media (max-width: 759px) {
+  .login-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(96px, 0.28fr) minmax(0, 0.72fr);
+  }
+
+  .login-shell {
+    height: 100%;
+  }
+
+  .login-brand {
+    padding: 10px 20px;
+  }
+
+  .login-brand-content {
+    display: grid;
+    grid-template-columns: clamp(58px, 15vw, 78px) minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-content: center;
+    column-gap: 14px;
+    text-align: left;
+  }
+
+  .login-crest {
+    width: 100%;
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    margin: 0;
+    border-radius: 6px;
+  }
+
+  .login-logo {
+    width: 90%;
+    height: 90%;
+  }
+
+  .login-brand-title {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: end;
+    margin: 0 0 4px;
+    font-size: clamp(1.8rem, 6vw, 2.3rem);
+  }
+
+  .login-brand-copy {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: start;
+    margin: 0;
+    font-size: clamp(10px, 2.7vw, 12px);
+    line-height: 1.35;
+  }
+
+  .login-brand-footer {
+    display: none;
+  }
+
+  .login-form-panel {
+    padding: clamp(14px, 3vh, 24px) clamp(18px, 5vw, 34px);
+  }
+
+  .login-lead {
+    margin: 9px 0 15px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .login-access-card {
+    padding: clamp(13px, 3vw, 18px);
+  }
+
+  .login-google-button {
+    min-height: 48px;
+    margin-top: 15px;
+    padding: 11px 14px;
+  }
+
+  .login-helper {
+    margin-top: 11px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+}
+
+@media (max-height: 600px) {
+  .login-brand-copy {
+    display: none;
+  }
+
+  .login-eyebrow {
+    margin-bottom: 6px;
+  }
+
+  .login-form-panel h2 {
+    font-size: 1.7rem;
+  }
+
+  .login-crest {
+    width: clamp(64px, 15vh, 112px);
+  }
+
+  .login-lead {
+    margin: 7px 0 10px;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .login-access-card {
+    padding: 9px 12px;
+  }
+
+  .login-error {
+    margin-top: 8px;
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .login-google-button {
+    min-height: 40px;
+    margin-top: 9px;
+    padding: 8px 12px;
+  }
+
+  .login-helper {
+    margin-top: 6px;
+    font-size: 10px;
+    line-height: 1.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-shell,
+  .login-circle {
+    animation: none;
+  }
+
+  .login-google-button {
+    transition: none;
+  }
+}
+
+.login-viewport-locked,
+.login-viewport-locked body,
+body.login-viewport-locked #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.login-page {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100svh;
+  display: block;
+  overflow: hidden;
+  overscroll-behavior: none;
+  padding: 0;
+  color: #20252d;
+  background: #f8fafc;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  box-sizing: border-box;
+}
+
+.portal-login-shell {
+  width: 100%;
+  height: 100vh;
+  height: 100svh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.portal-login-brand {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 0;
+  overflow: hidden;
+  padding: clamp(28px, 4.5vw, 64px);
+  border-top-right-radius: 38px;
+  color: #fff;
+  background: #b3200e;
+}
+
+.portal-login-glow {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.portal-login-brand.sidebar-pointer-glow > .portal-login-glow {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+}
+
+.portal-login-glow span {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  filter: blur(48px);
+}
+
+.portal-login-glow-one {
+  top: -90px;
+  left: -95px;
+  width: 320px;
+  height: 320px;
+  background: rgba(255, 150, 122, 0.34);
+  animation: portal-login-pulse 8s ease-in-out infinite;
+}
+
+.portal-login-glow-two {
+  top: 36%;
+  right: -115px;
+  width: 280px;
+  height: 280px;
+  background: rgba(255, 133, 34, 0.24);
+  animation: portal-login-spin 8s linear infinite;
+}
+
+.portal-login-glow-three {
+  bottom: -115px;
+  left: 18%;
+  width: 330px;
+  height: 330px;
+  background: rgba(105, 11, 10, 0.38);
+  animation: portal-login-bob 8s ease-in-out infinite;
+}
+
+.portal-login-brand-heading {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.portal-login-brand-logo,
+.portal-login-mobile-logo {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.portal-login-brand-logo {
+  width: 46px;
+  height: 46px;
+  padding: 4px;
+}
+
+.portal-login-brand-logo img,
+.portal-login-mobile-logo img {
+  display: block;
+  width: 88%;
+  height: 88%;
+  object-fit: contain;
+  transform: translateY(-2px);
+}
+
+.portal-login-brand-name,
+.portal-login-university {
+  margin: 0;
+}
+
+.portal-login-brand-name {
+  color: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.portal-login-university {
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.portal-login-brand-message {
+  position: relative;
+  width: min(100%, 500px);
+  margin: 48px auto;
+}
+
+.portal-login-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.portal-login-badge {
+  margin-bottom: 25px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+.portal-login-badge svg,
+.portal-login-notice svg,
+.portal-login-secure svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.portal-login-brand-message h1 {
+  max-width: 480px;
+  margin: 0 0 15px;
+  color: #fff;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.15rem, 3.6vw, 3.35rem);
+  font-weight: 700;
+  line-height: 1.13;
+}
+
+.portal-login-brand-message > p {
+  max-width: 440px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.portal-login-brand-footer {
+  position: relative;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.portal-login-brand-footer span {
+  padding: 0 3px;
+}
+
+.portal-login-content {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border-top-left-radius: 38px;
+  padding: clamp(24px, 3.4vw, 48px) clamp(24px, 5.5vw, 82px);
+  background:
+    radial-gradient(ellipse at 90% 0%, rgba(179, 32, 14, 0.045), transparent 34%),
+    #f8fafc;
+}
+
+.portal-login-content::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  opacity: 0.12;
+  background: url("../assets/fondodelogin.jpg") center / cover no-repeat;
+  filter: grayscale(25%) saturate(0.7) blur(1px);
+  transform: scale(1.015);
+}
+
+.portal-login-content > * {
+  position: relative;
+  z-index: 1;
+}
+
+.portal-login-header,
+.portal-login-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.portal-login-mobile-brand {
+  display: none;
+  align-items: center;
+  gap: 10px;
+}
+
+.portal-login-mobile-logo {
+  width: 38px;
+  height: 38px;
+  padding: 3px;
+  border-color: rgba(179, 32, 14, 0.1);
+}
+
+.portal-login-mobile-brand .portal-login-brand-name {
+  color: #20252d;
+  font-size: 14px;
+}
+
+.portal-login-mobile-brand .portal-login-university {
+  color: #858b94;
+  font-size: 8px;
+}
+
+.portal-login-audience {
+  color: #737982;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.portal-login-card-wrap {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  padding: 28px 0;
+}
+
+.portal-login-card {
+  width: min(100%, 460px);
+  padding: clamp(28px, 4vw, 44px);
+  border: 1px solid #eceef1;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 16px 44px rgba(35, 43, 53, 0.07);
+  text-align: center;
+}
+
+.portal-login-card-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  margin: 0 auto 21px;
+  border-radius: 14px;
+  color: #b3200e;
+  background: rgba(179, 32, 14, 0.09);
+}
+
+.portal-login-card-icon svg {
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.portal-login-card h2 {
+  margin: 0;
+  color: #20252d;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.5rem, 2.3vw, 1.8rem);
+  line-height: 1.25;
+}
+
+.portal-login-description {
+  max-width: 340px;
+  margin: 10px auto 25px;
+  color: #737982;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.portal-login-error {
+  margin: 0 0 16px;
+  padding: 11px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 7px;
+  color: #991b1b;
+  background: #fef2f2;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.portal-login-google {
+  display: flex;
+  width: 100%;
+  min-height: 54px;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  padding: 12px 16px;
+  border: 1px solid #b3200e;
+  border-radius: 9px;
+  color: #fff;
+  background: #b3200e;
+  box-shadow: 0 5px 12px rgba(128, 25, 12, 0.15);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.portal-login-google:hover {
+  transform: translateY(-1px);
+  border-color: #961b0c;
+  color: #fff;
+  background: #961b0c;
+  box-shadow: 0 8px 17px rgba(128, 25, 12, 0.22);
+}
+
+.portal-login-google:focus-visible {
+  outline: 3px solid rgba(179, 32, 14, 0.28);
+  outline-offset: 3px;
+}
+
+.portal-login-google-icon {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.portal-login-google-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.portal-login-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 17px;
+  padding: 11px 10px;
+  border: 1px solid #edf0f2;
+  border-radius: 8px;
+  color: #6f7781;
+  background: #f8f9fa;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.portal-login-notice svg {
+  color: #8e949c;
+}
+
+.portal-login-terms {
+  max-width: 340px;
+  margin: 19px auto 0;
+  color: #9298a0;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.portal-login-footer {
+  color: #9298a0;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.portal-login-secure {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.portal-login-secure svg {
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes portal-login-pulse {
+  50% { transform: scale(1.12); opacity: 0.72; }
+}
+
+@keyframes portal-login-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes portal-login-bob {
+  50% { transform: translateY(-14px) scale(1.06); }
+}
+
+@media (max-width: 1023px) {
+  .portal-login-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .portal-login-brand {
+    display: none;
+  }
+
+  .portal-login-content {
+    height: 100vh;
+    height: 100svh;
+    min-height: 0;
+    border-top-left-radius: 0;
+    padding: 22px clamp(20px, 6vw, 54px) 18px;
+  }
+
+  .portal-login-mobile-brand {
+    display: flex;
+  }
+
+  .portal-login-audience {
+    display: none;
+  }
+
+  .portal-login-card-wrap {
+    padding: 30px 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .portal-login-content {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .portal-login-card-wrap {
+    padding: 22px 0;
+  }
+
+  .portal-login-card {
+    padding: 28px 21px;
+    border-radius: 14px;
+  }
+
+  .portal-login-footer {
+    font-size: 10px;
+  }
+}
+
+@media (max-height: 620px) {
+  .portal-login-content {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .portal-login-brand {
+    padding-top: 22px;
+    padding-bottom: 22px;
+  }
+
+  .portal-login-card-wrap {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .portal-login-card {
+    padding: 20px 24px;
+  }
+
+  .portal-login-card-icon {
+    width: 42px;
+    height: 42px;
+    margin-bottom: 13px;
+  }
+
+  .portal-login-description {
+    margin-top: 7px;
+    margin-bottom: 15px;
+  }
+
+  .portal-login-google {
+    min-height: 48px;
+  }
+
+  .portal-login-notice {
+    margin-top: 11px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .portal-login-terms {
+    margin-top: 11px;
+  }
+}
+
+@media (max-height: 460px) {
+  .portal-login-brand-message > p,
+  .portal-login-brand-footer,
+  .portal-login-terms,
+  .portal-login-footer {
+    display: none;
+  }
+
+  .portal-login-card-icon {
+    display: none;
+  }
+
+  .portal-login-notice {
+    margin-top: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-login-glow span {
+    animation: none;
+  }
+
+  .portal-login-google {
+    transition: none;
+  }
+}

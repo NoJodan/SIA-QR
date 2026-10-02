@@ -62,9 +62,9 @@ export default function AdminCursoDetalle({ group, onBack }) {
       <ul className="mt-4 space-y-3">
         {classes.map((c) => (
           <li key={c.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-            <p className="font-semibold text-gray-800">{c.title}</p>
-            <p className="text-sm text-gray-500">
-              {formatBogota(c.start_time)} · {c.duration_minutes} min · QR {c.qr_duration_minutes ?? 10} min
+            <p className="font-semibold text-gray-800 break-words">{c.title}</p>
+            <p className="text-sm text-gray-500 break-words">
+              {formatBogota(c.start_time)} · {c.duration_minutes} min · QR {c.qr_duration_minutes ?? 15} min
             </p>
             <p className="text-xs text-gray-400 mt-1">{c.modality} · {c.status}</p>
             <button

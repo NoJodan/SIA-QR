@@ -4,7 +4,7 @@ export default function ProfHeader({ title, subtitle, onBack }) {
   return (
     <div className="mb-6">
       {onBack && (
-        <button onClick={onBack} className="text-sm text-blue-600 hover:text-blue-800 mb-2">
+        <button onClick={onBack} className="text-sm text-[#B3200E] hover:text-[#941B0B] mb-2">
           ← Volver
         </button>
       )}

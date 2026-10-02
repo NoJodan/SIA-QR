@@ -51,16 +51,15 @@ function fieldError(data, key) {
   return Array.isArray(v) ? v[0] : String(v);
 }
 
-// M1: registro inicial real del estudiante (RF-EST-03). El nombre viene de
-// Google (solo lectura); se exigen código/documento/teléfono/dirección
-// reales; el backend valida unicidad con 409 legible.
+// M1: registro inicial real del estudiante (RF-EST-03). Sin datos
+// sintéticos: exige código/documento/nombre reales; el backend valida
+// unicidad con 409 legible.
 function StudentProfileForm({ initial, onSaved }) {
-  const suggestedName = [initial?.suggested_first_name || initial?.first_name || "", initial?.suggested_last_name || initial?.last_name || ""].join(" ").trim();
   const [form, setForm] = useState({
     student_code: initial?.student_code || "",
     document_number: initial?.document_number || "",
-    phone_number: initial?.phone_number || "",
-    address: initial?.address || "",
+    first_name: initial?.first_name || "",
+    last_name: initial?.last_name || "",
   });
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
@@ -76,8 +75,8 @@ function StudentProfileForm({ initial, onSaved }) {
       const { data } = await api.patch("/api/auth/me/", {
         student_code: form.student_code.trim(),
         document_number: form.document_number.trim(),
-        phone_number: form.phone_number.trim(),
-        address: form.address.trim(),
+        first_name: form.first_name.trim(),
+        last_name: form.last_name.trim(),
       });
       onSaved(data);
     } catch (err) {
@@ -87,8 +86,8 @@ function StudentProfileForm({ initial, onSaved }) {
         setErrors({
           student_code: fieldError(d, "student_code"),
           document_number: fieldError(d, "document_number"),
-          phone_number: fieldError(d, "phone_number"),
-          address: fieldError(d, "address"),
+          first_name: fieldError(d, "first_name"),
+          last_name: fieldError(d, "last_name"),
           _global: d.error || "",
         });
       } else {
@@ -107,33 +106,27 @@ function StudentProfileForm({ initial, onSaved }) {
       <p className="text-sm font-semibold text-amber-800">
         Completa tu perfil de estudiante para marcar asistencia
       </p>
-      {(suggestedName || initial?.email) && (
-        <p className="text-xs text-gray-600 bg-white border border-amber-100 rounded-lg px-3 py-2">
-          Registrado como: {suggestedName || "—"}{initial?.email ? ` (${initial.email})` : ""}
-        </p>
-      )}
-      {suggestedName && (
-        <p className="text-xs text-gray-500">Nombre tomado de tu cuenta de Google (solo lectura).</p>
-      )}
-      <div>
-        <label className="text-xs text-gray-600">Número de documento *</label>
-        <input className={inputCls} value={form.document_number} onChange={set("document_number")} maxLength={50} />
-        {errors.document_number && <p className="text-xs text-red-600 mt-1">{errors.document_number}</p>}
-      </div>
       <div>
         <label className="text-xs text-gray-600">Código estudiantil *</label>
         <input className={inputCls} value={form.student_code} onChange={set("student_code")} maxLength={50} />
         {errors.student_code && <p className="text-xs text-red-600 mt-1">{errors.student_code}</p>}
       </div>
       <div>
-        <label className="text-xs text-gray-600">Teléfono *</label>
-        <input type="tel" className={inputCls} value={form.phone_number} onChange={set("phone_number")} maxLength={20} />
-        {errors.phone_number && <p className="text-xs text-red-600 mt-1">{errors.phone_number}</p>}
+        <label className="text-xs text-gray-600">Número de documento *</label>
+        <input className={inputCls} value={form.document_number} onChange={set("document_number")} maxLength={50} />
+        {errors.document_number && <p className="text-xs text-red-600 mt-1">{errors.document_number}</p>}
       </div>
-      <div>
-        <label className="text-xs text-gray-600">Dirección *</label>
-        <input className={inputCls} value={form.address} onChange={set("address")} maxLength={500} />
-        {errors.address && <p className="text-xs text-red-600 mt-1">{errors.address}</p>}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div>
+          <label className="text-xs text-gray-600">Nombres *</label>
+          <input className={inputCls} value={form.first_name} onChange={set("first_name")} maxLength={100} />
+          {errors.first_name && <p className="text-xs text-red-600 mt-1">{errors.first_name}</p>}
+        </div>
+        <div>
+          <label className="text-xs text-gray-600">Apellidos *</label>
+          <input className={inputCls} value={form.last_name} onChange={set("last_name")} maxLength={100} />
+          {errors.last_name && <p className="text-xs text-red-600 mt-1">{errors.last_name}</p>}
+        </div>
       </div>
       {errors._global && <p className="text-xs text-red-600">{errors._global}</p>}
       <button
@@ -279,8 +272,8 @@ export default function AttendQR() {
 
   if (phase === "no-token") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <div className="max-w-md w-full bg-white p-8 rounded-xl shadow border border-gray-100 text-center space-y-3">
+      <div className="min-h-dvh flex items-center justify-center bg-gray-50 p-4">
+        <div className="max-w-md w-full bg-white p-5 sm:p-8 rounded-xl shadow border border-gray-100 text-center space-y-3">
           <h1 className="text-2xl font-bold text-gray-800">SIA-QR</h1>
           <p className="text-sm text-gray-600">Falta el token del código QR. Escanea el QR proyectado por tu profesor.</p>
         </div>
@@ -290,8 +283,8 @@ export default function AttendQR() {
 
   if (phase === "login") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <div className="max-w-md w-full bg-white p-8 rounded-xl shadow border border-gray-100 flex flex-col items-center space-y-4">
+      <div className="min-h-dvh flex items-center justify-center bg-gray-50 p-4">
+        <div className="max-w-md w-full bg-white p-5 sm:p-8 rounded-xl shadow border border-gray-100 flex flex-col items-center space-y-4">
           <h1 className="text-2xl font-bold text-gray-800">SIA-QR</h1>
           <p className="text-sm text-gray-600 text-center">
             Inicia sesión con tu correo institucional (@ut.edu.co) para marcar tu asistencia.
@@ -317,7 +310,7 @@ export default function AttendQR() {
 
   if (phase === "resolving") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="min-h-dvh flex items-center justify-center bg-gray-50 p-4">
         <p className="text-gray-500">Validando código QR…</p>
       </div>
     );
@@ -325,8 +318,8 @@ export default function AttendQR() {
 
   if (phase === "error") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <div className="max-w-md w-full bg-white p-8 rounded-xl shadow border border-gray-100 text-center space-y-4">
+      <div className="min-h-dvh flex items-center justify-center bg-gray-50 p-4">
+        <div className="max-w-md w-full bg-white p-5 sm:p-8 rounded-xl shadow border border-gray-100 text-center space-y-4">
           <h1 className="text-xl font-bold text-red-700">No se pudo continuar</h1>
           <p className="text-sm text-gray-600">{error}</p>
           <button
@@ -342,8 +335,8 @@ export default function AttendQR() {
 
   if (phase === "done" || phase === "already") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-green-50 p-4">
-        <div className="max-w-md w-full bg-white p-8 rounded-xl shadow border border-green-200 text-center space-y-3">
+      <div className="min-h-dvh flex items-center justify-center bg-green-50 p-4">
+        <div className="max-w-md w-full bg-white p-5 sm:p-8 rounded-xl shadow border border-green-200 text-center space-y-3">
           <div className="text-5xl">✅</div>
           <h1 className="text-2xl font-bold text-green-700">
             {phase === "already" ? "Asistencia ya registrada" : "¡Asistencia registrada!"}
@@ -366,8 +359,8 @@ export default function AttendQR() {
 
   // phase === "ready"
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="max-w-md w-full bg-white p-8 rounded-xl shadow border border-gray-100 space-y-4">
+    <div className="min-h-dvh flex items-center justify-center bg-gray-50 p-4">
+      <div className="max-w-md w-full bg-white p-5 sm:p-8 rounded-xl shadow border border-gray-100 space-y-4">
         <h1 className="text-2xl font-bold text-gray-800 text-center">Marcar asistencia</h1>
         {session && (
           <div className="bg-gray-50 rounded-lg p-4 text-sm space-y-1">

@@ -69,18 +69,18 @@ export default function Profesores() {
         </div>
       )}
 
-      <form onSubmit={handleAddEmail} className="flex gap-2">
+      <form onSubmit={handleAddEmail} className="flex flex-col sm:flex-row gap-2">
         <input
           type="email"
           placeholder="correo.profesor@ut.edu.co"
           value={newEmail}
           onChange={(e) => setNewEmail(e.target.value)}
-          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          className="w-full min-w-0 flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
           required
         />
         <button
           type="submit"
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors"
+          className="w-full sm:w-auto px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] text-white font-medium rounded-lg shadow-sm transition-colors"
         >
           Añadir Correo
         </button>
@@ -94,9 +94,9 @@ export default function Profesores() {
         ) : (
           <ul className="divide-y divide-gray-100">
             {emails.map((item) => (
-              <li key={item.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
-                <div>
-                  <p className="font-medium text-gray-900">{item.email}</p>
+              <li key={item.id} className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-gray-50">
+                <div className="min-w-0">
+                  <p className="font-medium text-gray-900 break-all">{item.email}</p>
                   <p className="text-xs text-gray-400">
                     Autorizado el: {new Date(item.created_at).toLocaleDateString()} {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
@@ -105,7 +105,7 @@ export default function Profesores() {
                   type="button"
                   title="Eliminar correo"
                   onClick={() => handleDeleteEmail(item.email)}
-                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  className="p-2 self-end sm:self-auto shrink-0 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
