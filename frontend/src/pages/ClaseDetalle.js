@@ -108,6 +108,7 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
   const [startsIn, setStartsIn] = useState(null);
   const [startTime, setStartTime] = useState(classItem.start_time);
   const [classStatus, setClassStatus] = useState(classItem.status);
+  const [qrMinutes, setQrMinutes] = useState(classItem.qr_duration_minutes ?? 10);
   const [error, setError] = useState("");
   const [rows, setRows] = useState([]);
   const [count, setCount] = useState(0);
@@ -130,6 +131,11 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
       }
       if (cur.status === 200) {
         const d = cur.data || {};
+        // Reconciliar vida útil del QR desde la sesión vigente (ttl_minutes)
+        // en vez de solo classItem.qr_duration_minutes (puede traer default viejo).
+        if (d.ttl_minutes != null && Number.isFinite(Number(d.ttl_minutes))) {
+          setQrMinutes(Number(d.ttl_minutes));
+        }
         setPhase("live");
         setError("");
         setStartsIn(null);
@@ -194,6 +200,9 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
     try {
       const res = await rotateCurrentSession(group.id, classItem.id);
       if (res.status === 201 && res.data?.attend_url) {
+        if (res.data?.ttl_minutes != null && Number.isFinite(Number(res.data.ttl_minutes))) {
+          setQrMinutes(Number(res.data.ttl_minutes));
+        }
         const next = {
           session_id: res.data.session_id,
           attend_url: res.data.attend_url,
@@ -243,11 +252,14 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
   }, [classItem.id]);
 
   // Cuenta regresiva local del pending (el poll la resincroniza cada 10s).
+  // Booleano nombrado hasStartsIn en deps (no `startsIn != null` inline):
+  // el intervalo solo se recrea al entrar/salir del estado pendiente, no en cada tick.
+  const hasStartsIn = startsIn != null;
   useEffect(() => {
-    if (phase !== "pending" || startsIn == null) return;
+    if (phase !== "pending" || !hasStartsIn) return;
     const id = setInterval(() => setStartsIn((v) => (v == null ? v : Math.max(0, v - 1))), 1000);
     return () => clearInterval(id);
-  }, [phase, startsIn != null]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [phase, hasStartsIn]);
 
   const loadList = useCallback(
     async (sessionId, p = page) => {
@@ -318,7 +330,7 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
               </div>
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                 <span className="text-[11px] font-bold text-slate-400 tracking-wider block mb-1">VIDA ÚTIL DEL QR</span>
-                <p className="text-sm font-semibold text-slate-800">{classItem.qr_duration_minutes ?? 10} min</p>
+                <p className="text-sm font-semibold text-slate-800">{qrMinutes} min</p>
               </div>
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                 <span className="text-[11px] font-bold text-slate-400 tracking-wider block mb-1">MODALIDAD · ESTADO</span>

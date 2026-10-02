@@ -88,7 +88,13 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
           s?.session_id && s?.attend_url
             ? { session_id: s.session_id, attend_url: s.attend_url, expires_at: s.expires_at }
             : null;
-        onSelectClass(data.class, initialSession);
+        // Reconcilia TTL: el backend persiste qr_duration_minutes, pero si la
+        // respuesta trae el default viejo se corrige con s.ttl_minutes.
+        const cls = { ...data.class };
+        if (s?.ttl_minutes != null && Number(cls.qr_duration_minutes) !== Number(s.ttl_minutes)) {
+          cls.qr_duration_minutes = s.ttl_minutes;
+        }
+        onSelectClass(cls, initialSession);
         load().catch(() => {});
       } else {
         await load();

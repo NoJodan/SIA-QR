@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { Link } from "react-router-dom";
 import { googleLoginUrl } from "../services/api";
 import universityLogo from "../assets/logo.png";
 import "./Login.css";
@@ -126,6 +127,13 @@ export default function Login() {
 
           <footer className="portal-login-footer">
             <span>© {new Date().getFullYear()} SIA-QR</span>
+            <Link
+              to="/admin-login"
+              aria-label="Acceso de administrador"
+              className="portal-login-admin"
+            >
+              Administrador
+            </Link>
             <span className="portal-login-secure">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M5 11V7a7 7 0 0 1 14 0v4M4 11h16v10H4zM12 15v3" />

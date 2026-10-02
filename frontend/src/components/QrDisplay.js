@@ -36,10 +36,19 @@ export default function QrDisplay({ attendUrl, expiresAt, size = 220, onExpired 
     }
   }, [expired, expiresAt, onExpired]);
 
+  // Retorno de foco: guarda el elemento enfocado al abrir el modal y lo
+  // restaura al cerrar (accesibilidad del diálogo).
+  const triggerRef = React.useRef(null);
+  const openExpanded = (event) => {
+    triggerRef.current = event?.currentTarget ?? document.activeElement;
+    setExpanded(true);
+  };
+
   React.useEffect(() => {
     if (!expanded) return undefined;
 
     const previousOverflow = document.body.style.overflow;
+    const opener = triggerRef.current ?? document.activeElement;
     const closeOnEscape = (event) => {
       if (event.key === "Escape") setExpanded(false);
     };
@@ -50,6 +59,7 @@ export default function QrDisplay({ attendUrl, expiresAt, size = 220, onExpired 
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", closeOnEscape);
+      if (opener && typeof opener.focus === "function") opener.focus();
     };
   }, [expanded]);
 
@@ -58,7 +68,7 @@ export default function QrDisplay({ attendUrl, expiresAt, size = 220, onExpired 
       {attendUrl ? (
         <button
           type="button"
-          onClick={() => setExpanded(true)}
+          onClick={openExpanded}
           disabled={expired}
           aria-label="Ampliar código QR a pantalla completa"
           aria-expanded={expanded}
