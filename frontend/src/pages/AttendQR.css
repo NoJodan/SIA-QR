@@ -1,0 +1,159 @@
+.attend-sign-stage {
+  display: grid;
+  justify-items: center;
+  gap: 15px;
+  padding: 18px 0;
+}
+
+.attend-sign-button {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  width: min(230px, 64vw);
+  aspect-ratio: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 13px;
+  padding: 24px;
+  border: 1px solid rgba(179, 32, 14, 0.35);
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(145deg, #c42b18 0%, #941b0b 62%, #70100a 100%);
+  box-shadow:
+    0 20px 54px rgba(112, 16, 10, 0.24),
+    0 0 26px rgba(179, 32, 14, 0.34),
+    0 0 62px rgba(179, 32, 14, 0.16);
+  cursor: pointer;
+  animation: attend-sign-halo 1.8s ease-in-out infinite alternate;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.attend-sign-button::before,
+.attend-sign-button::after {
+  position: absolute;
+  z-index: -1;
+  border: 1px solid rgba(179, 32, 14, 0.2);
+  border-radius: inherit;
+  content: "";
+  pointer-events: none;
+}
+
+.attend-sign-button::before {
+  inset: -11px;
+}
+
+.attend-sign-button::after {
+  inset: -22px;
+  border-color: rgba(179, 32, 14, 0.1);
+}
+
+.attend-sign-button:hover:not(:disabled) {
+  transform: translateY(-3px);
+  box-shadow:
+    0 26px 62px rgba(112, 16, 10, 0.28),
+    0 0 34px rgba(179, 32, 14, 0.4),
+    0 0 76px rgba(179, 32, 14, 0.24);
+}
+
+.attend-sign-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.attend-sign-button:focus-visible {
+  outline: 3px solid #b3200e;
+  outline-offset: 8px;
+}
+
+.attend-sign-button:disabled {
+  cursor: wait;
+}
+
+.attend-sign-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.attend-sign-icon svg {
+  width: 23px;
+  height: 23px;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.attend-sign-label {
+  max-width: 150px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.attend-sign-caption {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+}
+
+.attend-sign-spinner {
+  width: 44px;
+  height: 44px;
+  border: 3px solid rgba(255, 255, 255, 0.28);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: attend-sign-spin 800ms linear infinite;
+}
+
+.attend-sign-button.is-loading {
+  animation: none;
+  background: linear-gradient(145deg, #941b0b, #70100a);
+}
+
+.attend-sign-status {
+  min-height: 18px;
+  margin: 0;
+  color: #667985;
+  font-size: 12px;
+}
+
+@keyframes attend-sign-halo {
+  from {
+    box-shadow: 0 20px 54px rgba(112, 16, 10, 0.24), 0 0 26px rgba(179, 32, 14, 0.34), 0 0 62px rgba(179, 32, 14, 0.16);
+  }
+  to {
+    box-shadow: 0 22px 60px rgba(112, 16, 10, 0.3), 0 0 42px rgba(179, 32, 14, 0.56), 0 0 92px rgba(179, 32, 14, 0.28);
+  }
+}
+
+@keyframes attend-sign-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 420px) {
+  .attend-sign-button {
+    width: min(210px, 62vw);
+    gap: 11px;
+    padding: 18px;
+  }
+
+  .attend-sign-label {
+    max-width: 132px;
+    font-size: 15px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attend-sign-button,
+  .attend-sign-spinner {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
+  }
+}
