@@ -5,12 +5,12 @@ import SearchBar from "../components/SearchBar";
 import api from "../services/api";
 import {
   MAX_EXPORT_ROWS,
+  MAX_PDF_ROWS,
   downloadReport,
   getReportPreview,
   reportErrorMessage,
 } from "../services/reports";
 import { formatBogota } from "../utils/dates";
-import useDebounce from "../utils/useDebounce";
 
 const PAGE_SIZE = 10;
 
@@ -33,10 +33,13 @@ const inputCls =
 const labelCls = "block text-xs font-medium text-slate-600 mb-1";
 
 // Trae todas las páginas (page_size 50) de un endpoint paginado DRF.
+// Tope de seguridad: 20 páginas (1000 ítems). Si hay más, avisa en consola
+// y la UI lo indica: refina filtros o pagina en el servidor.
 async function fetchAll(path, params = {}) {
   const items = [];
   let url = path;
   let query = { page_size: 50, ...params };
+  let truncated = false;
   for (let i = 0; i < 20; i += 1) {
     // eslint-disable-next-line no-await-in-loop
     const { data } = await api.get(url, { params: query });
@@ -45,16 +48,28 @@ async function fetchAll(path, params = {}) {
     if (Array.isArray(data) || !data.next) break;
     url = data.next;
     query = {};
+    if (i === 19 && data.next) truncated = true;
+  }
+  if (truncated) {
+    // eslint-disable-next-line no-console
+    console.warn(`[Reportes] fetchAll truncado a 1000 ítems en ${path}: hay más páginas.`);
   }
   return items;
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const emptyFilters = {
   courseId: "",
   groupId: "",
   classId: "",
+  sessionId: "",
   dateFrom: "",
   dateTo: "",
+  registeredFrom: "",
+  registeredTo: "",
+  document: "",
+  studentCode: "",
   search: "",
   classStatus: "",
   modality: "",
@@ -76,14 +91,20 @@ export default function Reportes({ isAdmin = false }) {
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(null);
-  const debouncedSearch = useDebounce(draft.search, 300);
+  const [truncatedNote, setTruncatedNote] = useState("");
 
   // Carga en cascada: grupos propios (prof) o todos (admin).
   useEffect(() => {
     setGroupsLoading(true);
+    setTruncatedNote("");
     const path = isAdmin ? "/api/academic/admin/groups/" : "/api/academic/my-groups/";
     fetchAll(path)
-      .then(setGroups)
+      .then((items) => {
+        setGroups(items);
+        if (items.length >= 1000) {
+          setTruncatedNote("La lista de grupos se truncó a 1000: refina filtros si falta alguno.");
+        }
+      })
       .catch(() => setGroups([]))
       .finally(() => setGroupsLoading(false));
   }, [isAdmin]);
@@ -120,9 +141,22 @@ export default function Reportes({ isAdmin = false }) {
     const p = {};
     if (filters.courseId) p.course_id = filters.courseId;
     if (filters.groupId) p.group_id = filters.groupId;
+    // classId acepta multiselección coma-separada (backend MultipleUUIDField
+    // tolera lista, coma o ?class_id=a&class_id=b).
     if (filters.classId) p.class_id = filters.classId;
+    if (filters.sessionId && filters.sessionId.trim()) {
+      p.session_id = filters.sessionId.trim();
+    }
     if (filters.dateFrom) p.date_from = filters.dateFrom;
     if (filters.dateTo) p.date_to = filters.dateTo;
+    if (filters.registeredFrom) p.registered_from = filters.registeredFrom;
+    if (filters.registeredTo) p.registered_to = filters.registeredTo;
+    if (filters.document && filters.document.trim()) {
+      p.document = filters.document.trim();
+    }
+    if (filters.studentCode && filters.studentCode.trim()) {
+      p.student_code = filters.studentCode.trim();
+    }
     if (filters.search.trim()) p.search = filters.search.trim();
     if (filters.classStatus) p.class_status = filters.classStatus;
     if (filters.modality) p.modality = filters.modality;
@@ -160,8 +194,17 @@ export default function Reportes({ isAdmin = false }) {
   }, [buildParams, isAdmin]);
 
   const handleBuscar = () => {
-    const filters = { ...draft, search: debouncedSearch };
-    setDraft(filters);
+    // Usa draft.search directo: el valor con debounce quedaba stale si el
+    // usuario pulsaba Buscar antes de los 300 ms (MEDIO 2 QA).
+    if (isAdmin && draft.professorId.trim() && !UUID_RE.test(draft.professorId.trim())) {
+      setError("El ID de profesor debe ser un UUID válido.");
+      return;
+    }
+    if (draft.sessionId.trim() && !UUID_RE.test(draft.sessionId.trim())) {
+      setError("El ID de sesión debe ser un UUID válido.");
+      return;
+    }
+    const filters = { ...draft };
     setApplied(filters);
     setPage(1);
     runSearch(filters, 1);
@@ -214,9 +257,16 @@ export default function Reportes({ isAdmin = false }) {
     }));
   };
 
+  const setMultiClass = (e) => {
+    const selected = Array.from(e.target.selectedOptions || []).map((o) => o.value);
+    setDraft((prev) => ({ ...prev, classId: selected.join(",") }));
+  };
+
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
-  const overCap = count > MAX_EXPORT_ROWS;
-  const canDownload = searched && !loading && !downloading && count > 0 && !overCap;
+  const overCapXlsx = count > MAX_EXPORT_ROWS;
+  const overCapPdf = count > MAX_PDF_ROWS;
+  const canXlsx = searched && !loading && !downloading && count > 0 && !overCapXlsx;
+  const canPdf = searched && !loading && !downloading && count > 0 && !overCapPdf;
 
   return (
     <div>
@@ -228,22 +278,28 @@ export default function Reportes({ isAdmin = false }) {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => handleDownload("xlsx")}
-            disabled={!canDownload}
+            disabled={!canXlsx}
             className="px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] text-white rounded-xl text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {downloading === "xlsx" ? "Generando..." : "Descargar Excel"}
           </button>
           <button
             onClick={() => handleDownload("pdf")}
-            disabled={!canDownload}
+            disabled={!canPdf}
+            title={`PDF limitado a ${MAX_PDF_ROWS} registros`}
             className="px-4 py-2 bg-white border border-[#B3200E]/40 text-[#B3200E] hover:bg-red-50 rounded-xl text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {downloading === "pdf" ? "Generando..." : "Descargar PDF"}
           </button>
         </div>
-        {overCap && searched && (
+        {overCapXlsx && searched && (
           <p role="alert" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            El reporte supera el máximo de {MAX_EXPORT_ROWS} registros para descarga. Refina los filtros.
+            El reporte supera el máximo de {MAX_EXPORT_ROWS} registros para Excel. Refina los filtros.
+          </p>
+        )}
+        {!overCapXlsx && overCapPdf && searched && (
+          <p role="alert" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            El PDF admite hasta {MAX_PDF_ROWS} registros (Excel hasta {MAX_EXPORT_ROWS}). Refina los filtros para PDF.
           </p>
         )}
       </section>
@@ -271,13 +327,32 @@ export default function Reportes({ isAdmin = false }) {
             </select>
           </div>
           <div>
-            <label htmlFor="rep-clase" className={labelCls}>Clase</label>
-            <select id="rep-clase" value={draft.classId} onChange={set("classId")} className={inputCls} disabled={!draft.groupId || classesLoading}>
-              <option value="">{!draft.groupId ? "Elige un grupo" : "Todas"}</option>
+            <label htmlFor="rep-clase" className={labelCls}>Clase(s) — Ctrl+clic varias</label>
+            <select
+              id="rep-clase"
+              multiple
+              value={draft.classId ? draft.classId.split(",").filter(Boolean) : []}
+              onChange={setMultiClass}
+              className={`${inputCls} min-h-[42px]`}
+              disabled={!draft.groupId || classesLoading}
+            >
               {classes.map((c) => (
                 <option key={c.id} value={c.id}>{c.title}</option>
               ))}
             </select>
+            <p className="mt-1 text-xs text-slate-400">
+              {!draft.groupId ? "Elige un grupo primero." : "Vacío = todas. Ctrl+clic para varias."}
+            </p>
+          </div>
+          <div>
+            <label htmlFor="rep-sesion" className={labelCls}>ID de sesión</label>
+            <input
+              id="rep-sesion"
+              value={draft.sessionId}
+              onChange={set("sessionId")}
+              placeholder="UUID de la sesión"
+              className={inputCls}
+            />
           </div>
           <div>
             <label htmlFor="rep-desde" className={labelCls}>Desde (AAAA-MM-DD)</label>
@@ -288,8 +363,36 @@ export default function Reportes({ isAdmin = false }) {
             <input id="rep-hasta" type="date" value={draft.dateTo} onChange={set("dateTo")} className={inputCls} />
           </div>
           <div>
+            <label htmlFor="rep-reg-desde" className={labelCls}>Registro desde</label>
+            <input id="rep-reg-desde" type="date" value={draft.registeredFrom} onChange={set("registeredFrom")} className={inputCls} />
+          </div>
+          <div>
+            <label htmlFor="rep-reg-hasta" className={labelCls}>Registro hasta</label>
+            <input id="rep-reg-hasta" type="date" value={draft.registeredTo} onChange={set("registeredTo")} className={inputCls} />
+          </div>
+          <div>
+            <label htmlFor="rep-documento" className={labelCls}>Documento</label>
+            <input
+              id="rep-documento"
+              value={draft.document}
+              onChange={set("document")}
+              placeholder="N.º documento"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label htmlFor="rep-codigo" className={labelCls}>Código estudiante</label>
+            <input
+              id="rep-codigo"
+              value={draft.studentCode}
+              onChange={set("studentCode")}
+              placeholder="Código"
+              className={inputCls}
+            />
+          </div>
+          <div>
             <label htmlFor="rep-search" className={labelCls}>Documento, código o nombre</label>
-            <SearchBar value={draft.search} onChange={(v) => setDraft((p) => ({ ...p, search: v }))} placeholder="Buscar estudiante..." />
+            <SearchBar id="rep-search" value={draft.search} onChange={(v) => setDraft((p) => ({ ...p, search: v }))} placeholder="Buscar estudiante..." />
           </div>
           <div>
             <label htmlFor="rep-estado" className={labelCls}>Estado de clase</label>
@@ -325,11 +428,19 @@ export default function Reportes({ isAdmin = false }) {
                 value={draft.professorId}
                 onChange={set("professorId")}
                 placeholder="UUID del profesor"
+                inputMode="text"
+                aria-describedby="rep-profesor-ayuda"
                 className={inputCls}
               />
+              <p id="rep-profesor-ayuda" className="mt-1 text-xs text-slate-400">
+                UUID v4 del profesor. Se valida antes de buscar.
+              </p>
             </div>
           )}
         </div>
+        {truncatedNote && (
+          <p role="status" className="mt-2 text-xs text-amber-700">{truncatedNote}</p>
+        )}
         <div className="flex gap-2 mt-3">
           <button
             onClick={handleBuscar}

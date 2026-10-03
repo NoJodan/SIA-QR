@@ -5,6 +5,7 @@ construcción del queryset y los exportadores XLSX/PDF. La vista está en
 ``views_reports.py`` y la ruta en ``urls.py`` (``reports/``).
 """
 
+import html
 import io
 import uuid as uuid_mod
 from datetime import datetime, time
@@ -20,9 +21,12 @@ from apps.authentication.models import UserRole
 
 BOGOTA_TZ = ZoneInfo("America/Bogota")
 
-#: Tope de filas para descargas XLSX/PDF (el preview JSON va paginado).
+#: Tope de filas para descarga XLSX (el preview JSON va paginado).
 MAX_EXPORT_ROWS = 5000
-#: Rango máximo permitido entre fecha inicial y final (días).
+#: Tope menor para PDF: una sola Table en memoria (riesgo OOM con 5000).
+#: El PDF legible ronda 400 filas; 1000 es el máximo operativo.
+MAX_PDF_ROWS = 1000
+#: Rango máximo permitido entre fecha inicial y final (días, inclusivo).
 MAX_RANGE_DAYS = 366
 
 
@@ -156,15 +160,20 @@ class ReportFilterSerializer(serializers.Serializer):
         error_messages={"invalid": "Identificador de profesor inválido."},
     )
     has_location = HasLocationField(required=False)
-    format = serializers.ChoiceField(
+    format = serializers.CharField(
         required=False,
-        choices=["json", "xlsx", "pdf"],
+        allow_blank=True,
         default="json",
-        error_messages={"invalid_choice": "Formato inválido (json, xlsx o pdf)."},
+        max_length=10,
     )
 
     def validate_format(self, value):
-        return str(value or "json").strip().lower()
+        norm = str(value or "json").strip().lower() or "json"
+        if norm not in ("json", "xlsx", "pdf"):
+            raise serializers.ValidationError(
+                "Formato inválido (json, xlsx o pdf)."
+            )
+        return norm
 
     def validate(self, attrs):
         date_from = attrs.get("date_from")
@@ -174,7 +183,8 @@ class ReportFilterSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     {"date_from": "La fecha inicial no puede ser posterior a la final."}
                 )
-            if (date_to - date_from).days > MAX_RANGE_DAYS:
+            # Inclusivo: (to - from).days + 1 son los días cubiertos.
+            if (date_to - date_from).days + 1 > MAX_RANGE_DAYS:
                 raise serializers.ValidationError(
                     {"date_to": "El rango de fechas no puede superar 366 días."}
                 )
@@ -190,7 +200,7 @@ class ReportFilterSerializer(serializers.Serializer):
                         )
                     }
                 )
-            if (reg_to - reg_from).days > MAX_RANGE_DAYS:
+            if (reg_to - reg_from).days + 1 > MAX_RANGE_DAYS:
                 raise serializers.ValidationError(
                     {
                         "registered_to": (
@@ -214,6 +224,10 @@ def build_report_queryset(validated, user):
 
     - Profesor: solo marcaciones de sus grupos. Filtrar por grupo/clase/
       sesión ajenos responde 403; ``professor_id`` es solo admin (403).
+    - ``course_id`` ajeno NO responde 403: los cursos son compartidos entre
+      profesores, así que el filtro se aplica dentro de los grupos propios
+      y un curso ajeno simplemente devuelve 200 vacío. Se documenta para
+      no confundirlo con el 403 de grupo/clase/sesión.
     - Admin: todo, con filtro opcional por ``professor_id``.
     """
     from apps.academic.models import AcademicGroup, ScheduledClass
@@ -315,7 +329,7 @@ def build_report_queryset(validated, user):
         "student__user",
         "session__scheduled_class__group__course",
         "session__scheduled_class__group__professor__user",
-    ).order_by("registered_at")
+    ).order_by("registered_at", "id")
 
 
 def report_row(attendance):
@@ -422,8 +436,15 @@ def export_xlsx(queryset):
     ws.append(header_cells)
 
     for idx, width in enumerate(_REPORT_WIDTHS, start=1):
-        ws.column_dimensions[get_column_letter(idx)].width = width
-    ws.freeze_panes = "A2"
+        try:
+            ws.column_dimensions[get_column_letter(idx)].width = width
+        except Exception:
+            pass
+    try:
+        # WriteOnlyWorksheet ignora vistas; no fallar si no soporta freeze.
+        ws.freeze_panes = "A2"
+    except Exception:
+        pass
     last_letter = get_column_letter(len(_REPORT_COLUMNS))
     try:
         total = queryset.count()
@@ -462,7 +483,9 @@ def _filters_summary(validated):
     for key, label in labels.items():
         value = validated.get(key)
         if value not in (None, "", []):
-            parts.append(f"{label}: {value}")
+            # Escapa input de usuario: Paragraph interpreta mini-HTML y
+            # "<>&" sin escapar rompe el parse (500). Ver ALTO 1 QA.
+            parts.append(f"{label}: {html.escape(str(value))}")
     return "; ".join(parts) if parts else "Sin filtros (todos los registros)"
 
 

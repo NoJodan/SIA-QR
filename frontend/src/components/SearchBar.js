@@ -1,7 +1,8 @@
 import React, { useId } from "react";
 
-export default function SearchBar({ value, onChange, placeholder = "Buscar..." }) {
-  const inputId = useId();
+export default function SearchBar({ value, onChange, placeholder = "Buscar...", id }) {
+  const fallbackId = useId();
+  const inputId = id || fallbackId;
   const hasValue = Boolean(value);
   return (
     <div className="relative w-full">

@@ -215,3 +215,70 @@ class AttendanceReportTests(TestCase):
             resp = self.admin_client.get(REPORT_URL, {"format": "xlsx"})
             self.assertEqual(resp.status_code, 400)
             self.assertIn("ximo", str(resp.data))
+
+    def test_pdf_escapes_user_input(self):
+        # ALTO 1: search con <>&ñ no debe romper el Paragraph (antes 500).
+        resp = self.admin_client.get(
+            REPORT_URL, {"format": "pdf", "search": "<test>&ñ"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+        self.assertTrue(resp.content.startswith(b"%PDF"))
+
+    def test_format_case_insensitive(self):
+        # BAJO 6: validate_format lower antes era muerto (ChoiceField 400).
+        resp = self.admin_client.get(REPORT_URL, {"format": "XLSX"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("spreadsheetml.sheet", resp["Content-Type"])
+        resp = self.admin_client.get(REPORT_URL, {"format": "PDF"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+        resp = self.admin_client.get(REPORT_URL, {"format": "JSON"})
+        self.assertEqual(resp.status_code, 200)
+
+    def test_pdf_cap_lower_than_xlsx(self):
+        # MEDIO 5: PDF capa a 1000 (XLSX sigue en 5000).
+        from apps.attendance import reports as _reports
+
+        self.assertLessEqual(_reports.MAX_PDF_ROWS, 1000)
+        self.assertEqual(_reports.MAX_EXPORT_ROWS, 5000)
+        with patch("apps.attendance.views_reports.MAX_PDF_ROWS", 1):
+            resp = self.admin_client.get(REPORT_URL, {"format": "pdf"})
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn("1", str(resp.data))
+        # Con el mismo tope 1, xlsx con 2 filas también cae, pero con
+        # topes reales el pdf cae antes: simula 2 filas con cap pdf=1.
+        with patch("apps.attendance.views_reports.MAX_EXPORT_ROWS", 5):
+            resp = self.admin_client.get(REPORT_URL, {"format": "xlsx"})
+            self.assertEqual(resp.status_code, 200)
+
+    def test_range_366_inclusive(self):
+        # BAJO 11: 366 días inclusivos OK, 367 rechaza.
+        resp = self.admin_client.get(
+            REPORT_URL,
+            {"date_from": "2024-01-01", "date_to": "2024-12-31"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        resp = self.admin_client.get(
+            REPORT_URL,
+            {"date_from": "2024-01-01", "date_to": "2025-01-01"},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_course_ajeno_returns_empty_200(self):
+        # BAJO 9: course_id ajeno no es 403 (cursos compartidos), es 200 vacío.
+        from apps.academic.models import Course
+
+        other_course = Course.objects.create(code="C-AJENO", name="Ajeno")
+        resp = self.owner_client.get(
+            REPORT_URL, {"course_id": str(other_course.id)}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 0)
+
+    def test_ordering_deterministic(self):
+        # BAJO 7: order_by registered_at + id es determinista.
+        from apps.attendance.reports import build_report_queryset
+
+        qs = build_report_queryset({}, self.admin)
+        self.assertIn("id", str(qs.query.order_by))

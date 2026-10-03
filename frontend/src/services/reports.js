@@ -1,7 +1,9 @@
 import api from "./api";
 
-// Tope de filas para descargas (espejo de MAX_EXPORT_ROWS del backend).
+// Topes de filas para descargas (espejo del backend: XLSX 5000, PDF 1000).
+// El PDF usa una sola Table en memoria (riesgo OOM con 5000; ~400 legible).
 export const MAX_EXPORT_ROWS = 5000;
+export const MAX_PDF_ROWS = 1000;
 
 // Preview paginado del reporte (format=json). Devuelve { count, results, ... }.
 export const getReportPreview = (params = {}, page = 1, pageSize = 10) =>
