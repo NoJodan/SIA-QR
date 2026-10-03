@@ -1,5 +1,5 @@
 import React from "react";
-import { QRCodeSVG } from "qrcode.react";
+import { QRCodeCanvas } from "qrcode.react";
 import { createPortal } from "react-dom";
 
 function remainingMs(expiresAt) {
@@ -78,7 +78,12 @@ export default function QrDisplay({ attendUrl, expiresAt, size = 220, onExpired 
               : "border-gray-200 cursor-zoom-in hover:scale-[1.02]"
           }`}
         >
-          <QRCodeSVG value={attendUrl} size={size} level="M" />
+          <QRCodeCanvas
+            value={attendUrl}
+            size={size}
+            level="M"
+            title="Código QR de asistencia. Clic derecho para copiar como imagen."
+          />
         </button>
       ) : (
         <div
@@ -94,7 +99,9 @@ export default function QrDisplay({ attendUrl, expiresAt, size = 220, onExpired 
         </p>
       )}
       <p className="text-xs text-gray-400 text-center max-w-xs">
-        {attendUrl ? "Haz clic en el QR para ampliarlo y facilitar el escaneo" : "Escanea el código con la cámara de tu celular"}
+        {attendUrl
+          ? "Haz clic para ampliar o clic derecho sobre el QR para copiarlo como imagen"
+          : "Escanea el código con la cámara de tu celular"}
       </p>
 
       {expanded && attendUrl && createPortal(
@@ -127,15 +134,18 @@ export default function QrDisplay({ attendUrl, expiresAt, size = 220, onExpired 
           </div>
 
           <div className="rounded-2xl bg-white p-3 shadow-2xl sm:p-5">
-            <QRCodeSVG
+            <QRCodeCanvas
               value={attendUrl}
-              size={size}
+              size={720}
               level="M"
+              title="Código QR de asistencia. Clic derecho para copiar como imagen."
               style={{ width: "min(70vmin, 720px)", height: "auto", maxWidth: "82vw", maxHeight: "70vh" }}
             />
           </div>
 
-          <p className="text-center text-sm text-slate-300">Escanea el código con la cámara de tu celular</p>
+          <p className="text-center text-sm text-slate-300">
+            Clic derecho sobre el QR para copiarlo como imagen · Escanéalo con la cámara del celular
+          </p>
         </div>,
         document.body
       )}
