@@ -116,7 +116,8 @@ class EnsureCurrentSessionTests(TestCase):
             1,
         )
 
-    def test_expired_rotates_within_window(self):
+    def test_expired_no_rotate_within_window(self):
+        # QR único: expirado en ventana => outcome expired, sin S2.
         _, _, group = _make_prof_group(email="p4@ut.edu.co")
         clase = _make_class(group, start_delta_min=-30)
         first = ensure_current_session(clase)
@@ -126,16 +127,19 @@ class EnsureCurrentSessionTests(TestCase):
         sess.expires_at = timezone.now() - timedelta(seconds=1)
         sess.save(update_fields=["expires_at"])
         out = ensure_current_session(clase)
-        self.assertEqual(out["outcome"], "live")
-        self.assertTrue(out["created"])
-        self.assertNotEqual(out["session"].id, old_id)
-        sess.refresh_from_db()
-        self.assertFalse(sess.is_active)
+        self.assertEqual(out["outcome"], "expired")
+        self.assertEqual(out["reason"], "qr_expired")
+        self.assertEqual(out["session_id"], str(old_id))
+        self.assertIsNotNone(out["expires_at"])
+        # Sin S2: solo 1 sesión total, 0 activas.
+        self.assertEqual(
+            AttendanceSession.objects.filter(scheduled_class=clase).count(), 1
+        )
         self.assertEqual(
             AttendanceSession.objects.filter(
                 scheduled_class=clase, is_active=True
             ).count(),
-            1,
+            0,
         )
 
     def test_no_generate_after_end_lazy_completes(self):
@@ -307,8 +311,7 @@ class EarlyGraceConfigTests(TestCase):
 
 
 class RotateViewTests(TestCase):
-    """M1 (opción b): reuso mismo dispositivo muestra QR; segundo
-    dispositivo rota; expirado no reusa el token anterior."""
+    """QR único (deprecated): rotación deshabilitada, nunca 201."""
 
     def _live_class(self, email="r1@ut.edu.co"):
         user, _, group = _make_prof_group(email=email)
@@ -318,7 +321,7 @@ class RotateViewTests(TestCase):
         url = f"/api/academic/groups/{group.id}/classes/{clase.id}/current-session/"
         return user, group, clase, client, url
 
-    def test_reuse_same_session_then_rotate_new_device(self):
+    def test_reuse_same_session_then_rotate_blocked(self):
         _, group, clase, client, url = self._live_class()
         first = client.get(url)
         self.assertEqual(first.status_code, 200)
@@ -333,33 +336,49 @@ class RotateViewTests(TestCase):
         self.assertIsNone(second.data["attend_url"])
         self.assertEqual(second["Cache-Control"], "no-store")
 
-        # Segundo dispositivo: rota y obtiene QR mostrable nuevo.
+        # Segundo dispositivo: rotación deshabilitada (410, nunca 201).
         rot = client.post(url + "rotate/", {}, format="json")
-        self.assertEqual(rot.status_code, 201)
+        self.assertEqual(rot.status_code, 410)
         self.assertEqual(rot["Cache-Control"], "no-store")
-        self.assertIsNotNone(rot.data["attend_url"])
-        self.assertNotEqual(rot.data["session_id"], sid)
-        self.assertTrue(rot.data["rotated"])
-        old = AttendanceSession.objects.get(pk=sid)
-        self.assertFalse(old.is_active)
+        self.assertEqual(rot.data["reason"], "rotation_disabled")
+        # Sin S2: sigue la misma sesión total, sin duplicar.
         self.assertEqual(
-            AttendanceSession.objects.filter(scheduled_class=clase, is_active=True).count(), 1
+            AttendanceSession.objects.filter(scheduled_class=clase).count(), 1
         )
 
-    def test_expired_session_is_not_reused(self):
+    def test_expired_no_rotate_returns_410(self):
+        # QR único expirado: GET 410 qr_expired, 0 activas, sin S2.
         _, _, clase, client, url = self._live_class(email="r2@ut.edu.co")
         first = client.get(url)
         old_id = first.data["session_id"]
         sess = AttendanceSession.objects.get(pk=old_id)
         sess.expires_at = timezone.now() - timedelta(seconds=1)
         sess.save(update_fields=["expires_at"])
-        # Expirado: el GET auto-rota (nuevo QR), nunca reusa el token viejo.
         nxt = client.get(url)
-        self.assertEqual(nxt.status_code, 200)
-        self.assertNotEqual(nxt.data["session_id"], old_id)
-        self.assertIsNotNone(nxt.data["attend_url"])
-        sess.refresh_from_db()
-        self.assertFalse(sess.is_active)
+        self.assertEqual(nxt.status_code, 410)
+        self.assertEqual(nxt.data["state"], "expired")
+        self.assertEqual(nxt.data["reason"], "qr_expired")
+        self.assertEqual(nxt.data["session_id"], str(old_id))
+        self.assertIsNotNone(nxt.data["expires_at"])
+        self.assertEqual(nxt["Cache-Control"], "no-store")
+        self.assertEqual(
+            AttendanceSession.objects.filter(scheduled_class=clase).count(), 1
+        )
+        self.assertEqual(
+            AttendanceSession.objects.filter(
+                scheduled_class=clase, is_active=True
+            ).count(),
+            0,
+        )
+
+    def test_rotate_in_window_returns_410_rotation_disabled(self):
+        _, _, _, client, url = self._live_class(email="r6@ut.edu.co")
+        first = client.get(url)
+        self.assertEqual(first.status_code, 200)
+        rot = client.post(url + "rotate/", {}, format="json")
+        self.assertEqual(rot.status_code, 410)
+        self.assertEqual(rot.data["reason"], "rotation_disabled")
+        self.assertEqual(rot["Cache-Control"], "no-store")
 
     def test_rotate_finished_returns_410_no_store(self):
         user, _, group = _make_prof_group(email="r3@ut.edu.co")
@@ -394,6 +413,65 @@ class RotateViewTests(TestCase):
         url = f"/api/academic/groups/{group.id}/classes/{clase.id}/current-session/"
         self.assertEqual(client.get(url).status_code, 403)
         self.assertEqual(client.post(url + "rotate/", {}, format="json").status_code, 403)
+
+
+class SingleSessionCreateTests(TestCase):
+    """QR único: A1 crea S1 una vez; la segunda es 410 rotation_disabled."""
+
+    def test_a1_second_create_returns_410(self):
+        user, _, group = _make_prof_group(email="a1@ut.edu.co")
+        clase = _make_class(group, start_delta_min=-1, status=ClassStatus.SCHEDULED)
+        client = APIClient()
+        client.force_login(user)
+        url = f"/api/academic/groups/{group.id}/classes/{clase.id}/sessions/"
+        first = client.post(url, {}, format="json")
+        self.assertEqual(first.status_code, 201)
+        self.assertIsNotNone(first.data.get("attend_url"))
+        second = client.post(url, {}, format="json")
+        self.assertEqual(second.status_code, 410)
+        self.assertEqual(second.data["reason"], "rotation_disabled")
+        self.assertEqual(
+            AttendanceSession.objects.filter(scheduled_class=clase).count(), 1
+        )
+
+    def test_pending_to_live_single_session(self):
+        # pending -> live crea S1 única; polls siguientes reusan sin duplicar.
+        user, _, group = _make_prof_group(email="a2@ut.edu.co")
+        clase = _make_class(group, start_delta_min=60)
+        client = APIClient()
+        client.force_login(user)
+        url = f"/api/academic/groups/{group.id}/classes/{clase.id}/current-session/"
+        resp = client.get(url)
+        self.assertEqual(resp.status_code, 202)
+        self.assertEqual(
+            AttendanceSession.objects.filter(scheduled_class=clase).count(), 0
+        )
+        clase.start_time = timezone.now() - timedelta(minutes=1)
+        clase.save(update_fields=["start_time"])
+        live = client.get(url)
+        self.assertEqual(live.status_code, 200)
+        sid = live.data["session_id"]
+        again = client.get(url)
+        self.assertEqual(again.status_code, 200)
+        self.assertEqual(again.data["session_id"], sid)
+        self.assertEqual(
+            AttendanceSession.objects.filter(scheduled_class=clase).count(), 1
+        )
+
+    def test_finished_after_end_completes(self):
+        user, _, group = _make_prof_group(email="a3@ut.edu.co")
+        clase = _make_class(
+            group, start_delta_min=-120, duration=60, status=ClassStatus.IN_PROGRESS
+        )
+        client = APIClient()
+        client.force_login(user)
+        resp = client.get(
+            f"/api/academic/groups/{group.id}/classes/{clase.id}/current-session/"
+        )
+        self.assertEqual(resp.status_code, 410)
+        self.assertEqual(resp.data["state"], "finished")
+        clase.refresh_from_db()
+        self.assertEqual(clase.status, ClassStatus.COMPLETED)
 
 
 class SingleActiveConcurrencyTests(TransactionTestCase):

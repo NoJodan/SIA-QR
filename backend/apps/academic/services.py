@@ -1,16 +1,17 @@
-"""QR automático: ventana de clase y sesión actual idempotente.
+"""QR automático: ventana de clase y sesión actual idempotente (QR único).
 
 Fuente de verdad del dominio: `SIA-QR.md` (TTL/expiración anti-replay,
 unicidad estricta, zona `America/Bogota`).
 
 Este módulo NO reemplaza `generate_session()` (núcleo single-active en
-`apps.attendance.services`); lo reutiliza para crear/rotar la sesión
-vigente de una clase programada sin intervención del profesor:
+`apps.attendance.services`); lo reutiliza para crear UNA sola vez la
+sesión vigente (S1) de una clase programada sin intervención del profesor:
 
 - `class_window()`      -> (inicio, fin) de la clase.
 - `should_auto_start()` -> True si `now` está en ventana (con gracia previa).
 - `get_valid_session()` -> sesión activa no expirada (o None).
-- `ensure_current_session()` -> máquina pending/live/finished idempotente.
+- `ensure_current_session()` -> máquina pending/live/expired/finished
+  idempotente, sin auto-rotación (QR único por clase).
 """
 
 from datetime import timedelta
@@ -131,21 +132,25 @@ def _session_ttl_minutes(session, clase):
 
 
 def ensure_current_session(clase):
-    """Asegura la sesión vigente de la clase (idempotente, nunca 500).
+    """Asegura la sesión vigente de la clase (QR único, sin auto-rotación).
 
     Retorna un dict con `outcome`:
     - pending  {status, starts_in_s, start_time} si falta para el inicio.
-    - live     {session, created, result} si hay sesión válida o recién creada.
-      `result` es el dict de `generate_session()` (con `attend_url`/`token_raw`)
-      solo cuando `created` es True; en reuso el token crudo ya no existe
-      (solo se guarda su hash) y `result` es None.
+    - live     {session, created, result} si hay sesión válida o recién creada
+      (S1 única). `result` es el dict de `generate_session()` (con
+      `attend_url`/`token_raw`) solo cuando `created` es True; en reuso el
+      token crudo ya no existe (solo se guarda su hash) y `result` es None.
+    - expired  {status, reason=qr_expired, session_id, expires_at} si el QR
+      único expiró dentro de la ventana (no se genera S2; sin auto-rotación).
     - finished {status, reason} si la clase está cerrada o pasó su ventana
       (con cierre perezoso a COMPLETED + revocación).
 
-    Auto-rotación: si expiró y sigue en ventana (IN_PROGRESS) genera una
-    nueva (revoca la anterior); si pasó el fin, cierra sin rotar.
-    Ante carrera de single-active (IntegrityError/ValidationError) reintenta
-    con fetch de la sesión válida en vez de propagar 500.
+    QR único: si no hay sesión válida en ventana y ya hubo alguna sesión
+    (`has_ever_had_session` por class_id) se retorna expired sin generar;
+    solo si nunca hubo sesión se crea S1 una vez. Si pasó el fin, cierra
+    sin crear. Ante carrera de single-active
+    (IntegrityError/ValidationError) reintenta con fetch de la sesión
+    válida en vez de propagar 500.
     """
     from apps.attendance.services import generate_session
 
@@ -178,8 +183,28 @@ def ensure_current_session(clase):
     if session is not None:
         return {"outcome": "live", "session": session, "created": False, "result": None}
 
-    # Sin sesión válida: crear (o rotar si la anterior expiró). generate_session
-    # revoca previas y pasa SCHEDULED -> IN_PROGRESS.
+    # QR único sin auto-rotación: si ya hubo alguna sesión, no generar S2.
+    from apps.attendance.models import AttendanceSession as _AS
+
+    has_ever = _AS.objects.filter(scheduled_class=clase).exists()
+    if has_ever:
+        last = (
+            _AS.objects.filter(scheduled_class=clase)
+            .order_by("-created_at")
+            .first()
+        )
+        # Revoca remanentes activos expirados (higiene single-active).
+        _revoke_sessions(clase)
+        return {
+            "outcome": "expired",
+            "status": clase.status,
+            "reason": "qr_expired",
+            "session_id": str(last.id) if last is not None else None,
+            "expires_at": last.expires_at if last is not None else None,
+        }
+
+    # Nunca hubo sesión: crear S1 una vez. generate_session revoca previas
+    # (vacías aquí) y pasa SCHEDULED -> IN_PROGRESS.
     try:
         result = generate_session(clase)
     except (IntegrityError, ValidationError):

@@ -233,9 +233,16 @@ class AdminClassUpdateView(generics.RetrieveUpdateAPIView):
         _revoke_active_sessions(clase)
 
 
-# --- Núcleo QR (Plan v2) ---
+# --- Núcleo QR (Plan v2, QR único sin auto-rotación) ---
 class ClassSessionCreateView(generics.GenericAPIView):
-    """A1: genera una sesión QR single-activa sobre una clase existente."""
+    """A1 (deprecated): genera la sesión QR única sobre una clase existente.
+
+    QR único sin auto-rotación: solo se permite crear S1 una vez por clase.
+    Si ya hubo alguna sesión (por class_id) responde 410
+    {state expired, reason rotation_disabled} y nunca 201. La ruta se
+    mantiene por compatibilidad pero no debe usarse (la UI usa
+    current-session automático).
+    """
 
     authentication_classes = _AUTH
     permission_classes = _PERMS
@@ -252,6 +259,27 @@ class ClassSessionCreateView(generics.GenericAPIView):
             return Response(
                 {"error": f"No se puede generar QR en una clase {clase.status}."},
                 status=status.HTTP_409_CONFLICT,
+            )
+
+        # QR único (deprecated): bloquear segunda creación.
+        from apps.attendance.models import AttendanceSession as _AS
+
+        if _AS.objects.filter(scheduled_class=clase).exists():
+            last = (
+                _AS.objects.filter(scheduled_class=clase)
+                .order_by("-created_at")
+                .first()
+            )
+            return Response(
+                {
+                    "state": "expired",
+                    "status": clase.status,
+                    "reason": "rotation_disabled",
+                    "session_id": str(last.id) if last is not None else None,
+                    "expires_at": last.expires_at if last is not None else None,
+                },
+                status=status.HTTP_410_GONE,
+                headers={"Cache-Control": "no-store"},
             )
 
         ser = SessionCreateSerializer(data=request.data or {})
@@ -393,18 +421,19 @@ class InstantClassCreateView(generics.GenericAPIView):
 
 
 class ClassCurrentSessionView(generics.GenericAPIView):
-    """QR automático: sesión vigente de la clase sin botón manual.
+    """QR automático: sesión vigente de la clase sin botón manual (QR único).
 
     GET groups/<group_id>/classes/<class_id>/current-session/ (profesor dueño):
 
-    - 200 live: hay sesión válida (reusada) o se creó/rotó en ventana.
+    - 200 live: hay sesión válida (reusada) o se creó S1 en ventana.
       `attend_url`/`token_raw` solo vienen cuando la sesión se creó en este
       request; en reuso el token crudo ya no existe (solo su hash) y
       `attend_url` es None — el frontend conserva el QR cacheado por
-      `session_id` (mismo dispositivo/pestaña, sessionStorage) o rota con
-      POST .../current-session/rotate/ para mostrarlo en este dispositivo
-      (workaround M1: revoca la anterior y devuelve un `attend_url` nuevo).
+      `session_id` (mismo dispositivo/pestaña, sessionStorage).
     - 202 pending: falta para el inicio ({status SCHEDULED, starts_in_s}).
+    - 410 expired: el QR único expiró dentro de la ventana
+      ({state expired, reason qr_expired, session_id, expires_at, status}).
+      Sin auto-rotación: no se genera S2.
     - 410 finished: clase cerrada o fuera de ventana (con cierre perezoso a
       COMPLETED + revocación de QR activos).
     - 409: colisión/carrera sin sesión válida que reusar (reintentable).
@@ -412,7 +441,8 @@ class ClassCurrentSessionView(generics.GenericAPIView):
     - 404 si el grupo/clase no existe o es de otro profesor.
 
     GET puro (sin CSRF) + `Cache-Control: no-store` (polling cada 10s).
-    A1 manual (`ClassSessionCreateView`) se mantiene como fallback interno.
+    A1 manual (`ClassSessionCreateView`) y rotate están deprecated
+    (bloquean segunda creación con 410 rotation_disabled).
     """
 
     authentication_classes = _AUTH
@@ -503,6 +533,18 @@ class ClassCurrentSessionView(generics.GenericAPIView):
                 status=status.HTTP_410_GONE,
                 headers={"Cache-Control": "no-store"},
             )
+        if kind == "expired":
+            return Response(
+                {
+                    "state": "expired",
+                    "status": outcome["status"],
+                    "reason": outcome.get("reason", "qr_expired"),
+                    "session_id": outcome.get("session_id"),
+                    "expires_at": outcome.get("expires_at"),
+                },
+                status=status.HTTP_410_GONE,
+                headers={"Cache-Control": "no-store"},
+            )
 
         # live
         session = outcome["session"]
@@ -527,20 +569,15 @@ class ClassCurrentSessionView(generics.GenericAPIView):
 
 
 class ClassCurrentSessionRotateView(generics.GenericAPIView):
-    """M1 (opción b): "Mostrar en este dispositivo".
+    """Rotate (deprecated): rotación deshabilitada (QR único, nunca 201).
 
     POST groups/<group_id>/classes/<class_id>/current-session/rotate/
-    (profesor dueño, CON CSRF por ser mutación):
+    (profesor dueño, CON CSRF por ser mutación). La ruta se mantiene por
+    compatibilidad pero ya no genera sesiones:
 
-    - Revoca la sesión activa previa (`generate_session` single-active) y
-      devuelve una sesión NUEVA con `attend_url` mostrable en este
-      navegador/proyector. Es el workaround documentado al reuso live con
-      `attend_url: null` (hash irreversible): en vez de un aviso muerto, la
-      UI ofrece esta acción de rotación (RF-PROF-06 proyectar).
-    - 201 live: {session_id, token_raw, attend_url, expires_at, ttl_minutes}.
+    - 410 rotation_disabled: en ventana (haya o no sesión previa). Nunca 201.
     - 202 pending: aún fuera de ventana (no rota nada).
     - 410 finished: clase cerrada o ventana pasada (cierre perezoso).
-    - 409/503: colisión/carrera o fallo inesperado (reintentables, nunca 500).
     - 404 si el grupo/clase no existe o es de otro profesor.
     """
 
@@ -553,8 +590,6 @@ class ClassCurrentSessionRotateView(generics.GenericAPIView):
             get_early_grace_seconds,
             should_auto_start,
         )
-        from apps.attendance.serializers import SessionCreateSerializer
-        from apps.attendance.services import generate_session
 
         prof = getattr(request.user, "professor_profile", None)
         group = get_object_or_404(AcademicGroup, pk=group_id, professor=prof)
@@ -613,36 +648,22 @@ class ClassCurrentSessionRotateView(generics.GenericAPIView):
                 headers={"Cache-Control": "no-store"},
             )
 
-        ser = SessionCreateSerializer(data=request.data or {})
-        ser.is_valid(raise_exception=True)
-        try:
-            result = generate_session(
-                clase, ttl_override=ser.validated_data.get("qr_duration_minutes")
-            )
-        except (IntegrityError, ValidationError):
-            return Response(
-                {"error": "No se pudo generar el código QR, intenta de nuevo."},
-                status=status.HTTP_409_CONFLICT,
-                headers={"Cache-Control": "no-store"},
-            )
-        except Exception:
-            logger.exception("rotate: generate_session falló (class=%s)", class_id)
-            return Response(
-                {"error": "Servicio no disponible, intenta de nuevo."},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                headers={"Cache-Control": "no-store", "Retry-After": "10"},
-            )
+        # QR único (deprecated): rotación deshabilitada, nunca 201.
+        from apps.attendance.models import AttendanceSession as _AS
+
+        last = (
+            _AS.objects.filter(scheduled_class=clase)
+            .order_by("-created_at")
+            .first()
+        )
         return Response(
             {
-                "state": "live",
-                "session_id": str(result["session"].id),
-                "token_raw": result["token_raw"],
-                "attend_url": result["attend_url"],
-                "expires_at": result["expires_at"],
-                "ttl_minutes": result["ttl_minutes"],
+                "state": "expired",
                 "status": clase.status,
-                "rotated": True,
+                "reason": "rotation_disabled",
+                "session_id": str(last.id) if last is not None else None,
+                "expires_at": last.expires_at if last is not None else None,
             },
-            status=status.HTTP_201_CREATED,
+            status=status.HTTP_410_GONE,
             headers={"Cache-Control": "no-store"},
         )
