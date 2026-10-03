@@ -14,11 +14,15 @@ function formatCountdown(ms) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-export default function QrDisplay({ attendUrl, expiresAt, size = 220, onExpired }) {
+export default function QrDisplay({ attendUrl, expiresAt, size = 220, onExpired, sessionLabel = null, rotationCount = 0, phase = "live" }) {
   const [now, setNow] = React.useState(Date.now());
   const [expanded, setExpanded] = React.useState(false);
   // Dispara onExpired una sola vez por cada expiresAt (refetch del QR).
   const firedRef = React.useRef(null);
+  // Etiqueta de sesión rotada: N = rotationCount + 1 (primera sesión = 1,
+  // tras una rotación backend S1→S2 = 2). Solo se muestra cuando hubo rotación.
+  const rotated = rotationCount > 0;
+  const sessionN = rotationCount + 1;
 
   React.useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -29,12 +33,16 @@ export default function QrDisplay({ attendUrl, expiresAt, size = 220, onExpired 
   const expired = left <= 0;
   void now;
 
+  // Expiración: onExpired una vez por expiresAt, solo en fase live y con la
+  // pestaña visible (evita refetch en background que pise el QR al volver).
+  // Si expiró en background, el poll ensure de 10s del padre ya trae la S2.
   React.useEffect(() => {
-    if (expired && onExpired && firedRef.current !== expiresAt) {
+    if (expired && onExpired && firedRef.current !== expiresAt && phase === "live") {
+      if (typeof document !== "undefined" && document.hidden) return;
       firedRef.current = expiresAt;
       onExpired();
     }
-  }, [expired, expiresAt, onExpired]);
+  }, [expired, expiresAt, onExpired, phase]);
 
   // Retorno de foco: guarda el elemento enfocado al abrir el modal y lo
   // restaura al cerrar (accesibilidad del diálogo).
@@ -90,8 +98,15 @@ export default function QrDisplay({ attendUrl, expiresAt, size = 220, onExpired 
       )}
       {expiresAt && (
         <p className={`text-sm font-semibold ${expired ? "text-red-600" : "text-green-700"}`}>
-          {expired ? "renovando…" : `Expira en ${formatCountdown(left)}`}
+          {expired
+            ? "Expiró — generando nuevo QR…"
+            : rotated
+              ? `Nuevo QR activo (sesión ${sessionN}) — Expira en ${formatCountdown(left)}`
+              : `Expira en ${formatCountdown(left)}`}
         </p>
+      )}
+      {sessionLabel && !expired && (
+        <p className="text-[11px] text-slate-400 font-medium">{sessionLabel}</p>
       )}
       <p className="text-xs text-gray-400 text-center max-w-xs">
         {attendUrl ? "Haz clic en el QR para ampliarlo y facilitar el escaneo" : "Escanea el código con la cámara de tu celular"}
@@ -121,7 +136,11 @@ export default function QrDisplay({ attendUrl, expiresAt, size = 220, onExpired 
             <h2 className="text-xl font-bold sm:text-2xl">QR de asistencia</h2>
             {expiresAt && (
               <p className={`mt-2 text-sm font-semibold ${expired ? "text-red-300" : "text-emerald-300"}`}>
-                {expired ? "Renovando código…" : `Expira en ${formatCountdown(left)}`}
+                {expired
+                  ? "Expiró — generando nuevo QR…"
+                  : rotated
+                    ? `Nuevo QR activo (sesión ${sessionN}) — Expira en ${formatCountdown(left)}`
+                    : `Expira en ${formatCountdown(left)}`}
               </p>
             )}
           </div>

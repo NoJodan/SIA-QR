@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import QrDisplay from "../components/QrDisplay";
 import { getCurrentSession, getSessionAttendances, rotateCurrentSession } from "../services/attendance";
+import { getReportPreview } from "../services/reports";
 import { getGroupClass } from "../services/academic";
 import { formatBogota } from "../utils/dates";
 
-// QR automático: ensure (clase + sesión vigente) cada 10s, lista viva cada 5s.
+// QR automático: ensure (clase + sesión vigente) cada 10s, lista viva
+// ACUMULADA POR CLASE cada 5s (vía reportes con filtro class_id: S1+S2, no se
+// vacía al rotar; fallback a la lista de la sesión vigente si el reporte falla).
 // Sin botón Generar manual: A1 queda solo como fallback interno del backend.
 // M1 (opción b): si el live reusado no trae attend_url (sesión creada en otro
 // dispositivo — el token crudo es irreversible, solo se guarda su hash), la UI
@@ -115,8 +118,26 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
   const [page, setPage] = useState(1);
   const [rotating, setRotating] = useState(false);
   const [rotateError, setRotateError] = useState("");
+  // Rotación backend S1→S2 (TTL expirado + ventana vigente, RF-PROF-05/07):
+  // banner transitorio + contador para la etiqueta "sesión N" del QR.
+  const [rotationNotice, setRotationNotice] = useState("");
+  const [rotationCount, setRotationCount] = useState(0);
+  const rotationTimer = useRef(null);
   const sessionRef = useRef(null);
   sessionRef.current = session;
+
+  // Limpia el timer del banner transitorio al desmontar.
+  useEffect(() => () => {
+    if (rotationTimer.current) clearTimeout(rotationTimer.current);
+  }, []);
+
+  const flagRotation = useCallback((newSessionId) => {
+    setRotationCount((c) => c + 1);
+    const short = String(newSessionId).slice(-8);
+    setRotationNotice(`QR renovado — el anterior ya no es válido (nueva sesión …${short}).`);
+    if (rotationTimer.current) clearTimeout(rotationTimer.current);
+    rotationTimer.current = setTimeout(() => setRotationNotice(""), 10000);
+  }, []);
 
   // ensure: estado de la clase + sesión vigente (idempotente, sin reload).
   const ensure = useCallback(async () => {
@@ -146,6 +167,15 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
             attend_url: d.attend_url,
             expires_at: d.expires_at,
           };
+          const prev = sessionRef.current;
+          if (prev?.session_id && d.session_id !== prev.session_id) {
+            // Rotación backend (TTL expirado + ventana IN_PROGRESS => S2 con
+            // nuevo session_id/token): NO es grace/storage/rotate-auto del
+            // front — el comportamiento esperado SÍ es regenerar en ventana
+            // (RF-PROF-05/07). attend_url presente la distingue del caso
+            // "otro dispositivo" (attend_url null de los guards de abajo).
+            flagRotation(d.session_id);
+          }
           setSession(next);
           saveCached(classItem.id, next);
         } else if (d.session_id === sessionRef.current?.session_id && sessionRef.current?.attend_url) {
@@ -190,7 +220,7 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
     } catch {
       // Poll silencioso: no se pisa el QR visible ante un fallo puntual.
     }
-  }, [group.id, classItem.id]);
+  }, [group.id, classItem.id, flagRotation]);
 
   // M1 (opción b): rotar el QR para mostrarlo en este dispositivo.
   // Revoca la sesión activa previa y trae un attend_url nuevo proyectable.
@@ -203,11 +233,15 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
         if (res.data?.ttl_minutes != null && Number.isFinite(Number(res.data.ttl_minutes))) {
           setQrMinutes(Number(res.data.ttl_minutes));
         }
+        const prev = sessionRef.current;
         const next = {
           session_id: res.data.session_id,
           attend_url: res.data.attend_url,
           expires_at: res.data.expires_at,
         };
+        if (prev?.session_id && res.data.session_id !== prev.session_id) {
+          flagRotation(res.data.session_id);
+        }
         setSession(next);
         saveCached(classItem.id, next);
         setPhase("live");
@@ -227,7 +261,7 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
     } finally {
       setRotating(false);
     }
-  }, [group.id, classItem.id]);
+  }, [group.id, classItem.id, flagRotation]);
 
   // Primer ensure inmediato + poll cada 10s.
   useEffect(() => {
@@ -261,25 +295,51 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
     return () => clearInterval(id);
   }, [phase, hasStartsIn]);
 
+  // Lista viva ACUMULADA POR CLASE (S1+S2): el endpoint de reportes acepta
+  // filtro class_id y devuelve las marcaciones de TODAS las sesiones de la
+  // clase — al rotar S1→S2 la lista NO se vacía ni se resetea. Alternativa
+  // backend (no implementada a propósito): endpoint dedicado de agregados por
+  // clase; con la restricción No-Redis y el filtro class_id existente, el
+  // reporte paginado ya cubre el caso sin tocar el back. Fallback: lista de
+  // la sesión vigente si el reporte falla.
   const loadList = useCallback(
-    async (sessionId, p = page) => {
-      if (!sessionId) return;
-      const data = await getSessionAttendances(sessionId, p);
+    async (p = page) => {
+      try {
+        const data = await getReportPreview({ class_id: classItem.id }, p, 10);
+        const list = Array.isArray(data) ? data : data.results || [];
+        setRows(list);
+        setCount(data.count ?? (Array.isArray(data) ? data.length : 0));
+        return;
+      } catch {
+        // Fallback a la sesión vigente.
+      }
+      const sid = sessionRef.current?.session_id;
+      if (!sid) return;
+      const data = await getSessionAttendances(sid, p);
       setRows(Array.isArray(data) ? data : data.results || []);
       setCount(data.count ?? (Array.isArray(data) ? data.length : 0));
     },
-    [page]
+    [page, classItem.id]
   );
 
   // Polling 5s de la lista viva (restricción No-Redis: sin WebSocket).
+  // Incluye session.session_id para refrescar justo al rotar S1→S2.
   useEffect(() => {
-    if (!session?.session_id) return;
-    loadList(session.session_id, 1).catch(() => {});
-    const id = setInterval(() => loadList(session.session_id, page).catch(() => {}), LIST_MS);
+    loadList(page).catch(() => {});
+    const id = setInterval(() => loadList(page).catch(() => {}), LIST_MS);
     return () => clearInterval(id);
-  }, [session?.session_id, page, loadList]);
+  }, [classItem.id, session?.session_id, page, loadList]);
 
   const showQr = phase === "live" && session?.attend_url;
+  // Etiqueta corta de sesión para el QR (verificación visual del session_id).
+  const sessionLabel = session?.session_id
+    ? `sesión …${String(session.session_id).slice(-8)}`
+    : null;
+  // Sesiones distintas presentes en la lista (S1+S2 tras rotar).
+  const sessionsInRows = new Set(
+    (rows || []).map((r) => r.session_id).filter(Boolean)
+  );
+  const multiSession = sessionsInRows.size > 1;
   const modalityLabel = MODALITY_LABELS[classItem.modality] || classItem.modality;
   const statusLabel = CLASS_STATUS_LABELS[classStatus] || classStatus;
   const statusColor = CLASS_STATUS_COLORS[classStatus] || "bg-slate-100 text-slate-600 border-slate-200";
@@ -357,6 +417,12 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
                 <span><strong>QR activo</strong> - Escanea para firmar asistencia.</span>
               </div>
             )}
+            {rotationNotice && phase === "live" && (
+              <div className="bg-sky-50 border border-sky-100 text-sky-800 text-xs md:text-sm font-medium px-4 py-3 rounded-2xl flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-sky-500 flex-shrink-0"></span>
+                <span>{rotationNotice}</span>
+              </div>
+            )}
             {phase === "finished" && (
               <div className="bg-gray-100 border border-gray-200 text-gray-700 text-xs md:text-sm font-medium px-4 py-3 rounded-2xl">
                 La clase finalizó — ya no se generan códigos QR.
@@ -384,10 +450,14 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
 
           {showQr ? (
             <QrDisplay
+              key={session.session_id}
               attendUrl={session.attend_url}
               expiresAt={session.expires_at}
               size={180}
               onExpired={() => ensure().catch(() => {})}
+              sessionLabel={sessionLabel}
+              rotationCount={rotationCount}
+              phase={phase}
             />
           ) : phase === "live" ? (
             <div className="w-full min-h-56 flex flex-col items-center justify-center gap-3 p-4">
@@ -426,17 +496,26 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
           <h3 className="text-lg md:text-xl font-bold text-slate-900">
             Asistencia {count > 0 && <span className="text-slate-500 font-normal">({count})</span>}
           </h3>
-          {session && (
-            <span className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>en vivo (5s)</span>
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {multiSession && (
+              <span className="bg-sky-50 border border-sky-100 text-sky-700 text-xs font-semibold px-3 py-1.5 rounded-full whitespace-nowrap">
+                acumulada · todas las sesiones
+              </span>
+            )}
+            {session && (
+              <span className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>en vivo (5s)</span>
+              </span>
+            )}
+          </div>
         </div>
-        {!session ? (
-          <p className="text-sm text-slate-500">El QR aparecerá solo al iniciar la ventana de la clase.</p>
-        ) : rows.length === 0 ? (
-          <p className="text-sm text-slate-400 pt-2">Aún no hay marcaciones registradas.</p>
+        {rows.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            {!session && phase !== "finished"
+              ? "El QR aparecerá solo al iniciar la ventana de la clase."
+              : "Aún no hay marcaciones registradas."}
+          </p>
         ) : (
           <>
             <ul className="divide-y divide-slate-100">
@@ -450,6 +529,9 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
                     <p className="text-slate-700">{formatBogota(a.registered_at)}</p>
                     <p className="text-xs text-slate-500">
                       {a.has_location ? "📍 con ubicación" : "sin ubicación"}
+                      {multiSession && a.session_id && (
+                        <span className="ml-1 text-slate-400">· …{String(a.session_id).slice(-8)}</span>
+                      )}
                     </p>
                   </div>
                 </li>
