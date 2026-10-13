@@ -32,3 +32,9 @@ services:
         fromDatabase:
           name: sia-qr-db
           property: connectionString
+      # Bootstrap sin shell (plan free): define EMAIL/PASSWORD en el
+      # dashboard para crear el superuser inicial en el próximo deploy.
+      - key: DJANGO_SUPERUSER_EMAIL
+        sync: false
+      - key: DJANGO_SUPERUSER_PASSWORD
+        sync: false
