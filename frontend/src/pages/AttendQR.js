@@ -3,6 +3,7 @@ import api, { ensureCsrf, googleLoginUrl } from "../services/api";
 import { markAttendance, resolveToken } from "../services/attendance";
 import { formatBogota } from "../utils/dates";
 import logo from "../assets/logo.png";
+import "./AttendQR.css";
 
 const GEO_TIMEOUT_MS = 8000;
 const PENDING_TOKEN_KEY = "siaqr_pending_token";
@@ -65,7 +66,7 @@ function toFixedOrNull(v, dec) {
 // M1: registro inicial real del estudiante (RF-EST-03). El nombre viene de
 // Google (solo lectura); se exigen código/documento/teléfono/dirección
 // reales; el backend valida unicidad con 409 legible.
-function StudentProfileForm({ initial, onSaved }) {
+function StudentProfileForm({ initial, onSaved, notice }) {
   const suggestedName = [initial?.suggested_first_name || initial?.first_name || "", initial?.suggested_last_name || initial?.last_name || ""].join(" ").trim();
   const [form, setForm] = useState({
     student_code: initial?.student_code || "",
@@ -110,61 +111,115 @@ function StudentProfileForm({ initial, onSaved }) {
     }
   };
 
-  const inputCls =
-    "mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20";
+  const fields = [
+    { key: "document_number", label: "Número de documento", autoComplete: "off" },
+    { key: "student_code", label: "Código estudiantil", autoComplete: "off" },
+    { key: "phone_number", label: "Teléfono", type: "tel", autoComplete: "tel" },
+    { key: "address", label: "Dirección", autoComplete: "street-address" },
+  ];
 
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-      <p className="text-sm font-semibold text-slate-800">
-        Completa tu perfil de estudiante para firmar asistencia
-      </p>
-      {(suggestedName || initial?.email) && (
-        <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-          Registrado como: {suggestedName || "—"}{initial?.email ? ` (${initial.email})` : ""}
+    <form
+      onSubmit={submit}
+      aria-busy={saving}
+      className="attend-profile-form"
+    >
+      <header className="attend-profile-form-heading">
+        <span className="attend-profile-step" aria-hidden="true">01</span>
+        <div>
+          <p className="attend-profile-kicker">Antes de firmar</p>
+          <h2>Completa tu perfil</h2>
+          <p>Registra estos datos una sola vez para continuar con tu asistencia.</p>
+        </div>
+      </header>
+
+      <section className="attend-profile-account" aria-label="Cuenta institucional">
+        <span className="attend-profile-avatar" aria-hidden="true">
+          {(suggestedName || initial?.email || "E").charAt(0).toUpperCase()}
+        </span>
+        <span className="attend-profile-account-copy">
+          <span className="attend-profile-account-label">Cuenta institucional</span>
+          <strong>{suggestedName || initial?.email || "Estudiante"}</strong>
+          {suggestedName && initial?.email && <span>{initial.email}</span>}
+        </span>
+        <span className="attend-profile-google-mark" aria-label="Cuenta de Google">G</span>
+      </section>
+
+      {suggestedName && (
+        <p className="attend-profile-readonly">
+          Tu nombre se obtiene de Google y no se puede editar aquí.
         </p>
       )}
-      {suggestedName && (
-        <p className="text-xs text-slate-500">Nombre tomado de tu cuenta de Google (solo lectura).</p>
+
+      <div className="attend-profile-fields">
+        {fields.map(({ key, label, type, autoComplete }) => (
+          <div key={key} className={`attend-profile-field${key === "address" ? " is-wide" : ""}`}>
+            <label htmlFor={`student-${key}`}>
+              {label}<span aria-hidden="true"> *</span>
+            </label>
+            <input
+              id={`student-${key}`}
+              type={type || "text"}
+              autoComplete={autoComplete}
+              className="attend-profile-input"
+              value={form[key]}
+              onChange={set(key)}
+              maxLength={key === "phone_number" ? 20 : key === "address" ? 500 : 50}
+              aria-invalid={Boolean(errors[key])}
+              aria-describedby={errors[key] ? `student-${key}-error` : undefined}
+            />
+            {errors[key] && (
+              <p id={`student-${key}-error`} className="attend-profile-field-error">
+                {errors[key]}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+      {(errors._global || notice) && (
+        <p className="attend-profile-global-error" role="alert">
+          {errors._global || notice}
+        </p>
       )}
-      <div>
-        <label className="text-xs font-medium text-slate-700">Número de documento *</label>
-        <input className={inputCls} value={form.document_number} onChange={set("document_number")} maxLength={50} />
-        {errors.document_number && <p className="mt-1 text-xs text-red-600">{errors.document_number}</p>}
-      </div>
-      <div>
-        <label className="text-xs font-medium text-slate-700">Código estudiantil *</label>
-        <input className={inputCls} value={form.student_code} onChange={set("student_code")} maxLength={50} />
-        {errors.student_code && <p className="mt-1 text-xs text-red-600">{errors.student_code}</p>}
-      </div>
-      <div>
-        <label className="text-xs font-medium text-slate-700">Teléfono *</label>
-        <input type="tel" className={inputCls} value={form.phone_number} onChange={set("phone_number")} maxLength={20} />
-        {errors.phone_number && <p className="mt-1 text-xs text-red-600">{errors.phone_number}</p>}
-      </div>
-      <div>
-        <label className="text-xs font-medium text-slate-700">Dirección *</label>
-        <input className={inputCls} value={form.address} onChange={set("address")} maxLength={500} />
-        {errors.address && <p className="mt-1 text-xs text-red-600">{errors.address}</p>}
-      </div>
-      {errors._global && <p className="text-xs text-red-600">{errors._global}</p>}
       <button
         type="submit"
         disabled={saving}
-        className="w-full rounded-xl bg-[#B3200E] px-4 py-2 text-sm font-medium text-white hover:bg-[#941B0B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40 disabled:cursor-not-allowed disabled:opacity-50"
+        className="attend-profile-submit"
       >
-        {saving ? "Guardando…" : "Guardar perfil y continuar"}
+        <span>{saving ? "Guardando perfil…" : "Guardar y continuar"}</span>
+        {!saving && (
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
       </button>
+      <p className="attend-profile-privacy">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 3 5 6v5c0 4.5 2.9 8.4 7 10 4.1-1.6 7-5.5 7-10V6l-7-3Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+          <path d="m9 12 2 2 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        Tus datos se usan para identificar tu asistencia.
+      </p>
     </form>
   );
 }
 
 function AttendHeader() {
   return (
-    <div className="flex items-center gap-3 rounded-2xl bg-[#B3200E] px-5 py-4 text-white shadow-sm">
-      <img src={logo} alt="Universidad del Tolima" className="h-10 w-10 rounded-full bg-white p-1" />
+    <div className="flex items-center gap-3 rounded-2xl bg-gradient-to-r from-[#D33B25] via-[#B3200E] to-[#941B0B] px-4 py-3 text-white shadow-lg shadow-red-900/15 sm:px-5">
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white p-2 shadow-sm ring-1 ring-white/50">
+        <img
+          src={logo}
+          alt=""
+          aria-hidden="true"
+          className="h-full w-full object-contain object-center -translate-y-1"
+        />
+      </span>
       <div>
-        <p className="text-base font-bold leading-tight">SIA-QR</p>
-        <p className="text-xs text-white/85">Universidad del Tolima</p>
+        <p className="text-[15px] font-extrabold leading-tight tracking-tight">SIA-QR</p>
+        <p className="mt-1 text-[9px] font-semibold uppercase leading-none tracking-[0.12em] text-white/85">
+          Universidad del Tolima
+        </p>
       </div>
     </div>
   );
@@ -369,12 +424,10 @@ export default function AttendQR() {
       : geoState === "pending"
         ? "Obteniendo ubicación (opcional)…"
         : "Sin ubicación — igual puedes firmar";
-  const geoBadgeCls =
-    geoState === "ready"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : geoState === "pending"
-        ? "border-slate-200 bg-slate-50 text-slate-500"
-        : "border-slate-200 bg-slate-50 text-slate-500";
+  const profileRequired = Boolean(
+    showProfileForm || user?.needs_profile || session?.needs_profile
+  );
+  const completed = phase === "done" || phase === "already";
 
   if (phase === "no-token") {
     return (
@@ -392,14 +445,43 @@ export default function AttendQR() {
 
   if (phase === "login") {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-[#F8FAFC] p-4">
-        <div className="w-full max-w-md space-y-4">
-          <AttendHeader />
-          <div className="flex flex-col items-center space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h1 className="text-xl font-bold text-slate-900">Firma tu asistencia</h1>
-            <p className="text-center text-sm text-slate-600">
-              Inicia sesión con tu correo institucional (@ut.edu.co) para firmar tu asistencia.
-            </p>
+      <main className="attend-login-page">
+        <div className="attend-login-shell">
+          <header className="attend-login-brand">
+            <img src={logo} alt="" />
+            <span>
+              <strong>SIA-QR</strong>
+              <small>Universidad del Tolima</small>
+            </span>
+            <span className="attend-login-portal">Portal estudiantil</span>
+          </header>
+
+          <section className="attend-login-card">
+            <div className="attend-login-card-topline" aria-hidden="true" />
+            <div className="flex flex-col items-center text-center">
+              <div className="attend-login-icon">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 3 5 6v5c0 4.5 2.9 8.4 7 10 4.1-1.6 7-5.5 7-10V6l-7-3Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                  <path d="m9 12 2 2 4-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <p className="attend-login-eyebrow">Acceso seguro</p>
+              <h1>Firma tu asistencia</h1>
+              <p className="attend-login-description">
+                Inicia sesión con tu cuenta institucional para validar el código QR y continuar con tu asistencia.
+              </p>
+            </div>
+
+            <div className="attend-login-account-hint">
+              <span className="attend-login-google-letter" aria-hidden="true">
+                G
+              </span>
+              <span>
+                <strong>Usa tu correo institucional</strong>
+                <small>Tu cuenta @ut.edu.co</small>
+              </span>
+            </div>
+
             <a
               href={googleLoginUrl(attendUrl)}
               onClick={() => {
@@ -410,13 +492,34 @@ export default function AttendQR() {
                   // sin almacenamiento: el ?next= sigue siendo el camino principal
                 }
               }}
-              className="w-full rounded-xl bg-[#B3200E] px-4 py-3 text-center font-medium text-white hover:bg-[#941B0B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40"
+              className="attend-login-google-button"
             >
-              Continuar con Google
+              <svg viewBox="0 0 48 48" aria-hidden="true">
+                <path fill="#4285F4" d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11a9.4 9.4 0 0 1-4.1 6.2v5.1h6.6c3.9-3.6 6.1-8.8 6.1-15Z" />
+                <path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.9l-6.6-5.1c-1.8 1.2-4.1 1.9-6.9 1.9-5.3 0-9.8-3.6-11.4-8.4H5.8v5.3A20 20 0 0 0 24 44Z" />
+                <path fill="#FBBC05" d="M12.6 27.5a12 12 0 0 1 0-7.1v-5.3H5.8a20 20 0 0 0 0 17.7l6.8-5.3Z" />
+                <path fill="#EA4335" d="M24 12c3 0 5.7 1 7.8 3.1l5.9-5.9A19.7 19.7 0 0 0 24 4 20 20 0 0 0 5.8 15.1l6.8 5.3C14.2 15.6 18.7 12 24 12Z" />
+              </svg>
+              <span>Continuar con Google</span>
+              <svg className="attend-login-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </a>
-          </div>
+
+            <p className="attend-login-privacy">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="5" y="10" width="14" height="11" rx="2" stroke="currentColor" strokeWidth="1.6" />
+                <path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+              Autenticación protegida por Google
+            </p>
+          </section>
+          <footer className="attend-login-footer">
+            <span>© {new Date().getFullYear()} Universidad del Tolima</span>
+            <span><i aria-hidden="true" /> Conexión segura</span>
+          </footer>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -456,71 +559,174 @@ export default function AttendQR() {
     );
   }
 
-  if (phase === "done" || phase === "already") {
+  if (profileRequired && !completed) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-[#F8FAFC] p-4">
-        <div className="w-full max-w-md space-y-4">
-          <AttendHeader />
-          <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              {phase === "already" ? "Ya firmada" : "Firma exitosa"}
+      <main className="attend-profile-page">
+        <div className="attend-profile-content">
+          <header className="attend-profile-brand">
+            <img src={logo} alt="" />
+            <span>
+              <strong>SIA-QR</strong>
+              <small>Universidad del Tolima</small>
             </span>
-            <h1 className="text-2xl font-bold text-slate-900">
-              {phase === "already" ? "Asistencia ya registrada" : "¡Asistencia registrada!"}
-            </h1>
-            {session && (
-              <p className="text-sm text-slate-600">
-                {session.class?.title} · {session.group?.course_name}
-              </p>
-            )}
-            {result?.registered_at && (
-              <p className="text-sm font-semibold text-slate-800">
-                Hora: {formatBogota(result.registered_at)}
-              </p>
-            )}
-            {user?.email && <p className="text-xs text-slate-400">{user.email}</p>}
-          </div>
+            <span className="attend-profile-brand-label">Portal estudiantil</span>
+          </header>
+          <section className="attend-profile-card">
+            <div className="attend-profile-card-topline" aria-hidden="true" />
+            <div className="attend-profile-heading">
+              <p className="attend-portal-eyebrow">Registro de asistencia</p>
+              <h1>Confirma tu asistencia</h1>
+              <p>Completa tus datos para continuar con el registro de esta clase.</p>
+            </div>
+            <div className="attend-profile-progress" aria-label="Paso 1 de 2: perfil del estudiante">
+              <div className="attend-profile-progress-item is-current">
+                <span>1</span>
+                <strong>Tu perfil</strong>
+              </div>
+              <span className="attend-profile-progress-line" aria-hidden="true" />
+              <div className="attend-profile-progress-item">
+                <span>2</span>
+                <strong>Asistencia</strong>
+              </div>
+            </div>
+            <StudentProfileForm
+              initial={user}
+              onSaved={handleProfileSaved}
+              notice={error}
+            />
+          </section>
+          <p className="attend-profile-page-footer">
+            <span className="attend-secure-dot" aria-hidden="true" />
+            Acceso seguro con tu cuenta institucional
+          </p>
         </div>
-      </div>
+      </main>
     );
   }
 
-  // phase === "ready"
+  const classData = session?.class;
+  const groupData = session?.group;
+
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-[#F8FAFC] p-4">
-      <div className="w-full max-w-md space-y-4">
-        <AttendHeader />
-        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h1 className="text-center text-xl font-bold text-slate-900">Firma tu asistencia</h1>
-          {session && (
-            <div className="space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-              <p className="font-semibold text-slate-800">{session.class?.title}</p>
-              <p className="text-slate-600">
-                {session.group?.course_name} · Grupo {session.group?.group_code}
-              </p>
-              <p className="text-slate-500">Expira: {formatBogota(session.expires_at)}</p>
-            </div>
-          )}
-          {(showProfileForm || user?.needs_profile || session?.needs_profile) && (
-            <StudentProfileForm initial={user} onSaved={handleProfileSaved} />
-          )}
-          <p className="text-center">
-            <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${geoBadgeCls}`}>
-              <span className="h-1.5 w-1.5 rounded-full bg-current" />
-              {geoLabel}
+    <div className="attend-portal">
+      <div className="attend-portal-shell">
+        <header className="attend-portal-topbar">
+          <div className="attend-portal-brand" aria-label="SIA-QR, Universidad del Tolima">
+            <img src={logo} alt="" className="attend-portal-logo" />
+            <span className="attend-portal-brand-copy">
+              <span className="attend-portal-brand-name">SIA-QR</span>
+              <span className="attend-portal-brand-school">Universidad del Tolima</span>
             </span>
-          </p>
-          {error && <p className="text-center text-sm text-red-600">{error}</p>}
-          <button
-            onClick={handleMark}
-            disabled={marking}
-            className="w-full rounded-xl bg-[#B3200E] px-4 py-3 font-semibold text-white hover:bg-[#941B0B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {marking ? "Registrando…" : "Firmar asistencia"}
-          </button>
-          {user?.email && <p className="text-center text-xs text-slate-400">{user.email}</p>}
-        </div>
+          </div>
+          <span className="attend-portal-label">Portal estudiantil</span>
+        </header>
+
+        {session && (
+          <section className="attend-class-context" aria-label="Información de la clase">
+            <div className="attend-class-heading">
+              <p className="attend-portal-eyebrow">Clase actual</p>
+              <h2 className="attend-course-name">
+                {groupData?.course_name || classData?.title}
+              </h2>
+              {groupData?.course_name && classData?.title && (
+                <p className="attend-class-title">{classData.title}</p>
+              )}
+            </div>
+            <div className="attend-class-details">
+              {classData?.start_time && (
+                <span className="attend-detail-item">
+                  <span className="attend-detail-dot" aria-hidden="true" />
+                  {formatBogota(classData.start_time)}
+                </span>
+              )}
+              {groupData?.group_code && (
+                <span className="attend-detail-item">Grupo {groupData.group_code}</span>
+              )}
+              {session.expires_at && (
+                <span className="attend-detail-item">
+                  QR válido hasta {formatBogota(session.expires_at)}
+                </span>
+              )}
+            </div>
+          </section>
+        )}
+
+        <main className="attend-portal-main">
+          <div className="attend-portal-heading">
+            <p className="attend-portal-eyebrow">Registro de asistencia</p>
+            <h1>
+              {completed
+                ? phase === "already" ? "Asistencia ya registrada" : "¡Asistencia registrada!"
+                : "Confirma tu asistencia"}
+            </h1>
+          </div>
+
+          <div className="attend-portal-stage">
+            <button
+              type="button"
+              onClick={handleMark}
+              disabled={marking || completed}
+              aria-busy={marking}
+              aria-label={
+                completed
+                  ? phase === "already" ? "La asistencia ya estaba registrada" : "Asistencia registrada"
+                  : marking ? "Registrando asistencia" : "Firmar asistencia"
+              }
+              className={`attend-portal-button${marking ? " is-loading" : ""}${completed ? " is-success" : ""}`}
+            >
+              <span className="attend-button-symbol" aria-hidden="true">
+                <svg className="attend-icon-idle" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M8 4H5a1 1 0 0 0-1 1v3M16 4h3a1 1 0 0 1 1 1v3M4 16v3a1 1 0 0 0 1 1h3M20 16v3a1 1 0 0 1-1 1h-3" />
+                  <circle cx="12" cy="12" r="3.25" />
+                  <circle className="attend-target-dot" cx="12" cy="12" r="1.1" />
+                </svg>
+                <svg className="attend-icon-success" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path className="attend-check-path" d="m5 12 4 4L19 6" />
+                </svg>
+              </span>
+              <span className="attend-button-spinner" aria-hidden="true" />
+              <span className="attend-button-label">
+                {completed
+                  ? phase === "already" ? "Ya estaba firmada" : "Asistencia firmada"
+                  : marking ? "Registrando…" : "Firmar asistencia"}
+              </span>
+              <span className="attend-button-caption">
+                {completed ? "Registro confirmado" : marking ? "Un momento" : "Toca para registrar"}
+              </span>
+            </button>
+
+            <p className={`attend-status-note${completed ? " is-success" : ""}`} role="status" aria-live="polite">
+              {completed
+                ? phase === "already"
+                  ? "Tu asistencia ya estaba registrada para esta clase."
+                  : "Tu asistencia quedó registrada para esta clase."
+                : marking ? "Validando tu asistencia…" : "Sesión disponible"}
+            </p>
+            {error && <p className="attend-inline-error" role="alert">{error}</p>}
+            {!completed && (
+              <span className="attend-location-note">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" />
+                  <circle cx="12" cy="10" r="2.5" />
+                </svg>
+                {geoLabel}
+              </span>
+            )}
+          </div>
+
+          {result?.registered_at && (
+            <p className="attend-registered-at">Registrada: {formatBogota(result.registered_at)}</p>
+          )}
+          {user?.email && <p className="attend-student-email">{user.email}</p>}
+        </main>
+
+        <footer className="attend-portal-footer">
+          <span>Universidad del Tolima <span aria-hidden="true">·</span> SIA-QR</span>
+          <span className="attend-footer-status">
+            <span className="attend-secure-dot" aria-hidden="true" />
+            Conexión segura
+          </span>
+        </footer>
       </div>
     </div>
   );
