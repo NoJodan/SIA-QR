@@ -44,6 +44,7 @@ Desktop.ini
 .idea/
 .vscode/
 *.swp
+.opencode/
 
 AGENTS.md
 SIA-QR.md
