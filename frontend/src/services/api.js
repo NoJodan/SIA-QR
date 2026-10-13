@@ -59,6 +59,34 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// Reintento único ante 403 CSRF: el token en memoria puede desincronizarse
+// de la cookie (ej. login en el admin Django en otro tab rota el token).
+// Se refresca el token y se reintenta la petición una sola vez.
+api.interceptors.response.use(
+  (res) => res,
+  async (error) => {
+    const res = error?.response;
+    const cfg = error?.config || {};
+    const detail = res?.data?.detail || "";
+    if (res?.status === 403 && detail.includes("CSRF") && !cfg._csrfRetried) {
+      cfg._csrfRetried = true;
+      csrfReady = false;
+      csrfPromise = null;
+      try {
+        await ensureCsrf();
+        if (csrfTokenMemory) {
+          cfg.headers = cfg.headers || {};
+          cfg.headers["X-CSRFToken"] = csrfTokenMemory;
+        }
+        return api.request(cfg);
+      } catch {
+        // Si el refresco falla, cae al error original.
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const googleLoginUrl = (next) =>
   `${API_BASE}/api/auth/google/login/${next ? `?next=${encodeURIComponent(next)}` : ""}`;
 
