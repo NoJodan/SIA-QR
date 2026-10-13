@@ -1,46 +1,61 @@
 # SIA-QR
 
-**Sistema de Asistencia Académica por Código QR.**
+**Sistema de Información de Asistencia por Código QR** para entornos universitarios.
 
-Plataforma web para digitalizar el registro de asistencia en entornos universitarios. Reemplaza las firmas en papel mediante códigos QR dinámicos, autenticación única con **Google** restringida al dominio institucional `@ut.edu.co`, captura opcional de geolocalización y listado de asistencia en tiempo real.
+Plataforma web que reemplaza las firmas de asistencia en papel por códigos QR dinámicos. Los estudiantes firman escaneando el QR proyectado en clase; los profesores programan clases, visualizan la asistencia en vivo y generan reportes. Autenticación única con **Google**, restringida al dominio institucional `@ut.edu.co`.
 
+## Características
+
+- **Firma de asistencia por QR**: cada clase genera un código QR único con vigencia limitada (anti-reutilización); el estudiante lo escanea y firma desde su celular.
+- **Autenticación con Google**: sin contraseñas; el acceso se limita al dominio institucional configurable.
+- **Roles**: estudiante, profesor y administrador, cada uno con su panel y permisos.
+- **Gestión académica**: cursos, grupos, programación de clases presenciales o virtuales y clases inmediatas.
+- **Lista de asistencia en vivo**: el profesor ve quién firma en tiempo real durante la clase.
+- **Geolocalización opcional**: se registra como referencia, nunca bloquea la firma.
+- **Reportes de asistencia**: consulta y exportación por curso, grupo o clase.
+- **Perfil de estudiante**: registro de datos institucionales (documento, código, teléfono, dirección) con validación en backend.
 
 ## Stack tecnológico
 
-- **Backend:** Python 3.12 · Django + Django REST Framework
-- **Frontend:** React 18 (JavaScript con Create React App)
-- **Base de datos:** PostgreSQL 16 · Docker Compose
+| Capa     | Tecnología                                          |
+|----------|-----------------------------------------------------|
+| Backend  | Python 3.12 · Django + Django REST Framework       |
+| Frontend | React 18 (JavaScript, Create React App)            |
+| Base de datos | PostgreSQL 16                                  |
+| Orquestación | Docker Compose                                  |
+
+Sin Redis ni servicios externos adicionales: el backend, la base de datos y el frontend son todo lo necesario.
 
 ## Estructura del proyecto
 
 ```
 SIA-QR/
-├── docker-compose.yml        # Servicios: db (Postgres 16), backend, frontend
-├── .env.example              # Variables de configuración (Postgres, Django)
-├── SIA-QR.md                 # Especificación funcional y arquitectónica
-├── backend/                  # Django (proyecto: sia_qr)
-│   ├── sia_qr/               # Configuración (settings, urls)
-│   └── apps/                 # Aplicaciones del proyecto
-│       ├── authentication/   # Usuarios, profesores, estudiantes
-│       ├── academic/         # Cursos, grupos, clases
-│       └── attendance/       # Sesiones QR y marcaciones (núcleo)
-└── frontend/                 # React (Create React App)
+├── docker-compose.yml   # Servicios: db (Postgres 16), backend, frontend
+├── .env.example         # Plantilla de variables de configuración
+├── SIA-QR.md            # Especificación funcional y arquitectónica
+├── backend/             # Django (proyecto: sia_qr)
+│   ├── sia_qr/          # Configuración (settings, urls)
+│   └── apps/
+│       ├── authentication/  # Usuarios, profesores, estudiantes, login Google
+│       ├── academic/        # Cursos, grupos académicos, clases
+│       └── attendance/      # Sesiones QR, marcaciones y reportes (núcleo)
+└── frontend/            # React (Create React App)
     └── src/
-        ├── components/       # UI reutilizable
-        ├── pages/            # Vistas (Login, AdminPanel, AttendQR)
-        ├── services/         # Llamadas Axios a la API
-        ├── context/          # Estado global (ej. AuthContext)
-        └── utils/            # Helpers y validaciones
+        ├── components/  # UI reutilizable (QR, modales, formularios)
+        ├── pages/       # Vistas por rol (Login, MisCursos, AttendQR, Reportes…)
+        ├── services/    # Llamadas Axios a la API
+        ├── context/     # Estado global (ej. AuthContext)
+        └── utils/       # Helpers (fechas, validaciones)
 ```
 
 ## Requisitos previos
 
-- [Docker](https://www.docker.com/products/docker-desktop/) (con Docker Compose)
+- [Docker](https://www.docker.com/products/docker-desktop/) con Docker Compose
 - Git
 
-## Puesta en marcha con Docker
+## Instalación y puesta en marcha
 
-1. **Clonar el repositorio y entrar al proyecto:**
+1. **Clonar el repositorio:**
 
    ```bash
    git clone <url-del-repositorio> SIA-QR
@@ -55,13 +70,13 @@ SIA-QR/
 
    Dentro de Docker, `POSTGRES_HOST=db` (nombre del servicio Postgres) es el valor correcto.
 
-3. **Levantar los servicios (crea las imágenes y arranca Postgres, backend y frontend):**
+3. **Levantar los servicios:**
 
    ```bash
    docker compose up --build -d
    ```
 
-4. **Aplicar las migraciones iniciales** (una sola vez; requerido para admin/auth/sessions):
+4. **Aplicar las migraciones** (una sola vez, requerido para admin/auth/sessions):
 
    ```bash
    docker compose exec backend python manage.py migrate
@@ -69,57 +84,59 @@ SIA-QR/
 
 5. **Acceder a la aplicación:**
 
-   | Servicio  | URL                              |
-   |-----------|----------------------------------|
-   | Frontend  | http://localhost:3000            |
-   | Backend   | http://localhost:8000            |
-   | Admin     | http://localhost:8000/admin      |
+   | Servicio | URL                         |
+   |----------|-----------------------------|
+   | Frontend | http://localhost:3000       |
+   | Backend  | http://localhost:8000       |
+   | Admin    | http://localhost:8000/admin |
+
+## Uso
+
+- **Estudiante**: abre el enlace del QR (`/attend?token=…`), inicia sesión con su cuenta institucional de Google, completa su perfil una sola vez y pulsa para firmar. Si no tiene perfil completo, la aplicación se lo pide antes de firmar.
+- **Profesor**: inicia sesión, entra a **Mis Cursos**, programa clases o crea una clase inmediata; durante la clase muestra el QR y ve la lista de asistencia actualizarse en vivo.
+- **Administrador**: gestiona cursos y usuarios desde el panel admin de Django y el módulo de administración del frontend.
+
+## Configuración
+
+El `.env` vive en la raíz del repo (ignorado por git). Variables principales:
+
+| Variable | Descripción |
+|----------|-------------|
+| `POSTGRES_DB/USER/PASSWORD/HOST/PORT` | Conexión a Postgres (`HOST=db` en Docker, `localhost` sin Docker) |
+| `DJANGO_SECRET_KEY` | Obligatoria en producción (`DEBUG=False`) |
+| `DJANGO_DEBUG` / `DJANGO_ALLOWED_HOSTS` | Modo y hosts permitidos |
+| `CORS_ALLOWED_ORIGINS` | Orígenes del frontend (por defecto `http://localhost:3000`) |
+| `FRONTEND_URL` | URL pública del frontend, usada para construir los enlaces del QR |
+| `QR_DEFAULT_MINUTES` | Vigencia por defecto de las sesiones QR (1–120 min) |
+| `EARLY_QR_GRACE_SECONDS` | Antelación con la que el QR se activa antes del inicio (0–300 s) |
+
+> Los valores `POSTGRES_*` solo se aplican al crear el contenedor de Postgres; cambiarlos después requiere `docker compose down -v` (borra los datos).
+
+## Desarrollo local sin Docker
+
+- **Backend**: desde `backend/`, con `POSTGRES_HOST=localhost` en el `.env`:
+  ```bash
+  python manage.py runserver 0.0.0.0:8000
+  ```
+- **Frontend**: desde `frontend/`:
+  ```bash
+  npm install && npm start
+  ```
+- Los contenedores montan el código local (`./backend:/app`, `./frontend:/app`), así que los cambios se reflejan con hot-reload.
 
 ## Comandos útiles
 
-- Ver logs de un servicio: `docker compose logs -f backend` (o `frontend`, `db`)
-- Detener los contenedores: `docker compose down`
-- Volver a arrancar: `docker compose up -d`
-- **Reset completo** (borra el volumen `postgres_data`): `docker compose down -v`
+```bash
+docker compose logs -f backend    # Logs de un servicio (backend, frontend, db)
+docker compose up -d              # Volver a arrancar
+docker compose down               # Detener los contenedores
+docker compose down -v            # Reset completo (borra postgres_data)
+```
 
-## Panel Profesor (sprint actual)
+## Verificación
 
-Entregado y aprobado por QA: **Mis Cursos y programación de clases** (RF-PROF-02, RF-PROF-03).
-
-- `GET /api/academic/my-groups/` — grupos del profesor autenticado.
-- `GET` / `POST /api/academic/groups/<uuid:group_id>/classes/` — listar y programar clases (`status` siempre `SCHEDULED`; 404 si el grupo es ajeno; anónimo → 403).
-- Frontend: Login → Mis Cursos → Detalle del grupo (polling 30 s) → crear clase de hoy.
-- Detalle completo (request/response, modelos, cómo probar, backlog QA): [`docs/SPRINT-panel-profesor.md`](docs/SPRINT-panel-profesor.md).
-
-**Evolución CRUD** (aprobada por QA, sin migraciones nuevas): crear cursos solo con `{name}` (`code`/`01`/`term` auto), renombrar/eliminar (cascada + curso huérfano), detalle/actualizar/eliminar clase con doble filtro ownership, botón ⚡ clase inmediata (ahora Bogotá, 60 min, `PRESENTIAL`), vista `ClaseDetalle` (QR y asistencia como placeholders vacíos).
-Rutas nuevas: `POST my-groups/`, `GET/PATCH/PUT/DELETE my-groups/<id>/`, `GET/PATCH/PUT/DELETE groups/<id>/classes/<class_id>/` (ajeno → 404, anónimo → 403).
-Detalle: [`docs/SPRINT-crud-profesor.md`](docs/SPRINT-crud-profesor.md).
-
-**Mejoras Cursos** (aprobada por QA, 1 migración `0002`): campo `qr_duration_minutes` (default 15, 1–120) en clases, serializer de grupo con `professor` anidado, paginación 10/máx 50 + `?search` (`course__name` en grupos, `title` en clases), 4 rutas admin `admin/groups/*` (list/detail grupos, list/update clases solo get/patch/put → POST/DELETE 405, rol admin; profesor → 403), frontend con `Modal` animado, `CreateClassForm` (programar/editar, profesor/admin) con QR 15, botones [⚡ inmediata][📅 Programar], buscador con debounce + paginación y módulo Admin Cursos (read-only + editar).
-Detalle: [`docs/SPRINT-mejoras-cursos.md`](docs/SPRINT-mejoras-cursos.md).
-
-## Asistencia por QR v2.1 (sprint actual, sin export, QR 100 % automático + fix inmediata §7.8)
-
-Entregado y aprobado por QA (auto-QR con residuales menores no bloqueantes R1–R5) + **fix inmediata APROBADO (solo frontend, ver §7.8)**: **núcleo de asistencia** (RF-EST-01–06, RF-PROF-04–07 parcial; RF-PROF-09 export fuera de alcance) + **QR automático sin botón Generar**.
-
-- **Backend:** `Student` (perfil real vía `PATCH /me`, sin autocreación), `AttendanceSession` (token SHA-256, **single-active** Opción A con `UniqueConstraint` parcial + `select_for_update`), `Attendance` (`UNIQUE` sesión–estudiante, geo opcional), `SystemConfig[QR_DEFAULT_MINUTES]`; `reconcile_professor_role` (promoción por whitelist en `GET/PATCH /me`); revocación de QR al cerrar la clase.
-- **Endpoints base:** A1 `POST groups/<g>/classes/<c>/sessions/` (ahora fallback interno, la UI no lo llama) · A2 `GET /api/attendance/sessions/<s>/attendances/` (lista viva paginada, sin lat/long) · B1 `GET /api/attendance/resolve/?token=` · B2 `POST /api/attendance/mark/` (idempotente; **412 + needs_profile** sin perfil) · B3 `POST groups/<g>/classes/instant/` (clase `IN_PROGRESS` + QR atómicos, intacta) · `GET /api/auth/csrf/` + `PATCH /me`.
-- **Auto-QR v2.1:** `GET groups/<g>/classes/<c>/current-session/` (lazy ensure: `200 live` / `202 pending {starts_in_s}` / `410 finished`, `Cache-Control: no-store`, GET exento de CSRF) + `POST .../current-session/rotate/` (**Mostrar en este dispositivo**, `201` con QR nuevo que revoca el anterior, con CSRF). Auto-rotación por expiración en ventana, cierre lazy a `COMPLETED`, ventana `[start − gracia, end)` con `EARLY_QR_GRACE_SECONDS` (default 30 s, `SystemConfig` > env, 0–300), timezone `America/Bogota` aware. Errores: 401/403/404/**409**/**410**/**503** (+ `Retry-After: 10`).
-- **Frontend:** `/attend?token=` (login Google con reanudación, `StudentProfileForm`, geo opcional, MARCAR; ante **410** re-escanear el QR vigente) · `QrDisplay` (`qrcode.react`, countdown, token nunca impreso) · `ClaseDetalle` (**sin botón Generar**: fases `pending/live/finished`, caché `sessionStorage` por pestaña, polling ensure 10 s + lista 5 s sin reload, botón **Mostrar en este dispositivo**) · instantánea con título/TTL en `CursoDetalle` · `api.js` con CSRF (`REACT_APP_API_BASE`).
-- **Fix inmediata §7.8 (solo frontend, QA APROBADO):** corregida pérdida de `data.session` B3 al navegar (`CursoDetalle` propaga `initialSession` → `ProfLayout selectClass(class, initialSession)+key+limpieza` → `ClaseDetalle` init `live` + `saveCached` + guard mismo `session_id`). Resultado: QR < 3 s 0 rotate, reload conserva, segundo dispositivo sí avisa + Rota, programada intacta.
-- **Seguridad:** `SessionAuthentication401` (sesión + CSRF, anónimo → 401), cookies `Secure/HttpOnly/SameSite`, `CSRF_TRUSTED_ORIGINS` debe incluir el origen del SPA.
-- **Verificación:** `check` 0 errores · `migrate` (sin migraciones nuevas en v2.1) · 45 tests OK · `npm run build` OK. Post-fix §7.8: `check` OK + `build` OK; `migrate`/tests completos **pendientes en Docker**.
-- Detalle completo (guía profesor/estudiante auto-QR, request/response, tabla de errores 401/403/404/409/410/503, env `EARLY_QR_GRACE_SECONDS`, ventana/gracia, E2E, residuales R1–R5, **bugfix inmediata §7.8 y pendientes §7.9**): [`docs/SPRINT-asistencia-qr.md`](docs/SPRINT-asistencia-qr.md).
-
-## Re-auditoría QA 2026-10-02 (APROBADA, 61 tests OK)
-
-- **Fix TTL instantánea:** B3 persiste `qr_duration_minutes` tras `generate_session` (rollback + 503 si falla el save); `ClaseDetalle`/`CursoDetalle` reconcilian `qrMinutes` desde `session.ttl_minutes`; defaults a 10. Texto QR en vivo: `QR activo - escanea el código para tomar asistencia.`
-- **Perfil estudiante:** formulario sin nombre (solo-lectura desde Google, fallback monónimo `first=last`); solo Documento/Código/Teléfono (≥ 7 dígitos, máx 20)/Dirección (máx 500). `needs_profile` si `phone/address` vacíos; `PATCH /api/auth/me/` atómico con 409 nunca 500.
-- **Purga + backup:** `students` 0, `ROLE_STUDENT` 0, backup `./backups/sia_qr_20261002.dump` + `scripts/Backup-Db.ps1`.
-- Detalle: [`docs/SPRINT-asistencia-qr.md §8`](docs/SPRINT-asistencia-qr.md) · contrato perfil [`docs/API-perfil-estudiante.md`](docs/API-perfil-estudiante.md) · backup/restore [`docs/Backup-restore.md`](docs/Backup-restore.md) · [`CHANGELOG.md`](CHANGELOG.md).
-
-## Notas
-
-- El `.env` vive en la raíz del repo (ignorado por git). `POSTGRES_*` solo se aplican al crear el contenedor de Postgres; cambiarlos después requiere `docker compose down -v`.
-- Los contenedores montan el código local (`./backend:/app`, `./frontend:/app`), por lo que los cambios se reflejan con hot-reload.
-- Para ejecutar sin Docker (backend en el host), cambiar `POSTGRES_HOST=localhost` en `.env`, y desde `backend/` correr `python manage.py runserver 0.0.0.0:8000`.
+```bash
+python manage.py check            # Chequeo del backend (desde backend/)
+python manage.py migrate          # Aplica migraciones pendientes
+npm run build                     # Valida que el frontend compila (desde frontend/)
+```
