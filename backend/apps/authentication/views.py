@@ -5,6 +5,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth import login as django_login
 from django.contrib.auth import logout as django_logout
 from django.db import IntegrityError, transaction
+from django.middleware.csrf import get_token
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
@@ -238,8 +239,12 @@ def reconcile_professor_role(user):
 @permission_classes([])
 @ensure_csrf_cookie
 def csrf_view(request):
-    """C1: fija la cookie `csrftoken` para el SPA (axios withXSRFToken)."""
-    return Response({"detail": "CSRF cookie fijada"}, status=status.HTTP_200_OK)
+    """C1: fija la cookie `csrftoken` para el SPA (axios withXSRFToken).
+
+    Además expone el token en el JSON: en despliegue cross-site el JS no
+    puede leer la cookie de otro dominio vía document.cookie, así que el
+    frontend lo guarda en memoria y lo envía como X-CSRFToken."""
+    return Response({"detail": "CSRF cookie fijada", "csrfToken": get_token(request)}, status=status.HTTP_200_OK)
 
 
 @api_view(["GET", "PATCH"])

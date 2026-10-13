@@ -158,10 +158,16 @@ REST_FRAMEWORK = {
 # HttpOnly/Secure/SameSite=Lax; CSRF_TRUSTED_ORIGINS por env).
 # En producción (DEBUG=False) las cookies viajan solo por HTTPS.
 _COOKIE_SECURE = os.getenv("COOKIE_SECURE", "False" if DEBUG else "True").lower() == "true"
-SESSION_COOKIE_SAMESITE = "Lax"
+# Cross-site (frontend Vercel + backend Render): el navegador no envía
+# cookies Lax en fetch entre dominios; en prod usar COOKIE_SAMESITE=None
+# (exige Secure, ya activo en prod). En local se mantiene Lax.
+_COOKIE_SAMESITE = os.getenv("COOKIE_SAMESITE", "Lax")
+if _COOKIE_SAMESITE not in ("Lax", "Strict", "None"):
+    _COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_SAMESITE = _COOKIE_SAMESITE
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = _COOKIE_SECURE
-CSRF_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = _COOKIE_SAMESITE
 CSRF_COOKIE_HTTPONLY = False  # axios debe leer `csrftoken` para cabecera X-CSRFToken
 CSRF_COOKIE_SECURE = _COOKIE_SECURE
 
