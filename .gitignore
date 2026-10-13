@@ -21,6 +21,10 @@ db.sqlite3-journal
 /media/
 /staticfiles/
 
+# Backups DB (host persistente, fuera de /tmp efímero)
+backups/*.dump
+!backups/.gitkeep
+
 # Node
 node_modules/
 npm-debug.log*
@@ -29,6 +33,7 @@ yarn-debug.log*
 .pnpm-debug.log*
 /dist/
 /build/
+frontend/build/
 
 # OS
 .DS_Store
@@ -39,6 +44,7 @@ Desktop.ini
 .idea/
 .vscode/
 *.swp
+.opencode/
 
 AGENTS.md
 SIA-QR.md
