@@ -12,7 +12,7 @@ services:
     runtime: python
     plan: free
     region: ohio
-    branch: chore/deploy-free
+    branch: master
     rootDir: backend
     buildCommand: "bash build.sh"
     startCommand: "gunicorn sia_qr.wsgi --bind 0.0.0.0:$PORT"
