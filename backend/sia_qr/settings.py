@@ -24,6 +24,10 @@ if not SECRET_KEY:
             "Defínelo en el .env de la raíz (ver .env.example)."
         )
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
+# Render free: inyecta el hostname externo automáticamente.
+_RENDER_HOST = os.getenv("RENDER_EXTERNAL_HOSTNAME", "").strip()
+if _RENDER_HOST and _RENDER_HOST not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_RENDER_HOST)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -50,6 +54,7 @@ AUTH_USER_MODEL = "authentication.User"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -91,6 +96,15 @@ DATABASES = {
         "PORT": os.getenv("POSTGRES_PORT", "5432"),
     }
 }
+# Render free: si hay DATABASE_URL (Postgres interno), tiene prioridad.
+_DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+if _DATABASE_URL:
+    try:
+        import dj_database_url
+
+        DATABASES["default"] = dj_database_url.parse(_DATABASE_URL, conn_max_age=600)
+    except Exception:
+        pass
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -114,6 +128,11 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
+# Render corre detrás de proxy HTTPS.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
