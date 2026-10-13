@@ -11,6 +11,10 @@ from django.db import migrations
 
 
 def bootstrap_superuser(apps, schema_editor):
+    # OJO: el modelo histórico de migraciones no trae métodos como
+    # set_password; se hashea con make_password directamente.
+    from django.contrib.auth.hashers import make_password
+
     email = os.environ.get("DJANGO_SUPERUSER_EMAIL", "").strip()
     password = os.environ.get("DJANGO_SUPERUSER_PASSWORD", "")
     if not email or not password:
@@ -18,16 +22,15 @@ def bootstrap_superuser(apps, schema_editor):
     User = apps.get_model("authentication", "User")
     if User.objects.filter(email=email).exists():
         return
-    user = User(
+    User(
         email=email,
         google_sub=email,
         role="ROLE_ADMIN",
         is_staff=True,
         is_superuser=True,
         is_active=True,
-    )
-    user.set_password(password)
-    user.save()
+        password=make_password(password),
+    ).save()
 
 
 class Migration(migrations.Migration):
