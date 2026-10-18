@@ -1,6 +1,15 @@
 import axios from "axios";
 
-export const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8000";
+// Prod (Vercel): rutas relativas; /api/* viaja por el rewrite de vercel.json
+// hacia Render para que la cookie de sesión sea first-party (los navegadores
+// bloquean cookies de terceros entre vercel.app y onrender.com).
+// Dev: directo al backend local.
+const isLocalDev =
+  typeof window !== "undefined" &&
+  ["localhost", "127.0.0.1"].includes(window.location.hostname);
+export const API_BASE = isLocalDev
+  ? process.env.REACT_APP_API_BASE || "http://localhost:8000"
+  : "";
 export const FRONTEND_BASE =
   (typeof window !== "undefined" && window.location.origin) || "http://localhost:3000";
 
