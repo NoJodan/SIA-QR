@@ -1,9 +1,12 @@
+from urllib.parse import quote
+
 from django.conf import settings
 from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
 from django.urls import resolve
 from rest_framework.test import APIClient
-from allauth.socialaccount.models import SocialAccount, SocialLogin
+from allauth.socialaccount.models import SocialAccount, SocialApp, SocialLogin
 from allauth.core.exceptions import ImmediateHttpResponse
 from apps.attendance.models import SystemConfig
 from apps.authentication.adapters import (
@@ -69,6 +72,23 @@ class AuthenticationIntegrationTests(TestCase):
         self.assertEqual(
             adapter.get_callback_url(request, None),
             f"{settings.FRONTEND_URL}/api/auth/google/login/callback/",
+        )
+
+    def test_google_login_route_redirect_uri_uses_frontend_domain(self):
+        # Regresion del flujo cableado (no solo del adapter): el provider
+        # construye el authorize con su oauth2_adapter_class, asi que el
+        # redirect_uri real debe salir del dominio del SPA.
+        app = SocialApp.objects.create(
+            provider="google", name="Google", client_id="cid", secret="sec"
+        )
+        app.sites.add(Site.objects.get_current())
+
+        response = self.client.get("/api/auth/google/login/")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(
+            quote(f"{settings.FRONTEND_URL}/api/auth/google/login/callback/", safe=""),
+            response["Location"],
         )
 
 

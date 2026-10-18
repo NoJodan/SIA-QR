@@ -278,6 +278,16 @@ class InstitutionalGoogleAdapter(DefaultSocialAccountAdapter):
                 return nxt
         return frontend + "/"
 
+    def get_provider(self, request, provider, client_id=None):
+        """El provider arma el authorize de Google con su propio
+        `oauth2_adapter_class` (GoogleOAuth2Adapter por defecto), no con el
+        adapter que pasa la vista: sin este swap el redirect_uri apunta al
+        host del backend y la cookie de sesión nace en el dominio equivocado."""
+        ret = super().get_provider(request, provider, client_id=client_id)
+        if getattr(ret, "id", None) == "google":
+            ret.oauth2_adapter_class = ProxiedGoogleOAuth2Adapter
+        return ret
+
 
 class ProxiedGoogleOAuth2Adapter(GoogleOAuth2Adapter):
     """Callback de Google fijo en el dominio del SPA (proxy same-origin de
