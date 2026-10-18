@@ -4,6 +4,7 @@ from django.db import IntegrityError, transaction
 from django.http import HttpResponseRedirect
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from allauth.core.exceptions import ImmediateHttpResponse
+from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from apps.attendance.models import SystemConfig
 from apps.authentication.models import AuthorizedProfessorEmail, Professor, User, UserRole
 
@@ -276,3 +277,13 @@ class InstitutionalGoogleAdapter(DefaultSocialAccountAdapter):
                     return f"{frontend}{nxt}"
                 return nxt
         return frontend + "/"
+
+
+class ProxiedGoogleOAuth2Adapter(GoogleOAuth2Adapter):
+    """Callback de Google fijo en el dominio del SPA (proxy same-origin de
+    Vercel). La cookie de sesión debe nacer y usarse en el mismo host: los
+    navegadores bloquean cookies de terceros entre vercel.app y onrender.com.
+    """
+
+    def get_callback_url(self, request, app):
+        return f"{_frontend()}/api/auth/google/login/callback/"
