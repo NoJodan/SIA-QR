@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
 from django.urls import resolve
@@ -5,7 +6,10 @@ from rest_framework.test import APIClient
 from allauth.socialaccount.models import SocialAccount, SocialLogin
 from allauth.core.exceptions import ImmediateHttpResponse
 from apps.attendance.models import SystemConfig
-from apps.authentication.adapters import InstitutionalGoogleAdapter
+from apps.authentication.adapters import (
+    InstitutionalGoogleAdapter,
+    ProxiedGoogleOAuth2Adapter,
+)
 from apps.authentication.models import AuthorizedProfessorEmail, Professor, UserRole
 from apps.authentication.views import reconcile_professor_role
 
@@ -56,6 +60,16 @@ class AuthenticationIntegrationTests(TestCase):
         response = ctx.exception.response
         self.assertEqual(response.status_code, 302)
         self.assertIn("domain_not_allowed", response.url)
+
+    def test_google_callback_url_uses_frontend_domain(self):
+        # El callback de Google debe ir por el dominio del SPA (proxy Vercel)
+        # para que la cookie de sesion sea first-party.
+        request = RequestFactory().get("/api/auth/google/login/")
+        adapter = ProxiedGoogleOAuth2Adapter(request)
+        self.assertEqual(
+            adapter.get_callback_url(request, None),
+            f"{settings.FRONTEND_URL}/api/auth/google/login/callback/",
+        )
 
 
 class ProfessorProfileUpdateTests(TestCase):

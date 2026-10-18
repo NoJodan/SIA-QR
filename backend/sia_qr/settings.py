@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -206,6 +207,11 @@ CORS_ALLOW_CREDENTIALS = True
 # SIA-QR: URL pública del frontend (para construir attend_url del QR) y
 # TTL por defecto (minutos) de las sesiones QR instantáneas.
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+# Proxy same-origin (Vercel -> Render): el Host reenviado puede ser el del
+# SPA; se agrega a ALLOWED_HOSTS para no romper la resolucion.
+_FRONTEND_HOST = urlparse(FRONTEND_URL).hostname
+if _FRONTEND_HOST and _FRONTEND_HOST not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_FRONTEND_HOST)
 try:
     QR_DEFAULT_MINUTES = int(os.getenv("QR_DEFAULT_MINUTES", "10"))
 except ValueError:
