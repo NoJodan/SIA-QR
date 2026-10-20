@@ -77,7 +77,13 @@ function StudentProfileForm({ initial, onSaved, notice }) {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
 
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  // Casillas numéricas: solo dígitos y su longitud máxima real.
+  const NUMERIC_MAX = { document_number: 10, student_code: 12, phone_number: 10 };
+  const set = (k) => (e) => {
+    const max = NUMERIC_MAX[k];
+    const value = max ? e.target.value.replace(/\D/g, "").slice(0, max) : e.target.value;
+    setForm((f) => ({ ...f, [k]: value }));
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -112,9 +118,9 @@ function StudentProfileForm({ initial, onSaved, notice }) {
   };
 
   const fields = [
-    { key: "document_number", label: "Número de documento", autoComplete: "off" },
-    { key: "student_code", label: "Código estudiantil", autoComplete: "off" },
-    { key: "phone_number", label: "Teléfono", type: "tel", autoComplete: "tel" },
+    { key: "document_number", label: "Número de documento", autoComplete: "off", numeric: true },
+    { key: "student_code", label: "Código estudiantil", autoComplete: "off", numeric: true },
+    { key: "phone_number", label: "Teléfono", type: "tel", autoComplete: "tel", numeric: true },
     { key: "address", label: "Dirección", autoComplete: "street-address" },
   ];
 
@@ -152,7 +158,7 @@ function StudentProfileForm({ initial, onSaved, notice }) {
       )}
 
       <div className="attend-profile-fields">
-        {fields.map(({ key, label, type, autoComplete }) => (
+        {fields.map(({ key, label, type, autoComplete, numeric }) => (
           <div key={key} className={`attend-profile-field${key === "address" ? " is-wide" : ""}`}>
             <label htmlFor={`student-${key}`}>
               {label}<span aria-hidden="true"> *</span>
@@ -160,11 +166,12 @@ function StudentProfileForm({ initial, onSaved, notice }) {
             <input
               id={`student-${key}`}
               type={type || "text"}
+              inputMode={numeric ? "numeric" : undefined}
               autoComplete={autoComplete}
               className="attend-profile-input"
               value={form[key]}
               onChange={set(key)}
-              maxLength={key === "phone_number" ? 20 : key === "address" ? 500 : 50}
+              maxLength={numeric ? NUMERIC_MAX[key] : key === "address" ? 500 : 50}
               aria-invalid={Boolean(errors[key])}
               aria-describedby={errors[key] ? `student-${key}-error` : undefined}
             />
