@@ -1,7 +1,7 @@
 from urllib.parse import quote
 
 from django.conf import settings
-from django.test import TestCase, RequestFactory
+from django.test import TestCase, RequestFactory, override_settings
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.urls import resolve
@@ -64,6 +64,7 @@ class AuthenticationIntegrationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("domain_not_allowed", response.url)
 
+    @override_settings(FRONTEND_URL="https://sia-qr.vercel.app")
     def test_google_callback_url_uses_frontend_domain(self):
         # El callback de Google debe ir por el dominio del SPA (proxy Vercel)
         # para que la cookie de sesion sea first-party.
@@ -74,6 +75,19 @@ class AuthenticationIntegrationTests(TestCase):
             f"{settings.FRONTEND_URL}/api/auth/google/login/callback/",
         )
 
+    @override_settings(FRONTEND_URL="http://localhost:3000")
+    def test_google_callback_url_local_uses_backend_domain(self):
+        # Sin proxy /api en el dev server, el callback debe volver al backend.
+        request = RequestFactory().get(
+            "/api/auth/google/login/", HTTP_HOST="localhost:8000"
+        )
+        adapter = ProxiedGoogleOAuth2Adapter(request)
+        self.assertEqual(
+            adapter.get_callback_url(request, None),
+            "http://localhost:8000/api/auth/google/login/callback/",
+        )
+
+    @override_settings(FRONTEND_URL="https://sia-qr.vercel.app")
     def test_google_login_route_redirect_uri_uses_frontend_domain(self):
         # Regresion del flujo cableado (no solo del adapter): el provider
         # construye el authorize con su oauth2_adapter_class, asi que el

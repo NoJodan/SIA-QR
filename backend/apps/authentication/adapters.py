@@ -1,7 +1,10 @@
 import uuid
+from urllib.parse import urlparse
+
 from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.http import HttpResponseRedirect
+from django.urls import reverse
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from allauth.core.exceptions import ImmediateHttpResponse
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
@@ -11,6 +14,12 @@ from apps.authentication.models import AuthorizedProfessorEmail, Professor, User
 
 def _frontend():
     return getattr(settings, "FRONTEND_URL", "http://localhost:3000").rstrip("/")
+
+
+def _is_local_frontend():
+    # En local no existe el proxy /api de Vercel: el callback debe volver al
+    # backend (mismo host que inició el login) o la sesión nunca se crea.
+    return urlparse(_frontend()).hostname in ("localhost", "127.0.0.1", "::1")
 
 
 def _is_persisted_user(sociallogin, existing, email):
@@ -293,7 +302,11 @@ class ProxiedGoogleOAuth2Adapter(GoogleOAuth2Adapter):
     """Callback de Google fijo en el dominio del SPA (proxy same-origin de
     Vercel). La cookie de sesión debe nacer y usarse en el mismo host: los
     navegadores bloquean cookies de terceros entre vercel.app y onrender.com.
+
+    En local no hay proxy /api, así que el callback vuelve al backend.
     """
 
     def get_callback_url(self, request, app):
+        if _is_local_frontend():
+            return request.build_absolute_uri(reverse("proxied_google_callback"))
         return f"{_frontend()}/api/auth/google/login/callback/"
