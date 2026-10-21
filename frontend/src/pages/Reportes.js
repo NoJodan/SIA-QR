@@ -14,7 +14,7 @@ import { formatBogota } from "../utils/dates";
 
 const PAGE_SIZE = 10;
 
-const modalityLabels = { PRESENTIAL: "Presencial", VIRTUAL: "Virtual" };
+const modalityLabels = { PRESENTIAL: "Presencial", VIRTUAL: "Mediada" };
 const statusLabels = {
   SCHEDULED: "Programada",
   IN_PROGRESS: "En progreso",
@@ -409,7 +409,7 @@ export default function Reportes({ isAdmin = false }) {
             <select id="rep-modalidad" value={draft.modality} onChange={set("modality")} className={inputCls}>
               <option value="">Todas</option>
               <option value="PRESENTIAL">Presencial</option>
-              <option value="VIRTUAL">Virtual</option>
+              <option value="VIRTUAL">Mediada</option>
             </select>
           </div>
           <div>

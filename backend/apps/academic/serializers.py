@@ -2,6 +2,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from apps.academic.models import AcademicGroup, ClassStatus, Course, ScheduledClass
+from apps.attendance.serializers import TolerantGeoField
 
 
 class CourseSerializer(serializers.ModelSerializer):
@@ -48,17 +49,33 @@ class AcademicGroupWriteSerializer(serializers.Serializer):
 
 class ScheduledClassSerializer(serializers.ModelSerializer):
     end_time = serializers.SerializerMethodField(read_only=True)
+    # Solo se expone el estado derivado del rango; las coordenadas del salón
+    # (geofence_lat/lng) jamás salen por API.
+    geofence_active = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = ScheduledClass
         fields = [
             "id", "title", "start_time", "end_time",
             "duration_minutes", "qr_duration_minutes", "modality", "status", "created_at",
+            "geofence_active", "geofence_radius_m",
         ]
-        read_only_fields = ["id", "status", "created_at"]
+        read_only_fields = ["id", "status", "created_at", "geofence_active", "geofence_radius_m"]
 
     def get_end_time(self, obj):
         return obj.start_time + timezone.timedelta(minutes=obj.duration_minutes)
+
+
+class ClassGeofenceSerializer(serializers.Serializer):
+    """Coords del profesor para fijar el rango del salón (tolerante, RNF-06).
+
+    `accuracy` es informativo: se guarda solo como referencia, no se usa en
+    el cálculo del radio.
+    """
+
+    latitude = TolerantGeoField(decimal_places=8, min_value=-90, max_value=90)
+    longitude = TolerantGeoField(decimal_places=8, min_value=-180, max_value=180)
+    accuracy = TolerantGeoField(decimal_places=2, min_value=0, max_value=100000)
 
     def validate_duration_minutes(self, value):
         if value <= 0:

@@ -6,11 +6,12 @@ import ProfHeader from "../components/ProfHeader";
 import SearchBar from "../components/SearchBar";
 import { createInstantClass, deleteGroupClass, getGroupClasses } from "../services/academic";
 import { formatBogota } from "../utils/dates";
+import { getDevicePosition } from "../utils/geolocation";
 import useDebounce from "../utils/useDebounce";
 
 const modalityLabels = {
   PRESENTIAL: "Presencial",
-  VIRTUAL: "Virtual",
+  VIRTUAL: "Mediada",
 };
 
 const classStatusLabels = {
@@ -34,6 +35,7 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
   const [editing, setEditing] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [instantLoading, setInstantLoading] = useState(false);
+  const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [count, setCount] = useState(0);
@@ -66,19 +68,38 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
   // B3: TTL/título opcionales desde el frontend (el backend usa defaults).
   const [instantTitle, setInstantTitle] = useState("");
   const [instantTtl, setInstantTtl] = useState(10);
+  const [instantModality, setInstantModality] = useState("PRESENTIAL");
 
   const handleInstant = async () => {
     setInstantLoading(true);
     setError("");
+    setNotice("");
+    // Aviso de rango sin GPS: la clase se crea igual (RNF-06: el GPS nunca
+    // impide dar clase); el reintento vive en ClaseDetalle.
+    let geoNotice = "";
     try {
       // B3: crea clase IN_PROGRESS + sesión QR en transacción atómica.
-      const payload = {};
+      const payload = { modality: instantModality };
       if (instantTitle.trim()) payload.title = instantTitle.trim();
       const ttlNum = Number(instantTtl);
       if (Number.isFinite(ttlNum) && ttlNum >= 1 && ttlNum <= 120) {
         payload.qr_duration_minutes = ttlNum;
       }
+      if (instantModality === "PRESENTIAL") {
+        // Geocerca automática: fija la referencia GPS del salón al crear la
+        // clase presencial. Si el permiso falla, se sigue creando sin rango.
+        try {
+          const pos = await getDevicePosition();
+          payload.geofence_latitude = Number(pos.latitude.toFixed(8));
+          payload.geofence_longitude = Number(pos.longitude.toFixed(8));
+          if (pos.accuracy != null) payload.geofence_accuracy = Number(pos.accuracy.toFixed(2));
+        } catch {
+          geoNotice =
+            "Clase creada sin rango de ubicación: no se concedió el permiso de GPS. Podrás fijarlo desde el detalle de la clase.";
+        }
+      }
       const data = await createInstantClass(group.id, payload);
+      if (geoNotice) setNotice(geoNotice);
       // Fix aviso fantasma: la B3 devuelve la sesión con attend_url mostrable.
       // Se pasa al detalle para hidratar el QR antes del primer ensure
       // (el GET current-session reusado devuelve attend_url null por hash
@@ -170,6 +191,42 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
                   className="mt-1 w-24 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
                 />
               </div>
+              <div>
+                <span id="instant-modality-label" className="block text-xs font-medium text-slate-600">
+                  Modalidad
+                </span>
+                <div
+                  role="radiogroup"
+                  aria-labelledby="instant-modality-label"
+                  className="mt-1 grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-white p-1"
+                >
+                  {[
+                    { value: "PRESENTIAL", label: "Presencial" },
+                    { value: "VIRTUAL", label: "Mediada" },
+                  ].map((opt) => (
+                    <label
+                      key={opt.value}
+                      htmlFor={`instant-mod-${opt.value}`}
+                      className={`cursor-pointer rounded-lg px-3 py-1.5 text-center text-xs font-medium transition ${
+                        instantModality === opt.value
+                          ? "bg-[#B3200E]/10 text-[#B3200E] border border-[#B3200E]/20"
+                          : "text-slate-600 hover:text-slate-800 border border-transparent"
+                      }`}
+                    >
+                      <input
+                        id={`instant-mod-${opt.value}`}
+                        type="radio"
+                        name="instant-modality"
+                        value={opt.value}
+                        checked={instantModality === opt.value}
+                        onChange={(e) => setInstantModality(e.target.value)}
+                        className="sr-only"
+                      />
+                      {opt.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
               <button
                 onClick={handleInstant}
                 disabled={instantLoading}
@@ -246,6 +303,11 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
       {error && (
         <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          {notice}
         </p>
       )}
       {!loading && !error && visibleClasses.length === 0 && (

@@ -118,10 +118,10 @@ function StudentProfileForm({ initial, onSaved, notice }) {
   };
 
   const fields = [
-    { key: "document_number", label: "Número de documento", autoComplete: "off", numeric: true },
-    { key: "student_code", label: "Código estudiantil", autoComplete: "off", numeric: true },
-    { key: "phone_number", label: "Teléfono", type: "tel", autoComplete: "tel", numeric: true },
-    { key: "address", label: "Dirección", autoComplete: "street-address" },
+    { key: "document_number", label: "Número de documento", placeholder: "Ej. 1234567890", autoComplete: "off", numeric: true },
+    { key: "student_code", label: "Código estudiantil", placeholder: "Ej. 085401582024", autoComplete: "off", numeric: true },
+    { key: "phone_number", label: "Teléfono", placeholder: "Ej. 3001234567", type: "tel", autoComplete: "tel", numeric: true },
+    { key: "address", label: "Dirección", placeholder: "Ej. Calle 10 # 5-20", autoComplete: "street-address" },
   ];
 
   return (
@@ -158,7 +158,7 @@ function StudentProfileForm({ initial, onSaved, notice }) {
       )}
 
       <div className="attend-profile-fields">
-        {fields.map(({ key, label, type, autoComplete, numeric }) => (
+        {fields.map(({ key, label, placeholder, type, autoComplete, numeric }) => (
           <div key={key} className={`attend-profile-field${key === "address" ? " is-wide" : ""}`}>
             <label htmlFor={`student-${key}`}>
               {label}<span aria-hidden="true"> *</span>
@@ -168,6 +168,7 @@ function StudentProfileForm({ initial, onSaved, notice }) {
               type={type || "text"}
               inputMode={numeric ? "numeric" : undefined}
               autoComplete={autoComplete}
+              placeholder={placeholder}
               className="attend-profile-input"
               value={form[key]}
               onChange={set(key)}
