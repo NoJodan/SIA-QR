@@ -525,7 +525,7 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
                     : "bg-emerald-50 border-emerald-100 text-emerald-700"
                 }`}
               >
-                {insideCount} dentro · {outsideCount} fuera
+                {insideCount} en rango · {outsideCount} fuera de rango
               </span>
             ) : null}
             {session && (
@@ -559,9 +559,11 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
                       }`}
                     >
                       {a.inside_range === true
-                        ? `✅ Dentro del rango (${a.distance_m} m)`
+                        ? `✅ En rango (${a.distance_m} m)`
                         : a.inside_range === false
-                          ? `⚠️ Fuera del rango (${a.distance_m} m)`
+                          ? a.distance_m != null
+                            ? `⚠️ Fuera de Rango (${a.distance_m} m)`
+                            : "⚠️ Fuera de Rango (sin ubicación)"
                           : a.has_location
                             ? "📍 con ubicación"
                             : "sin ubicación"}

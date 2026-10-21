@@ -14,8 +14,9 @@ class AttendanceListSerializer(serializers.ModelSerializer):
     student_code = serializers.CharField(source="student.student_code", read_only=True)
     # NO se exponen lat/long exactas; solo si registró ubicación.
     has_location = serializers.SerializerMethodField()
-    # Dentro/fuera del rango del salón (null si no hay rango vigente o si el
-    # alumno no envió ubicación). Se calcula al momento de la consulta.
+    # En rango / fuera de rango (null solo si la clase no tiene rango fijado
+    # o es mediada). Se recalcula en cada consulta, también tras cerrar la
+    # clase: la geocerca ya no cambia después, así el veredicto es estable.
     inside_range = serializers.SerializerMethodField()
     distance_m = serializers.SerializerMethodField()
 
@@ -33,21 +34,24 @@ class AttendanceListSerializer(serializers.ModelSerializer):
         return obj.latitude is not None and obj.longitude is not None
 
     def _geofence(self):
-        """Clase con rango vigente (solo presencial, en curso) o None.
+        """Clase con rango fijado (presencial y con coordenadas) o None.
+
+        No exige que la clase esté en curso: el veredicto se re-valida en
+        cada lectura, incluso después de cerrar la clase (el panel del
+        profesor conserva En rango / Fuera de Rango en el historial).
 
         Se cachea por serializador: DRF reutiliza la misma instancia para
         todas las filas, así los 2 method fields no repiten los chequeos.
         """
         if hasattr(self, "_geofence_cache"):
             return self._geofence_cache
-        from apps.academic.models import ClassModality, ClassStatus
+        from apps.academic.models import ClassModality
 
         clase = self.context.get("class")
         vigente = None
         if (
             clase is not None
             and clase.modality == ClassModality.PRESENTIAL
-            and clase.status == ClassStatus.IN_PROGRESS
             and clase.geofence_lat is not None
             and clase.geofence_lng is not None
         ):
@@ -75,9 +79,14 @@ class AttendanceListSerializer(serializers.ModelSerializer):
         return self._distance(obj)[1]
 
     def get_inside_range(self, obj):
-        clase, distance = self._distance(obj)
-        if distance is None:
+        clase = self._geofence()
+        if clase is None:
             return None
+        distance = self._distance(obj)[1]
+        if distance is None:
+            # Rango fijado y alumno sin ubicación: cuenta como fuera de
+            # rango (sin distancia que mostrar). La marcación no se bloquea.
+            return False
         return distance <= (clase.geofence_radius_m or 0)
 
 

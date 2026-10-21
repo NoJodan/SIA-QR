@@ -472,12 +472,14 @@ class AttendanceRangeTests(TestCase):
         self.assertEqual(len(rows), 1)
         self.assertFalse(rows[0]["inside_range"])
 
-    def test_null_when_student_has_no_location(self):
+    def test_no_location_with_range_is_outside(self):
+        # Rango fijado y alumno sin GPS: cuenta como Fuera de Rango.
         client, session, raw, _, _ = self._setup(email="r3prof@ut.edu.co")
-        self._mark(raw, "sinloc@ut.edu.co")
+        resp = self._mark(raw, "sinloc@ut.edu.co")
+        self.assertEqual(resp.status_code, 201)  # la marcación nunca se bloquea
         rows = self._rows(client, session)
         self.assertEqual(len(rows), 1)
-        self.assertIsNone(rows[0]["inside_range"])
+        self.assertFalse(rows[0]["inside_range"])
         self.assertIsNone(rows[0]["distance_m"])
         self.assertFalse(rows[0]["has_location"])
 
@@ -496,13 +498,21 @@ class AttendanceRangeTests(TestCase):
         rows = self._rows(client, session)
         self.assertIsNone(rows[0]["inside_range"])
 
-    def test_null_when_class_finished(self):
-        client, session, raw, clase, _ = self._setup(email="r6prof@ut.edu.co")
-        self._mark(raw, "cerrada@ut.edu.co", lat=SALON_LAT, lng=SALON_LNG)
+    def test_verdict_survives_after_close(self):
+        # El veredicto se re-valida en cada lectura: sigue visible al cerrar
+        # la clase (la geocerca ya no cambia después del cierre).
+        client, session, _, clase, _ = self._setup(email="r6prof@ut.edu.co")
+        _, student_in = _make_student("cerro-in@ut.edu.co", code="EST-CI", doc="DOC-CI")
+        _, student_out = _make_student("cerro-out@ut.edu.co", code="EST-CO", doc="DOC-CO")
+        self._add_attendance(session, student_in, SALON_LAT, SALON_LNG)
+        self._add_attendance(session, student_out, SALON_LAT + 0.001, SALON_LNG)
         clase.status = ClassStatus.COMPLETED
         clase.save(update_fields=["status", "updated_at"])
-        rows = self._rows(client, session)
-        self.assertIsNone(rows[0]["inside_range"])
+        rows = {r["student_code"]: r for r in self._rows(client, session)}
+        self.assertTrue(rows["EST-CI"]["inside_range"])
+        self.assertAlmostEqual(rows["EST-CI"]["distance_m"], 0.0, places=1)
+        self.assertFalse(rows["EST-CO"]["inside_range"])
+        self.assertGreater(rows["EST-CO"]["distance_m"], 25)
 
     def test_custom_radius_respected(self):
         client, session, _, _, _ = self._setup(email="r7prof@ut.edu.co", radius=200)
