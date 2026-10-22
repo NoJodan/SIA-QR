@@ -78,7 +78,7 @@ function StudentProfileForm({ initial, onSaved, notice }) {
   const [errors, setErrors] = useState({});
 
   // Casillas numéricas: solo dígitos y su longitud máxima real.
-  const NUMERIC_MAX = { document_number: 10, student_code: 12, phone_number: 10 };
+  const NUMERIC_MAX = { document_number: 12, student_code: 12, phone_number: 10 };
   const set = (k) => (e) => {
     const max = NUMERIC_MAX[k];
     const value = max ? e.target.value.replace(/\D/g, "").slice(0, max) : e.target.value;
@@ -118,9 +118,9 @@ function StudentProfileForm({ initial, onSaved, notice }) {
   };
 
   const fields = [
-    { key: "document_number", label: "Número de documento", placeholder: "Ej. 1234567890", autoComplete: "off", numeric: true },
-    { key: "student_code", label: "Código estudiantil", placeholder: "Ej. 085401582024", autoComplete: "off", numeric: true },
-    { key: "phone_number", label: "Teléfono", placeholder: "Ej. 3001234567", type: "tel", autoComplete: "tel", numeric: true },
+    { key: "document_number", label: "Número de documento", placeholder: "Solo números, máximo 12", autoComplete: "off", numeric: true },
+    { key: "student_code", label: "Código estudiantil", placeholder: "Solo números, máximo 12", autoComplete: "off", numeric: true },
+    { key: "phone_number", label: "Teléfono", placeholder: "Solo números, máximo 10", type: "tel", autoComplete: "tel", numeric: true },
     { key: "address", label: "Dirección", placeholder: "Ej. Calle 10 # 5-20", autoComplete: "street-address" },
   ];
 

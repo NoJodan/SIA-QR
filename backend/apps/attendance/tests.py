@@ -321,8 +321,8 @@ class StudentProfileTests(TestCase):
         client.force_login(student_user)
         resp = client.patch(
             "/api/auth/me/",
-            {"student_code": "EST-REAL-1", "document_number": "123456",
-             "phone_number": "+57 300 123 4567", "address": "Calle 1 #2-3",
+            {"student_code": "123456789012", "document_number": "123456",
+             "phone_number": "3001234567", "address": "Calle 1 #2-3",
              "first_name": "Real", "last_name": "Estudiante"},
             format="json",
         )
@@ -335,8 +335,8 @@ class StudentProfileTests(TestCase):
 
         u1 = User.objects.create_user(email="s1@ut.edu.co", google_sub="s1", role="ROLE_STUDENT")
         Student.objects.create(
-            user=u1, student_code="EST-DUP", document_number="DOC-DUP",
-            first_name="A", last_name="B", phone_number="+57 300 111 1111",
+            user=u1, student_code="123456789012", document_number="123456789012",
+            first_name="A", last_name="B", phone_number="3001111111",
             address="Dir 1",
         )
         u2 = User.objects.create_user(email="s2@ut.edu.co", google_sub="s2", role="ROLE_STUDENT")
@@ -348,8 +348,8 @@ class StudentProfileTests(TestCase):
         client.force_login(u2)
         resp = client.patch(
             "/api/auth/me/",
-            {"student_code": "EST-DUP", "document_number": "DOC-OTHER",
-             "phone_number": "+57 300 222 2222", "address": "Dir 2",
+            {"student_code": "123456789012", "document_number": "123456789013",
+             "phone_number": "3002222222", "address": "Dir 2",
              "first_name": "C", "last_name": "D"},
             format="json",
         )

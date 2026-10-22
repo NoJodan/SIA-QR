@@ -50,7 +50,8 @@ class AdminLoginThrottle(AnonRateThrottle):
 
 _GENERIC_ADMIN_LOGIN_ERROR = {"error": "Credenciales inválidas"}
 
-_DIGITS_RE = re.compile(r"^[0-9]+$")
+_STUDENT_CODE_RE = re.compile(r"^[0-9]{1,12}$")
+_DOCUMENT_NUMBER_RE = re.compile(r"^[0-9]{1,12}$")
 _PHONE_RE = re.compile(r"^[0-9]{7,10}$")
 
 
@@ -407,20 +408,16 @@ def _patch_student(request, user):
     errors = {}
     if not student_code:
         errors["student_code"] = "El código estudiantil es obligatorio."
-    elif len(student_code) > 12:
-        errors["student_code"] = "No puede superar 12 dígitos."
-    elif not _DIGITS_RE.fullmatch(student_code):
-        errors["student_code"] = "El código estudiantil solo debe contener números."
+    elif not _STUDENT_CODE_RE.match(student_code):
+        errors["student_code"] = "El código estudiantil solo admite números (máximo 12, sin espacios)."
     if not document_number:
         errors["document_number"] = "El número de documento es obligatorio."
-    elif len(document_number) > 10:
-        errors["document_number"] = "No puede superar 10 dígitos."
-    elif not _DIGITS_RE.fullmatch(document_number):
-        errors["document_number"] = "El número de documento solo debe contener números."
+    elif not _DOCUMENT_NUMBER_RE.match(document_number):
+        errors["document_number"] = "El número de documento solo admite números (máximo 12, sin espacios)."
     if not phone_number:
         errors["phone_number"] = "El teléfono es obligatorio."
-    elif not _PHONE_RE.fullmatch(phone_number):
-        errors["phone_number"] = "Formato de teléfono inválido."
+    elif not _PHONE_RE.match(phone_number):
+        errors["phone_number"] = "El teléfono solo admite números (entre 7 y 10 dígitos, sin espacios)."
     if not address:
         errors["address"] = "La dirección es obligatoria."
     elif len(address) > 500:
