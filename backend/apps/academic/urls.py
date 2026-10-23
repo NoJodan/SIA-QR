@@ -7,6 +7,7 @@ from apps.academic.views import (
     AdminGroupsListView,
     ClassCurrentSessionRotateView,
     ClassCurrentSessionView,
+    ClassGeofenceView,
     ClassSessionCreateView,
     InstantClassCreateView,
     MyGroupDetailView,
@@ -25,6 +26,13 @@ urlpatterns = [
         "groups/<uuid:group_id>/classes/<uuid:class_id>/",
         ScheduledClassDetailView.as_view(),
         name="group-class-detail",
+    ),
+    # Rango del salón (solo presencial): fija/reubica la referencia GPS del
+    # profesor. Se apaga solo al finalizar la clase (sin cron).
+    path(
+        "groups/<uuid:group_id>/classes/<uuid:class_id>/geofence/",
+        ClassGeofenceView.as_view(),
+        name="group-class-geofence",
     ),
     # A1: generar sesión QR sobre una clase (profesor dueño, single-active).
     # Se mantiene como fallback interno; la UI usa current-session (automático).

@@ -39,6 +39,19 @@ export const adminUpdateGroupClass = (groupId, classId, payload) =>
   api.patch(`/api/academic/admin/groups/${groupId}/classes/${classId}/`, payload).then((r) => r.data);
 
 // Clase al momento: B3 crea ScheduledClass IN_PROGRESS + sesión QR atómica.
-// payload opcional: { title, modality, duration_minutes, qr_duration_minutes }.
+// payload opcional: { title, modality, duration_minutes, qr_duration_minutes,
+// geofence_latitude, geofence_longitude, geofence_accuracy }.
+// Solo PRESENTIAL usa la geocerca (el backend ignora coords en VIRTUAL).
 export const createInstantClass = (groupId, payload = {}) =>
   api.post(`/api/academic/groups/${groupId}/classes/instant/`, payload).then((r) => r.data);
+
+// Rango del salón (solo presencial): fija/reubica la referencia GPS del
+// profesor. Idempotente: un POST posterior sobrescribe la ubicación.
+export const setClassGeofence = (groupId, classId, payload = {}) =>
+  api
+    .post(`/api/academic/groups/${groupId}/classes/${classId}/geofence/`, payload)
+    .then((r) => r.data);
+
+// Estado del rango (sin coordenadas): { geofence_active, geofence_radius_m }.
+export const getClassGeofence = (groupId, classId) =>
+  api.get(`/api/academic/groups/${groupId}/classes/${classId}/geofence/`).then((r) => r.data);

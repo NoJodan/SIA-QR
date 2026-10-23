@@ -112,12 +112,22 @@ class SessionAttendanceListView(generics.ListAPIView):
     pagination_class = StandardResultsPagination
 
     def get_session(self):
-        return get_object_or_404(
-            AttendanceSession.objects.select_related(
-                "scheduled_class__group__professor__user"
-            ),
-            pk=self.kwargs["session_id"],
-        )
+        # Memoizado: queryset y contexto comparten la misma sesión (1 query).
+        if not hasattr(self, "_session_cache"):
+            self._session_cache = get_object_or_404(
+                AttendanceSession.objects.select_related(
+                    "scheduled_class__group__professor__user"
+                ),
+                pk=self.kwargs["session_id"],
+            )
+        return self._session_cache
+
+    def get_serializer_context(self):
+        # Para calcular dentro/fuera del rango por alumno (lat/long del salón
+        # NO se exponen; solo distancia/booleano).
+        ctx = super().get_serializer_context()
+        ctx["class"] = self.get_session().scheduled_class
+        return ctx
 
     def get_queryset(self):
         session = self.get_session()

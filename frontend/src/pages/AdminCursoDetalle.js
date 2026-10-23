@@ -9,7 +9,7 @@ import useDebounce from "../utils/useDebounce";
 
 const modalityLabels = {
   PRESENTIAL: "Presencial",
-  VIRTUAL: "Virtual",
+  VIRTUAL: "Mediada",
 };
 
 const classStatusLabels = {

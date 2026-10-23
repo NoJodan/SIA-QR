@@ -50,14 +50,8 @@ class AdminLoginThrottle(AnonRateThrottle):
 
 _GENERIC_ADMIN_LOGIN_ERROR = {"error": "Credenciales inválidas"}
 
-_PHONE_RE = re.compile(r"^(?=(?:\D*\d){7,})\+?[\d\s\-()]{7,20}$")
-
-
-def _phone_has_digits(value):
-    """B2: exige >=7 dígitos (la regex sola aceptaba '       ' o '-------')."""
-    import re as _re
-
-    return len(_re.sub(r"\D", "", value or "")) >= 7
+_DIGITS_RE = re.compile(r"^[0-9]+$")
+_PHONE_RE = re.compile(r"^[0-9]{7,10}$")
 
 
 def get_google_names(user):
@@ -405,26 +399,27 @@ def _patch_student(request, user):
     B1: check+create/update envueltos en transaction.atomic(); ante
     IntegrityError por carrera se re-chequea iexact y se responde 409
     legible (nunca 500)."""
-    student_code = str(request.data.get("student_code") or "").strip()
-    document_number = str(request.data.get("document_number") or "").strip()
-    phone_number = str(request.data.get("phone_number") or "").strip()
+    student_code = str(request.data.get("student_code") or "")
+    document_number = str(request.data.get("document_number") or "")
+    phone_number = str(request.data.get("phone_number") or "")
     address = str(request.data.get("address") or "").strip()
 
     errors = {}
     if not student_code:
         errors["student_code"] = "El código estudiantil es obligatorio."
-    elif len(student_code) > 50:
-        errors["student_code"] = "No puede superar 50 caracteres."
+    elif len(student_code) > 12:
+        errors["student_code"] = "No puede superar 12 dígitos."
+    elif not _DIGITS_RE.fullmatch(student_code):
+        errors["student_code"] = "El código estudiantil solo debe contener números."
     if not document_number:
         errors["document_number"] = "El número de documento es obligatorio."
-    elif len(document_number) > 50:
-        errors["document_number"] = "No puede superar 50 caracteres."
+    elif len(document_number) > 10:
+        errors["document_number"] = "No puede superar 10 dígitos."
+    elif not _DIGITS_RE.fullmatch(document_number):
+        errors["document_number"] = "El número de documento solo debe contener números."
     if not phone_number:
         errors["phone_number"] = "El teléfono es obligatorio."
-    elif len(phone_number) > 20:
-        errors["phone_number"] = "No puede superar 20 caracteres."
-    elif not _PHONE_RE.match(phone_number) or not _phone_has_digits(phone_number):
-        # B2: exige >=7 dígitos (rechaza '       ' y '-------').
+    elif not _PHONE_RE.fullmatch(phone_number):
         errors["phone_number"] = "Formato de teléfono inválido."
     if not address:
         errors["address"] = "La dirección es obligatoria."

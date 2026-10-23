@@ -373,6 +373,14 @@ def _fmt_bogota(value):
     return timezone.localtime(value, BOGOTA_TZ).strftime("%d/%m/%Y %H:%M")
 
 
+def _modality_label(value):
+    """Etiqueta legible para los exportes (JSON sigue exponiendo el código)."""
+    try:
+        return ClassModality(value).label
+    except Exception:
+        return value or ""
+
+
 _REPORT_COLUMNS = [
     "Estudiante",
     "Código",
@@ -406,7 +414,7 @@ def _row_cells(attendance):
         row["course_name"] or "",
         group_label,
         row["class_title"] or "",
-        row["modality"] or "",
+        _modality_label(row["modality"]),
         row["class_status"] or "",
         _fmt_bogota(row["class_start_time"]),
         _fmt_bogota(row["registered_at"]),
@@ -483,6 +491,9 @@ def _filters_summary(validated):
     for key, label in labels.items():
         value = validated.get(key)
         if value not in (None, "", []):
+            # Modalidad en el resumen también en etiqueta legible (Mediada).
+            if key == "modality":
+                value = _modality_label(value)
             # Escapa input de usuario: Paragraph interpreta mini-HTML y
             # "<>&" sin escapar rompe el parse (500). Ver ALTO 1 QA.
             parts.append(f"{label}: {html.escape(str(value))}")

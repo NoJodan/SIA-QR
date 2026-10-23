@@ -215,10 +215,10 @@ export default function CreateClassForm({ groupId, initial = null, onCreated, on
               onChange={set("modality")}
               className="sr-only"
             />
-            Virtual
+            Mediada
           </label>
         </div>
-        <p className="mt-1 text-xs text-slate-500">Define si la clase es presencial o virtual.</p>
+        <p className="mt-1 text-xs text-slate-500">Define si la clase es presencial o mediada.</p>
       </fieldset>
       {error && (
         <p id={errorId} role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">

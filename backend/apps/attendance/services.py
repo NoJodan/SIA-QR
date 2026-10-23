@@ -17,6 +17,30 @@ from apps.academic.models import ClassStatus
 MIN_TTL = 1
 MAX_TTL = 120
 
+# Radio terrestre medio (WGS-84) en metros.
+EARTH_RADIUS_M = 6371008.8
+
+
+def haversine_m(lat1, lon1, lat2, lon2):
+    """Distancia en metros entre dos coordenadas (fórmula haversine).
+
+    Precisión suficiente para un rango de salón (±25 m); sin dependencias.
+    """
+    from math import atan2, cos, radians, sin, sqrt
+
+    def to_float(value):
+        return float(value) if value is not None else None
+
+    lat1, lon1, lat2, lon2 = map(to_float, (lat1, lon1, lat2, lon2))
+    if None in (lat1, lon1, lat2, lon2):
+        return None
+
+    phi1, phi2 = radians(lat1), radians(lat2)
+    dphi = radians(lat2 - lat1)
+    dlambda = radians(lon2 - lon1)
+    a = sin(dphi / 2) ** 2 + cos(phi1) * cos(phi2) * sin(dlambda / 2) ** 2
+    return 2 * EARTH_RADIUS_M * atan2(sqrt(a), sqrt(1 - a))
+
 
 def get_default_qr_minutes():
     """TTL por defecto: SystemConfig QR_DEFAULT_MINUTES > settings > 10."""

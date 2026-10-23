@@ -16,7 +16,7 @@ def _mk_student_user(email, uid, given="Test", family="User", name=None):
     return u
 
 
-def _payload(code="EST-X", doc="DOC-X", phone="+57 300 123 4567", addr="Calle 1 #2-3"):
+def _payload(code="123456789012", doc="1234567890", phone="3001234567", addr="Calle 1 #2-3"):
     return {
         "student_code": code,
         "document_number": doc,
@@ -42,12 +42,56 @@ class B2PhoneDigitsTests(TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertIn("phone_number", r.data)
 
-    def test_valid_colombian_phone_is_201_or_200(self):
+    def test_valid_ten_digit_phone_is_200(self):
         u = _mk_student_user("b2c@ut.edu.co", "b2c")
         c = APIClient()
         c.force_login(u)
-        r = c.patch("/api/auth/me/", _payload(phone="+57 300 123 4567"), format="json")
+        r = c.patch("/api/auth/me/", _payload(), format="json")
         self.assertIn(r.status_code, (200, 201))
+
+    def test_phone_rejects_prefix_and_spaces(self):
+        u = _mk_student_user("b2d@ut.edu.co", "b2d")
+        c = APIClient()
+        c.force_login(u)
+        for phone in ("+573001234567", "300 1234567", " 3001234567", "30012345678"):
+            with self.subTest(phone=phone):
+                r = c.patch("/api/auth/me/", _payload(phone=phone), format="json")
+                self.assertEqual(r.status_code, 400)
+                self.assertIn("phone_number", r.data)
+
+
+class StudentNumericFieldsTests(TestCase):
+    def test_student_code_and_document_reject_non_digits(self):
+        u = _mk_student_user("numeric@ut.edu.co", "numeric")
+        c = APIClient()
+        c.force_login(u)
+        for field, value in (
+            ("student_code", "123ABC"),
+            ("student_code", " 123"),
+            ("document_number", "123-456"),
+            ("document_number", "123 "),
+        ):
+            with self.subTest(field=field, value=value):
+                payload = _payload()
+                payload[field] = value
+                r = c.patch("/api/auth/me/", payload, format="json")
+                self.assertEqual(r.status_code, 400)
+                self.assertIn(field, r.data)
+
+    def test_student_code_and_document_respect_frontend_limits(self):
+        u = _mk_student_user("numeric-limits@ut.edu.co", "numeric-limits")
+        c = APIClient()
+        c.force_login(u)
+        for field, value in (
+            ("student_code", "1" * 13),
+            ("document_number", "1" * 11),
+        ):
+            with self.subTest(field=field):
+                payload = _payload()
+                payload[field] = value
+                r = c.patch("/api/auth/me/", payload, format="json")
+                self.assertEqual(r.status_code, 400)
+                self.assertIn(field, r.data)
 
 
 class B3MononymTests(TestCase):
@@ -55,7 +99,7 @@ class B3MononymTests(TestCase):
         u = _mk_student_user("mad@ut.edu.co", "mad", name="Madonna")
         c = APIClient()
         c.force_login(u)
-        r = c.patch("/api/auth/me/", _payload(code="EST-MAD", doc="DOC-MAD"), format="json")
+        r = c.patch("/api/auth/me/", _payload(code="111", doc="222"), format="json")
         self.assertEqual(r.status_code, 200)
         st = Student.objects.get(user=u)
         self.assertEqual(st.first_name, "Madonna")
@@ -128,11 +172,11 @@ class B1AtomicityTests(TestCase):
         c1.force_login(u1)
         c2.force_login(u2)
         r1 = c1.patch(
-            "/api/auth/me/", _payload(code="EST-RACE", doc="DOC-1"), format="json"
+            "/api/auth/me/", _payload(code="111111", doc="111"), format="json"
         )
         self.assertIn(r1.status_code, (200, 201))
         r2 = c2.patch(
-            "/api/auth/me/", _payload(code="EST-RACE", doc="DOC-2"), format="json"
+            "/api/auth/me/", _payload(code="111111", doc="222"), format="json"
         )
         self.assertEqual(r2.status_code, 409)
         self.assertNotEqual(r2.status_code, 500)
@@ -143,7 +187,7 @@ class B1AtomicityTests(TestCase):
         c.force_login(u)
         for _ in range(2):
             r = c.patch(
-                "/api/auth/me/", _payload(code="EST-SAME", doc="DOC-SAME"),
+                "/api/auth/me/", _payload(code="555555", doc="555"),
                 format="json",
             )
             self.assertIn(r.status_code, (200, 201, 409))

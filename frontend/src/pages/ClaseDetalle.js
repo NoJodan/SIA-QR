@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import QrDisplay from "../components/QrDisplay";
 import { getCurrentSession, getSessionAttendances } from "../services/attendance";
-import { getGroupClass } from "../services/academic";
+import { getGroupClass, setClassGeofence } from "../services/academic";
 import { formatBogota } from "../utils/dates";
+import { getDevicePosition } from "../utils/geolocation";
 
 // QR único sin auto-rotación: ensure (clase + sesión vigente) cada 10s,
 // lista viva POR SESIÓN ÚNICA cada 5s (getSessionAttendances por session_id).
@@ -17,7 +18,7 @@ const ENSURE_MS = 10000;
 const LIST_MS = 5000;
 const MODALITY_LABELS = {
   PRESENTIAL: "Presencial",
-  VIRTUAL: "Virtual",
+  VIRTUAL: "Mediada",
 };
 const CLASS_STATUS_LABELS = {
   SCHEDULED: "Programada",
@@ -107,6 +108,10 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
   const [startsIn, setStartsIn] = useState(null);
   const [startTime, setStartTime] = useState(classItem.start_time);
   const [classStatus, setClassStatus] = useState(classItem.status);
+  const [geofenceActive, setGeofenceActive] = useState(Boolean(classItem.geofence_active));
+  const [geofenceRadius, setGeofenceRadius] = useState(classItem.geofence_radius_m ?? 25);
+  const [geofenceSaving, setGeofenceSaving] = useState(false);
+  const [geofenceError, setGeofenceError] = useState("");
   const [qrMinutes, setQrMinutes] = useState(classItem.qr_duration_minutes ?? 10);
   const [error, setError] = useState("");
   const [rows, setRows] = useState([]);
@@ -140,6 +145,10 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
       if (cls) {
         setClassStatus(cls.status);
         setStartTime(cls.start_time);
+        // Rango del salón: estado derivado en backend (se "apaga" solo al
+        // finalizar la clase), refrescado en cada poll de 10s.
+        setGeofenceActive(Boolean(cls.geofence_active));
+        if (cls.geofence_radius_m != null) setGeofenceRadius(cls.geofence_radius_m);
       }
       if (cur.status === 200) {
         const d = cur.data || {};
@@ -270,6 +279,42 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
     const id = setInterval(() => loadList(page).catch(() => {}), LIST_MS);
     return () => clearInterval(id);
   }, [classItem.id, session?.session_id, page, loadList]);
+
+  // Fija la referencia GPS del salón con la ubicación actual del profesor.
+  // Idempotente: un nuevo POST sobrescribe (reubicar/reintentar).
+  const handleFixGeofence = async () => {
+    setGeofenceSaving(true);
+    setGeofenceError("");
+    try {
+      const pos = await getDevicePosition();
+      const saved = await setClassGeofence(group.id, classItem.id, {
+        latitude: Number(pos.latitude.toFixed(8)),
+        longitude: Number(pos.longitude.toFixed(8)),
+        accuracy: pos.accuracy != null ? Number(pos.accuracy.toFixed(2)) : null,
+      });
+      if (saved) {
+        setGeofenceActive(Boolean(saved.geofence_active));
+        if (saved.geofence_radius_m != null) setGeofenceRadius(saved.geofence_radius_m);
+      }
+      // Refresca el resto de datos de la clase (estado/QR) en segundo plano.
+      ensure().catch(() => {});
+    } catch (err) {
+      const geoCode = err?.message;
+      setGeofenceError(
+        ["unsupported", "denied", "timeout", "unavailable"].includes(geoCode)
+          ? "No se pudo obtener tu ubicación. Revisa el permiso de GPS del navegador e inténtalo de nuevo."
+          : err?.response?.data?.error || "No se pudo fijar el rango del salón, inténtalo de nuevo."
+      );
+    } finally {
+      setGeofenceSaving(false);
+    }
+  };
+
+  const isPresential = classItem.modality === "PRESENTIAL";
+  const canFixGeofence = isPresential && classStatus === "IN_PROGRESS" && !geofenceActive;
+  // Conteo de la página visible (la lista se paginó en backend, 10 por página).
+  const insideCount = rows.filter((a) => a.inside_range === true).length;
+  const outsideCount = rows.filter((a) => a.inside_range === false).length;
 
   const showQr = phase === "live" && session?.attend_url;
   const showExpiredQr = phase === "expired" && session?.attend_url;
@@ -423,6 +468,46 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
               <p className="text-sm text-slate-400 px-4">Conectando…</p>
             </div>
           )}
+
+          {/* Rango del salón (solo presencial): estado + fijar referencia. */}
+          <div className="w-full space-y-3">
+            {!isPresential ? (
+              <p className="bg-slate-50 border border-slate-200 text-slate-600 text-xs md:text-sm font-medium px-4 py-3 rounded-2xl">
+                Clase mediada — no usa rango de ubicación.
+              </p>
+            ) : geofenceActive ? (
+              <p className="bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs md:text-sm font-medium px-4 py-3 rounded-2xl flex items-center justify-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
+                <span>Rango activo · {geofenceRadius} m</span>
+              </p>
+            ) : classStatus === "IN_PROGRESS" ? (
+              <p className="bg-amber-50 border border-amber-100 text-amber-800 text-xs md:text-sm font-medium px-4 py-3 rounded-2xl flex items-center justify-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0"></span>
+                <span>Rango inactivo — sin ubicación del profesor.</span>
+              </p>
+            ) : null}
+
+            {geofenceError && (
+              <p className="bg-red-50 border border-red-100 text-red-700 text-xs md:text-sm font-medium px-4 py-3 rounded-2xl">
+                {geofenceError}
+              </p>
+            )}
+
+            {canFixGeofence && (
+              <button
+                type="button"
+                onClick={handleFixGeofence}
+                disabled={geofenceSaving}
+                aria-label="Fijar rango del salón con tu ubicación actual"
+                className="w-full inline-flex flex-col items-center gap-0.5 rounded-2xl bg-[#B3200E] hover:bg-[#941B0B] px-4 py-3 text-white font-semibold disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40"
+              >
+                <span className="text-sm">{geofenceSaving ? "Ubicando…" : "📍 Fijar rango del salón"}</span>
+                <span className="text-[11px] font-normal text-white/85">
+                  Usa tu ubicación actual como referencia ({geofenceRadius} m)
+                </span>
+              </button>
+            )}
+          </div>
         </section>
       </div>
 
@@ -432,6 +517,17 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
             Asistencia {count > 0 && <span className="text-slate-500 font-normal">({count})</span>}
           </h3>
           <div className="flex items-center gap-2">
+            {insideCount > 0 || outsideCount > 0 ? (
+              <span
+                className={`text-xs font-semibold px-3 py-1.5 rounded-full border whitespace-nowrap ${
+                  outsideCount > 0
+                    ? "bg-amber-50 border-amber-100 text-amber-700"
+                    : "bg-emerald-50 border-emerald-100 text-emerald-700"
+                }`}
+              >
+                {insideCount} en rango · {outsideCount} fuera de rango
+              </span>
+            ) : null}
             {session && (
               <span className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -457,8 +553,20 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
                   </div>
                   <div className="text-right">
                     <p className="text-slate-700">{formatBogota(a.registered_at)}</p>
-                    <p className="text-xs text-slate-500">
-                      {a.has_location ? "📍 con ubicación" : "sin ubicación"}
+                    <p
+                      className={`text-xs ${
+                        a.inside_range === false ? "text-amber-700 font-medium" : "text-slate-500"
+                      }`}
+                    >
+                      {a.inside_range === true
+                        ? `✅ En rango (${a.distance_m} m)`
+                        : a.inside_range === false
+                          ? a.distance_m != null
+                            ? `⚠️ Fuera de Rango (${a.distance_m} m)`
+                            : "⚠️ Fuera de Rango (sin ubicación)"
+                          : a.has_location
+                            ? "📍 con ubicación"
+                            : "sin ubicación"}
                     </p>
                   </div>
                 </li>

@@ -370,3 +370,162 @@ class ProfessorReconcileTests(TestCase):
         user.refresh_from_db()
         self.assertEqual(user.role, "ROLE_PROFESSOR")
         self.assertTrue(Professor.objects.filter(user=user).exists())
+
+
+# Referencia GPS del salón (4.0915, -75.2315); las coordenadas de los alumnos
+# se eligen respecto a ella para los casos dentro/fuera del rango de 25 m.
+SALON_LAT, SALON_LNG = 4.0915, -75.2315
+
+
+def _set_geofence(clase, lat=SALON_LAT, lng=SALON_LNG, radius=25):
+    clase.geofence_lat = lat
+    clase.geofence_lng = lng
+    clase.geofence_radius_m = radius
+    clase.geofence_activated_at = timezone.now()
+    clase.save(update_fields=[
+        "geofence_lat", "geofence_lng", "geofence_radius_m", "geofence_activated_at", "updated_at",
+    ])
+    return clase
+
+
+class HaversineTests(TestCase):
+    def test_same_point_is_zero(self):
+        from apps.attendance.services import haversine_m
+
+        self.assertAlmostEqual(haversine_m(SALON_LAT, SALON_LNG, SALON_LAT, SALON_LNG), 0.0, places=3)
+
+    def test_known_distance_north(self):
+        from apps.attendance.services import haversine_m
+
+        # ~111.2 m al norte (0.001 grado de latitud).
+        distance = haversine_m(SALON_LAT, SALON_LNG, SALON_LAT + 0.001, SALON_LNG)
+        self.assertAlmostEqual(distance, 111.2, delta=1.0)
+
+    def test_none_coordinates_return_none(self):
+        from apps.attendance.services import haversine_m
+
+        self.assertIsNone(haversine_m(None, SALON_LNG, SALON_LAT, SALON_LNG))
+        self.assertIsNone(haversine_m(SALON_LAT, SALON_LNG, None, None))
+
+
+class AttendanceRangeTests(TestCase):
+    """inside_range/distance_m de la lista viva (profesor dueño)."""
+
+    def _setup(self, email="rangeprof@ut.edu.co", radius=25, geofence=True, modality="PRESENTIAL"):
+        owner, _, group = _make_prof_group(email=email)
+        clase = _make_class(group, status=ClassStatus.IN_PROGRESS)
+        clase.modality = modality
+        clase.save(update_fields=["modality"])
+        if geofence:
+            _set_geofence(clase, radius=radius)
+        session, raw = _make_session(clase)
+        client = APIClient()
+        client.force_login(owner)
+        return client, session, raw, clase, group
+
+    def _mark(self, raw, email, lat=None, lng=None):
+        user, _ = _make_student(
+            email, code=f"EST-{email[:4].upper()}", doc=f"DOC-{email[:4].upper()}"
+        )
+        client = APIClient()
+        client.force_login(user)
+        body = {"token": raw}
+        if lat is not None:
+            body["latitude"] = lat
+            body["longitude"] = lng
+            body["accuracy"] = 8.0
+        return client.post("/api/attendance/mark/", body, format="json")
+
+    def _add_attendance(self, session, student, lat, lng):
+        from apps.attendance.models import Attendance
+
+        return Attendance.objects.create(
+            session=session, student=student,
+            latitude=lat, longitude=lng, accuracy=5,
+            ip_address="127.0.0.1", user_agent="test",
+        )
+
+    def _rows(self, owner_client, session):
+        resp = owner_client.get(f"/api/attendance/sessions/{session.id}/attendances/")
+        self.assertEqual(resp.status_code, 200)
+        return resp.data["results"] if isinstance(resp.data, dict) else resp.data
+
+    def test_inside_and_outside_range(self):
+        client, session, _, _, _ = self._setup(email="r1prof@ut.edu.co")
+        _, student_in = _make_student("dentro@ut.edu.co", code="EST-IN", doc="DOC-IN")
+        _, student_out = _make_student("fuera@ut.edu.co", code="EST-OUT", doc="DOC-OUT")
+        self._add_attendance(session, student_in, SALON_LAT, SALON_LNG)
+        self._add_attendance(session, student_out, SALON_LAT + 0.001, SALON_LNG)
+        rows = self._rows(client, session)
+        by_code = {r["student_code"]: r for r in rows}
+        self.assertTrue(by_code["EST-IN"]["inside_range"])
+        self.assertAlmostEqual(by_code["EST-IN"]["distance_m"], 0.0, places=1)
+        self.assertFalse(by_code["EST-OUT"]["inside_range"])
+        self.assertGreater(by_code["EST-OUT"]["distance_m"], 25)
+
+    def test_outside_radius_still_marks_attendance(self):
+        # RNF-06: fuera del rango NO bloquea; solo se etiqueta.
+        client, session, raw, _, _ = self._setup(email="r2prof@ut.edu.co")
+        resp = self._mark(raw, "fuera2@ut.edu.co", lat=SALON_LAT + 0.001, lng=SALON_LNG)
+        self.assertEqual(resp.status_code, 201)
+        rows = self._rows(client, session)
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rows[0]["inside_range"])
+
+    def test_no_location_with_range_is_outside(self):
+        # Rango fijado y alumno sin GPS: cuenta como Fuera de Rango.
+        client, session, raw, _, _ = self._setup(email="r3prof@ut.edu.co")
+        resp = self._mark(raw, "sinloc@ut.edu.co")
+        self.assertEqual(resp.status_code, 201)  # la marcación nunca se bloquea
+        rows = self._rows(client, session)
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rows[0]["inside_range"])
+        self.assertIsNone(rows[0]["distance_m"])
+        self.assertFalse(rows[0]["has_location"])
+
+    def test_null_when_class_has_no_geofence(self):
+        client, session, raw, _, _ = self._setup(email="r4prof@ut.edu.co", geofence=False)
+        self._mark(raw, "sinrango@ut.edu.co", lat=SALON_LAT, lng=SALON_LNG)
+        rows = self._rows(client, session)
+        self.assertIsNone(rows[0]["inside_range"])
+        self.assertIsNone(rows[0]["distance_m"])
+        # Sigue indicando que sí envió ubicación.
+        self.assertTrue(rows[0]["has_location"])
+
+    def test_null_when_class_is_virtual(self):
+        client, session, raw, _, _ = self._setup(email="r5prof@ut.edu.co", modality="VIRTUAL")
+        self._mark(raw, "mediada@ut.edu.co", lat=SALON_LAT, lng=SALON_LNG)
+        rows = self._rows(client, session)
+        self.assertIsNone(rows[0]["inside_range"])
+
+    def test_verdict_survives_after_close(self):
+        # El veredicto se re-valida en cada lectura: sigue visible al cerrar
+        # la clase (la geocerca ya no cambia después del cierre).
+        client, session, _, clase, _ = self._setup(email="r6prof@ut.edu.co")
+        _, student_in = _make_student("cerro-in@ut.edu.co", code="EST-CI", doc="DOC-CI")
+        _, student_out = _make_student("cerro-out@ut.edu.co", code="EST-CO", doc="DOC-CO")
+        self._add_attendance(session, student_in, SALON_LAT, SALON_LNG)
+        self._add_attendance(session, student_out, SALON_LAT + 0.001, SALON_LNG)
+        clase.status = ClassStatus.COMPLETED
+        clase.save(update_fields=["status", "updated_at"])
+        rows = {r["student_code"]: r for r in self._rows(client, session)}
+        self.assertTrue(rows["EST-CI"]["inside_range"])
+        self.assertAlmostEqual(rows["EST-CI"]["distance_m"], 0.0, places=1)
+        self.assertFalse(rows["EST-CO"]["inside_range"])
+        self.assertGreater(rows["EST-CO"]["distance_m"], 25)
+
+    def test_custom_radius_respected(self):
+        client, session, _, _, _ = self._setup(email="r7prof@ut.edu.co", radius=200)
+        _, student = _make_student("lejos@ut.edu.co", code="EST-LEJ", doc="DOC-LEJ")
+        self._add_attendance(session, student, SALON_LAT + 0.001, SALON_LNG)
+        rows = self._rows(client, session)
+        # ~111 m: fuera de 25 m pero dentro de un radio ampliado a 200 m.
+        self.assertTrue(rows[0]["inside_range"])
+
+    def test_exact_coords_do_not_expose_lat_long(self):
+        client, session, _, _, _ = self._setup(email="r8prof@ut.edu.co")
+        _, student = _make_student("priv@ut.edu.co", code="EST-PRIV", doc="DOC-PRIV")
+        self._add_attendance(session, student, SALON_LAT, SALON_LNG)
+        rows = self._rows(client, session)
+        self.assertNotIn("latitude", rows[0])
+        self.assertNotIn("longitude", rows[0])

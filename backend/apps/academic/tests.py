@@ -505,3 +505,190 @@ class SingleActiveConcurrencyTests(TransactionTestCase):
             AttendanceSession.objects.filter(scheduled_class=clase, is_active=True).count(), 1
         )
         self.assertEqual(errors, [])
+
+
+class GeofenceTests(TestCase):
+    """Rango del salón (geocerca): solo presencial; se deriva del status."""
+
+    COORDS = {"latitude": 4.0915, "longitude": -75.2315, "accuracy": 12.5}
+
+    def _setup(self, email, modality="PRESENTIAL", status=ClassStatus.IN_PROGRESS):
+        user, _, group = _make_prof_group(email=email)
+        clase = _make_class(group, start_delta_min=-1, status=status)
+        clase.modality = modality
+        clase.save(update_fields=["modality"])
+        client = APIClient()
+        client.force_login(user)
+        url = f"/api/academic/groups/{group.id}/classes/{clase.id}/geofence/"
+        return user, group, clase, client, url
+
+    def test_fix_geofence_persists_and_activates(self):
+        _, _, clase, client, url = self._setup("g1@ut.edu.co")
+        resp = client.post(url, self.COORDS, format="json")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.data["geofence_active"])
+        self.assertEqual(resp.data["geofence_radius_m"], 25)
+        # Las coordenadas del salón NUNCA salen por API.
+        self.assertNotIn("geofence_lat", resp.data)
+        self.assertNotIn("geofence_lng", resp.data)
+        clase.refresh_from_db()
+        self.assertIsNotNone(clase.geofence_lat)
+        self.assertIsNotNone(clase.geofence_lng)
+        self.assertIsNotNone(clase.geofence_activated_at)
+        self.assertTrue(clase.geofence_active)
+
+    def test_geofence_is_idempotent_and_replaces(self):
+        _, _, clase, client, url = self._setup("g2@ut.edu.co")
+        client.post(url, self.COORDS, format="json")
+        clase.refresh_from_db()
+        first_lat = clase.geofence_lat
+        segunda = dict(self.COORDS, latitude=4.5, longitude=-75.5)
+        resp = client.post(url, segunda, format="json")
+        self.assertEqual(resp.status_code, 200)
+        clase.refresh_from_db()
+        self.assertNotEqual(clase.geofence_lat, first_lat)
+        self.assertTrue(clase.geofence_active)
+
+    def test_virtual_class_rejects_geofence(self):
+        _, _, clase, client, url = self._setup("g3@ut.edu.co", modality="VIRTUAL")
+        resp = client.post(url, self.COORDS, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("presenciales", resp.data["error"])
+        clase.refresh_from_db()
+        self.assertIsNone(clase.geofence_lat)
+        self.assertFalse(clase.geofence_active)
+
+    def test_virtual_class_never_shows_active_flag(self):
+        # Coordenadas residuales jamás activan el rango en una clase mediada.
+        _, _, clase, client, url = self._setup("g4@ut.edu.co", modality="VIRTUAL")
+        clase.geofence_lat = 4.09
+        clase.geofence_lng = -75.23
+        clase.save(update_fields=["geofence_lat", "geofence_lng"])
+        resp = client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.data["geofence_active"])
+
+    def test_completed_class_conflict(self):
+        _, _, clase, client, url = self._setup("g5@ut.edu.co", status=ClassStatus.COMPLETED)
+        resp = client.post(url, self.COORDS, format="json")
+        self.assertEqual(resp.status_code, 409)
+        clase.refresh_from_db()
+        self.assertIsNone(clase.geofence_lat)
+
+    def test_missing_coordinates_returns_400(self):
+        _, _, clase, client, url = self._setup("g6@ut.edu.co")
+        resp = client.post(url, {"latitude": None, "longitude": None}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        clase.refresh_from_db()
+        self.assertIsNone(clase.geofence_lat)
+
+    def test_scheduled_class_without_window_is_allowed(self):
+        # Programada aún SCHEDULED: el profesor puede fijar el rango antes de
+        # la hora si así lo decide (el estado activo depende del status).
+        _, _, clase, client, url = self._setup("g7@ut.edu.co", status=ClassStatus.SCHEDULED)
+        resp = client.post(url, self.COORDS, format="json")
+        self.assertEqual(resp.status_code, 200)
+        clase.refresh_from_db()
+        self.assertIsNotNone(clase.geofence_lat)
+        self.assertFalse(clase.geofence_active)  # aún no inicia
+
+    def test_geofence_turns_off_when_class_completes(self):
+        # Se "apaga solo": sin cron, derivando del status al cerrar la clase.
+        from apps.academic.services import _close_class
+
+        _, _, clase, client, url = self._setup("g8@ut.edu.co")
+        client.post(url, self.COORDS, format="json")
+        clase.refresh_from_db()
+        self.assertTrue(clase.geofence_active)
+        _close_class(clase)
+        clase.refresh_from_db()
+        self.assertFalse(clase.geofence_active)
+
+    def test_other_professor_404(self):
+        _, _, clase, client, url = self._setup("g9@ut.edu.co")
+        other_user, _, _ = _make_prof_group(email="g10@ut.edu.co")
+        other = APIClient()
+        other.force_login(other_user)
+        self.assertEqual(other.get(url).status_code, 404)
+        self.assertEqual(other.post(url, self.COORDS, format="json").status_code, 404)
+        # Sin tocar la clase ajena.
+        clase.refresh_from_db()
+        self.assertIsNone(clase.geofence_lat)
+
+    def test_student_403(self):
+        _, _, clase, client, url = self._setup("g11@ut.edu.co")
+        student = APIClient()
+        student.force_login(_make_student(email="g-est@ut.edu.co"))
+        self.assertEqual(student.get(url).status_code, 403)
+        self.assertEqual(student.post(url, self.COORDS, format="json").status_code, 403)
+
+    def test_anonymous_401(self):
+        _, _, clase, client, url = self._setup("g12@ut.edu.co")
+        anon = APIClient()
+        self.assertIn(anon.get(url).status_code, (401, 403))
+        self.assertIn(anon.post(url, self.COORDS, format="json").status_code, (401, 403))
+
+
+class InstantClassGeofenceTests(TestCase):
+    """B3 + geocerca: la instantánea presencial fija el rango automáticamente."""
+
+    COORDS = {
+        "geofence_latitude": 4.0915,
+        "geofence_longitude": -75.2315,
+        "geofence_accuracy": 9.0,
+    }
+
+    def _client(self, email):
+        user, _, group = _make_prof_group(email=email)
+        client = APIClient()
+        client.force_login(user)
+        return user, group, client
+
+    def test_presential_instant_persists_geofence(self):
+        _, group, client = self._client("i1@ut.edu.co")
+        resp = client.post(
+            f"/api/academic/groups/{group.id}/classes/instant/",
+            {**self.COORDS, "modality": "PRESENTIAL"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertTrue(resp.data["class"]["geofence_active"])
+        clase = ScheduledClass.objects.get(pk=resp.data["class"]["id"])
+        self.assertIsNotNone(clase.geofence_lat)
+        self.assertIsNotNone(clase.geofence_activated_at)
+
+    def test_virtual_instant_ignores_geofence(self):
+        _, group, client = self._client("i2@ut.edu.co")
+        resp = client.post(
+            f"/api/academic/groups/{group.id}/classes/instant/",
+            {**self.COORDS, "modality": "VIRTUAL"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.data["class"]["modality"], "VIRTUAL")
+        self.assertFalse(resp.data["class"]["geofence_active"])
+        clase = ScheduledClass.objects.get(pk=resp.data["class"]["id"])
+        self.assertIsNone(clase.geofence_lat)
+        self.assertIsNone(clase.geofence_lng)
+
+    def test_presential_instant_without_gps_creates_without_range(self):
+        # RNF-06: el GPS nunca impide dar clase; se crea sin rango.
+        _, group, client = self._client("i3@ut.edu.co")
+        resp = client.post(
+            f"/api/academic/groups/{group.id}/classes/instant/",
+            {"modality": "PRESENTIAL"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertFalse(resp.data["class"]["geofence_active"])
+        clase = ScheduledClass.objects.get(pk=resp.data["class"]["id"])
+        self.assertIsNone(clase.geofence_lat)
+
+    def test_invalid_modality_rejected(self):
+        _, group, client = self._client("i4@ut.edu.co")
+        resp = client.post(
+            f"/api/academic/groups/{group.id}/classes/instant/",
+            {"modality": "PRESENCIAL"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)

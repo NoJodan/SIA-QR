@@ -98,7 +98,7 @@ export default function ProfConfiguraciones({ user, onSaved }) {
               maxLength={100}
               onChange={(e) => setDepartment(e.target.value)}
               className={inputClass}
-              placeholder="No asignado"
+              placeholder="Ej. Ingeniería de Sistemas"
             />
           </div>
 

@@ -16,12 +16,13 @@ from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.academic.models import AcademicGroup, ClassStatus, Course, ScheduledClass
+from apps.academic.models import AcademicGroup, ClassModality, ClassStatus, Course, ScheduledClass
 from apps.academic.pagination import StandardResultsPagination
 from apps.academic.permissions import IsProfessor
 from apps.academic.serializers import (
     AcademicGroupSerializer,
     AcademicGroupWriteSerializer,
+    ClassGeofenceSerializer,
     ScheduledClassSerializer,
 )
 from apps.authentication.views import IsAdminUserRole, SessionAuthentication401
@@ -169,6 +170,77 @@ class ScheduledClassDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_update(self, serializer):
         clase = serializer.save()
         _revoke_active_sessions(clase)
+
+
+class ClassGeofenceView(generics.GenericAPIView):
+    """Rango del salón: fija (o reubica) la referencia GPS de una clase
+    presencial. Solo aplica a PRESENTIAL; se "apaga" solo al finalizar la
+    clase (geofence_active se deriva del status, sin cron ni tareas).
+
+    POST .../geofence/ (profesor dueño, CON CSRF por ser mutación):
+    - 200: rango fijado/actualizado (idempotente: un POST posterior
+      sobrescribe la ubicación, útil para reintentar si falló el GPS de la
+      instantánea o si el profesor se movió de salón).
+    - 400: modalidad no presencial, o sin coordenadas utilizables (permiso
+      denegado/no soportado).
+    - 409: clase finalizada o cancelada.
+    - 404 si el grupo/clase no existe o es de otro profesor.
+
+    GET sobre la misma ruta devuelve el estado (sin coordenadas)."""
+
+    authentication_classes = _AUTH
+    permission_classes = _PERMS
+
+    def get_clase(self, group_id, class_id):
+        prof = getattr(self.request.user, "professor_profile", None)
+        group = get_object_or_404(AcademicGroup, pk=group_id, professor=prof)
+        return get_object_or_404(ScheduledClass, pk=class_id, group=group)
+
+    def _payload(self, clase):
+        return {
+            "geofence_active": clase.geofence_active,
+            "geofence_radius_m": clase.geofence_radius_m,
+            "geofence_activated_at": clase.geofence_activated_at,
+            "status": clase.status,
+            "modality": clase.modality,
+        }
+
+    def get(self, request, group_id, class_id):
+        clase = self.get_clase(group_id, class_id)
+        return Response(
+            self._payload(clase),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    def post(self, request, group_id, class_id):
+        clase = self.get_clase(group_id, class_id)
+
+        if clase.modality != ClassModality.PRESENTIAL:
+            return Response(
+                {"error": "El rango de ubicación solo aplica a clases presenciales."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if clase.status in (ClassStatus.COMPLETED, ClassStatus.CANCELLED):
+            return Response(
+                {"error": "La clase ya finalizó, no se puede activar el rango."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        ser = ClassGeofenceSerializer(data=request.data or {})
+        ser.is_valid(raise_exception=True)
+        lat = ser.validated_data.get("latitude")
+        lng = ser.validated_data.get("longitude")
+        if lat is None or lng is None:
+            return Response(
+                {"error": "No se pudo obtener tu ubicación, revisa el permiso del navegador."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        clase.geofence_lat = lat
+        clase.geofence_lng = lng
+        clase.geofence_activated_at = timezone.now()
+        clase.save(update_fields=["geofence_lat", "geofence_lng", "geofence_activated_at", "updated_at"])
+        return Response(ScheduledClassSerializer(clase).data)
 
 
 # --- Vistas admin (solo lectura de cursos + edición de clases, sin post/delete) ---
@@ -342,6 +414,22 @@ class InstantClassCreateView(generics.GenericAPIView):
                 {"error": "Modalidad inválida (PRESENTIAL o VIRTUAL)."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # Geocerca automática (solo presencial): coords tolerantes. Si no
+        # llegan o son inválidas, la clase se crea igual sin rango (RNF-06:
+        # el GPS nunca impide dar clase); el profesor puede reintentar con
+        # el POST .../geofence/.
+        geofence_lat = geofence_lng = None
+        if modality == "PRESENTIAL":
+            geo_ser = ClassGeofenceSerializer(
+                data={
+                    "latitude": request.data.get("geofence_latitude"),
+                    "longitude": request.data.get("geofence_longitude"),
+                    "accuracy": request.data.get("geofence_accuracy"),
+                }
+            )
+            if geo_ser.is_valid():
+                geofence_lat = geo_ser.validated_data.get("latitude")
+                geofence_lng = geo_ser.validated_data.get("longitude")
         try:
             duration = int(request.data.get("duration_minutes") or 60)
         except (TypeError, ValueError):
@@ -365,6 +453,9 @@ class InstantClassCreateView(generics.GenericAPIView):
                 duration_minutes=duration,
                 modality=modality,
                 status=ClassStatus.IN_PROGRESS,
+                geofence_lat=geofence_lat,
+                geofence_lng=geofence_lng,
+                geofence_activated_at=dj_timezone.now() if geofence_lat is not None else None,
             )
             try:
                 result = generate_session(clase, ttl_override=ttl_override)
