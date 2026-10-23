@@ -173,6 +173,8 @@ function StudentProfileForm({ initial, onSaved, notice }) {
               value={form[key]}
               onChange={set(key)}
               maxLength={numeric ? NUMERIC_MAX[key] : key === "address" ? 500 : 50}
+              minLength={key === "phone_number" ? 7 : undefined}
+              required
               aria-invalid={Boolean(errors[key])}
               aria-describedby={errors[key] ? `student-${key}-error` : undefined}
             />
