@@ -5,36 +5,44 @@ import AdminLogin from "./pages/AdminLogin";
 import AttendQR from "./pages/AttendQR";
 import AdminLayout from "./components/AdminLayout";
 import ProfLayout from "./components/ProfLayout";
-import api, { API_BASE } from "./services/api";
+import api from "./services/api";
 
 function MainApp() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const fetchCurrentUser = () => {
+  const fetchCurrentUser = (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    setError("");
     api
       .get("/api/auth/me/")
-      .then((res) => {
-        setUser(res.data);
-        setLoading(false);
+      .then((res) => setUser(res.data))
+      .catch((err) => {
+        const status = err?.response?.status;
+        if (status === 401 || status === 403) {
+          setUser(null);
+        } else {
+          setError("No se pudo conectar con el servidor.");
+        }
       })
-      .catch(() => {
-        setUser(null);
-        setLoading(false);
-      });
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    fetchCurrentUser();
+    fetchCurrentUser(true);
+    // El interceptor de api.js avisa aquí cuando otra petición recibe 401.
+    const onUnauthorized = () => setUser(null);
+    window.addEventListener("siaqr:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("siaqr:unauthorized", onUnauthorized);
   }, []);
 
   const handleLogout = async () => {
     try {
       // api con withXSRFToken: el POST lleva X-CSRFToken (C1).
       await api.post("/api/auth/logout/");
-    } catch (e) {
+    } catch {
       // Ignoramos error y limpiamos estado
-      void API_BASE;
     } finally {
       setUser(null);
       window.location.href = "/";
@@ -45,6 +53,20 @@ function MainApp() {
     return (
       <div className="min-h-dvh flex items-center justify-center">
         <p className="text-gray-500">Cargando...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-dvh flex flex-col items-center justify-center space-y-4 bg-gray-50 p-4 text-center">
+        <p className="text-gray-700">{error}</p>
+        <button
+          onClick={() => fetchCurrentUser(true)}
+          className="px-4 py-2 bg-[#B3200E] hover:bg-[#941B0B] text-white rounded-lg text-sm font-medium transition-colors"
+        >
+          Reintentar
+        </button>
       </div>
     );
   }

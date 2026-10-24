@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from apps.attendance.models import Attendance, AttendanceSession, SystemConfig
+from apps.attendance.models import Attendance, AttendanceSession, AuditLog, SystemConfig
 
 
 @admin.register(SystemConfig)
@@ -20,3 +20,20 @@ class AttendanceSessionAdmin(admin.ModelAdmin):
 class AttendanceAdmin(admin.ModelAdmin):
     list_display = ["id", "session", "student", "registered_at", "ip_address"]
     search_fields = ["student__student_code", "student__document_number"]
+
+
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = ["created_at", "event_type", "actor", "resource", "ip_address"]
+    list_filter = ["event_type", "created_at"]
+    search_fields = ["resource", "actor__email"]
+    readonly_fields = [field.name for field in AuditLog._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

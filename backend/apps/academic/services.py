@@ -12,15 +12,19 @@ sesión vigente (S1) de una clase programada sin intervención del profesor:
 - `get_valid_session()` -> sesión activa no expirada (o None).
 - `ensure_current_session()` -> máquina pending/live/expired/finished
   idempotente, sin auto-rotación (QR único por clase).
+
+Los listados de clases sincronizan sus estados de forma perezosa antes de
+filtrar (`sync_class_statuses`), mismo patrón que `ensure_current_session`.
 """
 
 from datetime import timedelta
 
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
+from django.db.models import DateTimeField, DurationField, ExpressionWrapper, F, Func
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from apps.academic.models import ClassStatus
+from apps.academic.models import ClassStatus, ScheduledClass
 
 # Gracia previa por defecto: el QR aparece hasta 30s antes del inicio.
 # Fuente prioritaria: SystemConfig[EARLY_QR_GRACE_SECONDS] (0-300) >
@@ -78,6 +82,71 @@ def class_window(clase):
     start = _ensure_aware(clase.start_time)
     end = start + timedelta(minutes=clase.duration_minutes)
     return start, end
+
+
+def sync_class_statuses(base_queryset):
+    """Alinea el status persistido con el reloj antes de listar/filtrar.
+
+    Recibe un queryset de `ScheduledClass` ya acotado (grupo o admin global):
+    1. SCHEDULED/IN_PROGRESS con `start_time + duration_minutes` ya pasado ->
+       COMPLETED (revoca sus sesiones activas).
+    2. SCHEDULED ya iniciada -> IN_PROGRESS (después del paso 1, para que una
+       clase que empezó y terminó entre requests quede COMPLETED).
+    CANCELLED/COMPLETED no se tocan. No devuelve nada.
+    """
+    from apps.attendance.models import AttendanceSession
+
+    now = timezone.now()
+    interval = Func(
+        F("duration_minutes"),
+        function="make_interval",
+        template="make_interval(mins => %(expressions)s)",
+        output_field=DurationField(),
+    )
+    ends_at = ExpressionWrapper(F("start_time") + interval, output_field=DateTimeField())
+
+    with transaction.atomic():
+        ended_ids = list(
+            base_queryset.filter(
+                status__in=(ClassStatus.SCHEDULED, ClassStatus.IN_PROGRESS)
+            )
+            .annotate(ends_at=ends_at)
+            .filter(ends_at__lte=now)
+            .values_list("id", flat=True)
+        )
+        if ended_ids:
+            # Mismo orden de locks que ensure/rotate: clase -> sesión (evita deadlock).
+            # Se repite la condición de fin en el UPDATE: si un PATCH concurrente
+            # movió la clase al futuro entre el SELECT y el UPDATE, no se completa.
+            ScheduledClass.objects.filter(pk__in=ended_ids).annotate(
+                ends_at=ends_at
+            ).filter(ends_at__lte=now).update(
+                status=ClassStatus.COMPLETED, updated_at=now
+            )
+            AttendanceSession.objects.filter(
+                scheduled_class_id__in=ended_ids, is_active=True
+            ).update(is_active=False)
+        base_queryset.filter(
+            status=ClassStatus.SCHEDULED, start_time__lte=now
+        ).update(status=ClassStatus.IN_PROGRESS, updated_at=now)
+
+
+def reopen_completed_if_future(clase):
+    """Reabre una clase COMPLETED cuya ventana quedó en el futuro.
+
+    El listado auto-cierra las clases pasadas; si un PATCH reprograma la clase
+    al futuro, sin esto quedaría COMPLETED y `current-session` respondería 410
+    para siempre. CANCELLED no se revive (la cancelación es intencional).
+    """
+    if clase.status != ClassStatus.COMPLETED:
+        return clase
+    now = timezone.now()
+    start, end = class_window(clase)
+    if end <= now:
+        return clase
+    clase.status = ClassStatus.IN_PROGRESS if start <= now else ClassStatus.SCHEDULED
+    clase.save(update_fields=["status", "updated_at"])
+    return clase
 
 
 def should_auto_start(clase, now=None):
@@ -178,40 +247,44 @@ def ensure_current_session(clase):
             "start_time": start,
         }
 
-    # En ventana (incluye gracia previa): reusar si hay sesión válida.
-    session = get_valid_session(clase, now)
-    if session is not None:
-        return {"outcome": "live", "session": session, "created": False, "result": None}
+    # En ventana (incluye gracia previa): el lock serializa polls
+    # concurrentes (select_for_update no bloquea filas inexistentes).
+    with transaction.atomic():
+        clase = ScheduledClass.objects.select_for_update().get(pk=clase.pk)
 
-    # QR único sin auto-rotación: si ya hubo alguna sesión, no generar S2.
-    from apps.attendance.models import AttendanceSession as _AS
+        session = get_valid_session(clase, timezone.now())
+        if session is not None:
+            return {"outcome": "live", "session": session, "created": False, "result": None}
 
-    has_ever = _AS.objects.filter(scheduled_class=clase).exists()
-    if has_ever:
-        last = (
-            _AS.objects.filter(scheduled_class=clase)
-            .order_by("-created_at")
-            .first()
-        )
-        # Revoca remanentes activos expirados (higiene single-active).
-        _revoke_sessions(clase)
-        return {
-            "outcome": "expired",
-            "status": clase.status,
-            "reason": "qr_expired",
-            "session_id": str(last.id) if last is not None else None,
-            "expires_at": last.expires_at if last is not None else None,
-        }
+        # QR único sin auto-rotación: si ya hubo alguna sesión, no generar S2.
+        from apps.attendance.models import AttendanceSession as _AS
 
-    # Nunca hubo sesión: crear S1 una vez. generate_session revoca previas
-    # (vacías aquí) y pasa SCHEDULED -> IN_PROGRESS.
-    try:
-        result = generate_session(clase)
-    except (IntegrityError, ValidationError):
-        # Carrera de single-active o colisión de token: la otra transacción
-        # pudo dejar una sesión válida -> reusarla (nunca 500 en el poll).
-        fresh = get_valid_session(clase, timezone.now())
-        if fresh is not None:
-            return {"outcome": "live", "session": fresh, "created": False, "result": None}
-        raise ValidationError("No se pudo generar el código QR, intenta de nuevo.")
-    return {"outcome": "live", "session": result["session"], "created": True, "result": result}
+        has_ever = _AS.objects.filter(scheduled_class=clase).exists()
+        if has_ever:
+            last = (
+                _AS.objects.filter(scheduled_class=clase)
+                .order_by("-created_at")
+                .first()
+            )
+            # Revoca remanentes activos expirados (higiene single-active).
+            _revoke_sessions(clase)
+            return {
+                "outcome": "expired",
+                "status": clase.status,
+                "reason": "qr_expired",
+                "session_id": str(last.id) if last is not None else None,
+                "expires_at": last.expires_at if last is not None else None,
+            }
+
+        # Nunca hubo sesión: crear S1 una vez. generate_session revoca previas
+        # (vacías aquí) y pasa SCHEDULED -> IN_PROGRESS.
+        try:
+            result = generate_session(clase)
+        except (IntegrityError, ValidationError):
+            # Carrera de single-active o colisión de token: la otra transacción
+            # pudo dejar una sesión válida -> reusarla (nunca 500 en el poll).
+            fresh = get_valid_session(clase, timezone.now())
+            if fresh is not None:
+                return {"outcome": "live", "session": fresh, "created": False, "result": None}
+            raise ValidationError("No se pudo generar el código QR, intenta de nuevo.")
+        return {"outcome": "live", "session": result["session"], "created": True, "result": result}

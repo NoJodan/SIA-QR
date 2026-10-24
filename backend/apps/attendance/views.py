@@ -4,21 +4,23 @@ from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, status
-from rest_framework.exceptions import NotAuthenticated
+from rest_framework.exceptions import NotAuthenticated, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.academic.models import ClassStatus
 from apps.academic.pagination import StandardResultsPagination
-from apps.attendance.models import Attendance, AttendanceSession
+from apps.attendance.models import Attendance, AttendanceSession, AuditLog
 from apps.attendance.permissions import IsOwnerProfessor
 from apps.attendance.serializers import (
     AttendanceListSerializer,
+    AuditLogSerializer,
     MarkAttendanceSerializer,
 )
+from apps.attendance.services import _client_ip, log_event
 from apps.authentication.models import Student, UserRole
-from apps.authentication.views import SessionAuthentication401
+from apps.authentication.views import IsAdminUserRole, SessionAuthentication401
 
 _AUTH = [SessionAuthentication401]
 
@@ -34,13 +36,6 @@ class Auth401Mixin:
 
 def _hash_token(raw):
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-
-def _client_ip(request):
-    xff = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    if xff:
-        return xff.split(",")[0].strip()[:45]
-    return (request.META.get("REMOTE_ADDR") or "")[:45]
 
 
 def _student_profile_complete(student):
@@ -77,6 +72,13 @@ def _get_student_profile(user):
 
 def _class_is_closed(clase):
     return getattr(clase, "status", None) in (ClassStatus.COMPLETED, ClassStatus.CANCELLED)
+
+
+def _class_window_elapsed(clase):
+    """La ventana terminó aunque el status aún no se haya cerrado."""
+    from apps.academic.services import class_window
+
+    return timezone.now() >= class_window(clase)[1]
 
 
 def _session_payload(session, already_marked=False, needs_profile=False):
@@ -177,6 +179,15 @@ class ResolveTokenView(Auth401Mixin, APIView):
                 {"error": "La clase ya finalizó o fue cancelada."},
                 status=status.HTTP_410_GONE,
             )
+        if _class_window_elapsed(session.scheduled_class):
+            return Response(
+                {
+                    "error": "La clase ya finalizó, el código QR no es válido.",
+                    "state": "finished",
+                    "reason": "window_elapsed",
+                },
+                status=status.HTTP_410_GONE,
+            )
         already_marked = False
         needs_profile = False
         if request.user.role == UserRole.ROLE_STUDENT:
@@ -227,6 +238,11 @@ class MarkAttendanceView(Auth401Mixin, APIView):
                 {"error": "La clase ya finalizó o fue cancelada, no se aceptan marcaciones."},
                 status=status.HTTP_409_CONFLICT,
             )
+        if _class_window_elapsed(session.scheduled_class):
+            return Response(
+                {"error": "La clase ya finalizó, no se aceptan marcaciones."},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         # M1: sin perfil real no hay marcación (412 + needs_profile).
         student = _get_student_profile(user)
@@ -274,7 +290,56 @@ class MarkAttendanceView(Auth401Mixin, APIView):
             "registered_at": attendance.registered_at,
             "already_marked": not created,
         }
+        log_event(
+            user,
+            "attendance_marked" if created else "attendance_duplicate",
+            f"session:{session.id}",
+            request=request,
+            payload={
+                "attendance_id": str(attendance.id),
+                "class_id": str(session.scheduled_class_id),
+            },
+        )
         return Response(
             data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
+
+
+class AuditLogListView(generics.ListAPIView):
+    """RF-ADM-07: consulta paginada de auditoría (solo administradores).
+
+    Filtros opcionales: event_type, resource y rango de fechas from/to
+    (AAAA-MM-DD, inclusivo por día en America/Bogota).
+    """
+
+    authentication_classes = _AUTH
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    serializer_class = AuditLogSerializer
+    pagination_class = StandardResultsPagination
+
+    def get_queryset(self):
+        from django.utils.dateparse import parse_date
+
+        from apps.attendance.reports import _day_bounds
+
+        qs = AuditLog.objects.select_related("actor").order_by("-created_at")
+        params = self.request.query_params
+        if params.get("event_type"):
+            qs = qs.filter(event_type=params["event_type"])
+        if params.get("resource"):
+            qs = qs.filter(resource=params["resource"])
+        for key, lookup, end in (("from", "gte", False), ("to", "lte", True)):
+            raw = params.get(key)
+            if not raw:
+                continue
+            try:
+                day = parse_date(raw)
+            except ValueError:
+                day = None
+            if day is None:
+                raise ValidationError(
+                    {key: "Formato de fecha inválido, usa AAAA-MM-DD."}
+                )
+            qs = qs.filter(**{f"created_at__{lookup}": _day_bounds(day, end=end)})
+        return qs

@@ -2,11 +2,21 @@ import React, { useCallback, useEffect, useState } from "react";
 import api, { ensureCsrf, googleLoginUrl } from "../services/api";
 import { markAttendance, resolveToken } from "../services/attendance";
 import { formatBogota } from "../utils/dates";
+import { getDevicePosition } from "../utils/geolocation";
 import logo from "../assets/logo.png";
 import "./AttendQR.css";
 
-const GEO_TIMEOUT_MS = 8000;
+// El token vive en sessionStorage (alcance de pestaña) y se borra en cuanto
+// deja de ser utilizable (ya marcado, QR inválido/expirado).
 const PENDING_TOKEN_KEY = "siaqr_pending_token";
+
+const clearPendingToken = () => {
+  try {
+    window.sessionStorage.removeItem(PENDING_TOKEN_KEY);
+  } catch {
+    // sin almacenamiento: nada que limpiar
+  }
+};
 
 function readToken() {
   const fromUrl = new URLSearchParams(window.location.search).get("token") || "";
@@ -14,37 +24,17 @@ function readToken() {
     // M4: guarda el token antes de cualquier redirección a Google para
     // reanudar /attend al volver aunque se pierda el ?next=.
     try {
-      localStorage.setItem(PENDING_TOKEN_KEY, fromUrl);
+      window.sessionStorage.setItem(PENDING_TOKEN_KEY, fromUrl);
     } catch {
       // almacenamiento no disponible: se sigue con el token de la URL
     }
     return fromUrl;
   }
   try {
-    return localStorage.getItem(PENDING_TOKEN_KEY) || "";
+    return window.sessionStorage.getItem(PENDING_TOKEN_KEY) || "";
   } catch {
     return "";
   }
-}
-
-function requestLocation(setGeo, setGeoState) {
-  if (!("geolocation" in navigator)) {
-    setGeoState("unsupported");
-    return;
-  }
-  setGeoState("pending");
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      setGeo({
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
-        accuracy: pos.coords.accuracy ?? null,
-      });
-      setGeoState("ready");
-    },
-    () => setGeoState("denied"), // NO bloqueante: se marca sin ubicación
-    { enableHighAccuracy: true, timeout: GEO_TIMEOUT_MS, maximumAge: 60000 }
-  );
 }
 
 function fieldError(data, key) {
@@ -258,6 +248,7 @@ export default function AttendQR() {
       setSession(data);
       if (data.needs_profile) setShowProfileForm(true);
       if (data.already_marked) {
+        clearPendingToken();
         setPhase("already");
       } else {
         setPhase("ready");
@@ -267,9 +258,11 @@ export default function AttendQR() {
       if (st === 401) {
         setPhase("login");
       } else if (st === 404) {
+        clearPendingToken();
         setError("El código QR no es válido.");
         setPhase("error");
       } else if (st === 410) {
+        clearPendingToken();
         setError(
           err?.response?.data?.error || "El código QR expiró o la clase ya finalizó."
         );
@@ -293,9 +286,17 @@ export default function AttendQR() {
   }, [resolve]);
 
   // La geolocalización solo se solicita cuando el QR ya está listo para
-  // marcar (no al resolver ni en login/error).
+  // marcar (no al resolver ni en login/error). NO bloqueante: si falla se
+  // marca sin ubicación.
   useEffect(() => {
-    if (phase === "ready") requestLocation(setGeo, setGeoState);
+    if (phase !== "ready") return;
+    setGeoState("pending");
+    getDevicePosition()
+      .then((pos) => {
+        setGeo(pos);
+        setGeoState("ready");
+      })
+      .catch(() => setGeoState("denied"));
   }, [phase]);
 
   const handleMark = async () => {
@@ -312,11 +313,7 @@ export default function AttendQR() {
       accuracy: geoReady ? toFixedOrNull(geo.accuracy, 2) : null,
     };
     const finishOk = (data) => {
-      try {
-        localStorage.removeItem(PENDING_TOKEN_KEY);
-      } catch {
-        // sin almacenamiento: nada que limpiar
-      }
+      clearPendingToken();
       setResult(data);
       setPhase(data.already_marked ? "already" : "done");
     };
@@ -329,6 +326,7 @@ export default function AttendQR() {
       if (st === 401) {
         setPhase("login");
       } else if (st === 404) {
+        clearPendingToken();
         setError("El código QR no es válido.");
         setPhase("error");
       } else if (st === 400) {
@@ -362,11 +360,13 @@ export default function AttendQR() {
               return;
             }
             if (rst === 404) {
+              clearPendingToken();
               setError("El código QR no es válido.");
               setPhase("error");
               return;
             }
             if (rst === 409 || rst === 410) {
+              clearPendingToken();
               setError(
                 rdata?.error ||
                   "El código expiró o ya registraste tu asistencia."
@@ -405,6 +405,7 @@ export default function AttendQR() {
           .then((r) => setUser(r.data))
           .catch(() => {});
       } else if (st === 409 || st === 410) {
+        clearPendingToken();
         setError(
           err?.response?.data?.error || "El código expiró o ya registraste tu asistencia."
         );
@@ -497,7 +498,7 @@ export default function AttendQR() {
               onClick={() => {
                 // M4: respaldo local por si el ?next= no sobrevive al OAuth.
                 try {
-                  localStorage.setItem(PENDING_TOKEN_KEY, token);
+                  window.sessionStorage.setItem(PENDING_TOKEN_KEY, token);
                 } catch {
                   // sin almacenamiento: el ?next= sigue siendo el camino principal
                 }

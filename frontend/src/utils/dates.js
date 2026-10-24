@@ -21,18 +21,33 @@ export function combineDateTimeToISO(date, time) {
   return `${date}T${time}:00-05:00`;
 }
 
-// ISO del momento actual en hora de Bogotá (offset fijo -05:00, sin DST).
-export function nowBogotaISO() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
+// Fecha y hora numéricas de Bogotá (dd/mm/aaaa, hh:mm).
+export function formatBogotaNumeric(isoString) {
+  if (!isoString) return "";
+  return new Intl.DateTimeFormat("es-CO", {
+    timeZone: "America/Bogota",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(isoString));
+}
+
+// Separa un ISO en fecha y hora locales de Bogotá (para inputs date/time).
+export function isoToBogotaDateTime(iso) {
+  const d = new Date(iso);
+  const date = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Bogota",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
+  }).format(d);
+  const time = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Bogota",
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
     hour12: false,
-  }).formatToParts(new Date());
-  const get = (t) => parts.find((p) => p.type === t)?.value;
-  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}-05:00`;
+  }).format(d);
+  return { date, time };
 }

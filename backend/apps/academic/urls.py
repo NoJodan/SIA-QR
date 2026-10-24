@@ -8,7 +8,6 @@ from apps.academic.views import (
     ClassCurrentSessionRotateView,
     ClassCurrentSessionView,
     ClassGeofenceView,
-    ClassSessionCreateView,
     InstantClassCreateView,
     MyGroupDetailView,
     MyGroupsListView,
@@ -33,13 +32,6 @@ urlpatterns = [
         "groups/<uuid:group_id>/classes/<uuid:class_id>/geofence/",
         ClassGeofenceView.as_view(),
         name="group-class-geofence",
-    ),
-    # A1: generar sesión QR sobre una clase (profesor dueño, single-active).
-    # Se mantiene como fallback interno; la UI usa current-session (automático).
-    path(
-        "groups/<uuid:group_id>/classes/<uuid:class_id>/sessions/",
-        ClassSessionCreateView.as_view(),
-        name="group-class-sessions",
     ),
     # QR automático: sesión vigente idempotente (pending/live/finished).
     path(

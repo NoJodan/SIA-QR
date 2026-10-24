@@ -11,12 +11,6 @@ class CourseSerializer(serializers.ModelSerializer):
         fields = ["id", "code", "name", "description"]
 
 
-class ProfessorBriefSerializer(serializers.Serializer):
-    full_name = serializers.CharField()
-    employee_code = serializers.CharField()
-    email = serializers.EmailField()
-
-
 class AcademicGroupSerializer(serializers.ModelSerializer):
     course = CourseSerializer(read_only=True)
     professor = serializers.SerializerMethodField()
@@ -65,18 +59,6 @@ class ScheduledClassSerializer(serializers.ModelSerializer):
     def get_end_time(self, obj):
         return obj.start_time + timezone.timedelta(minutes=obj.duration_minutes)
 
-
-class ClassGeofenceSerializer(serializers.Serializer):
-    """Coords del profesor para fijar el rango del salón (tolerante, RNF-06).
-
-    `accuracy` es informativo: se guarda solo como referencia, no se usa en
-    el cálculo del radio.
-    """
-
-    latitude = TolerantGeoField(decimal_places=8, min_value=-90, max_value=90)
-    longitude = TolerantGeoField(decimal_places=8, min_value=-180, max_value=180)
-    accuracy = TolerantGeoField(decimal_places=2, min_value=0, max_value=100000)
-
     def validate_duration_minutes(self, value):
         if value <= 0:
             raise serializers.ValidationError("La duración debe ser mayor a 0.")
@@ -97,3 +79,15 @@ class ClassGeofenceSerializer(serializers.Serializer):
         if value < timezone.now() - timezone.timedelta(minutes=5):
             raise serializers.ValidationError("La fecha de inicio no puede estar en el pasado.")
         return value
+
+
+class ClassGeofenceSerializer(serializers.Serializer):
+    """Coords del profesor para fijar el rango del salón (tolerante, RNF-06).
+
+    `accuracy` es informativo: se guarda solo como referencia, no se usa en
+    el cálculo del radio.
+    """
+
+    latitude = TolerantGeoField(decimal_places=8, min_value=-90, max_value=90)
+    longitude = TolerantGeoField(decimal_places=8, min_value=-180, max_value=180)
+    accuracy = TolerantGeoField(decimal_places=2, min_value=0, max_value=100000)

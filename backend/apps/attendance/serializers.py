@@ -2,7 +2,17 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from rest_framework import serializers
 
-from apps.attendance.models import Attendance
+from apps.attendance.models import Attendance, AuditLog
+
+
+class AuditLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AuditLog
+        fields = [
+            "id", "actor", "event_type", "resource", "ip_address", "payload",
+            "created_at",
+        ]
+        read_only_fields = fields
 
 
 class SessionCreateSerializer(serializers.Serializer):

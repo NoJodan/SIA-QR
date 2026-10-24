@@ -1,4 +1,5 @@
 import uuid
+from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 
 
@@ -89,3 +90,30 @@ class Attendance(models.Model):
 
     def __str__(self):
         return f"Asistencia {self.id} (sesión {self.session_id})"
+
+
+class AuditLog(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    actor = models.ForeignKey(
+        "authentication.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="audit_logs",
+        db_column="actor_id",
+    )
+    event_type = models.CharField(max_length=100)
+    resource = models.CharField(max_length=100)
+    ip_address = models.CharField(max_length=45, blank=True)
+    payload = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "audit_logs"
+        indexes = [
+            models.Index(fields=["event_type"], name="idx_audit_logs_event_type"),
+            models.Index(fields=["-created_at"], name="idx_audit_logs_created_at"),
+            GinIndex(fields=["payload"], name="idx_audit_logs_payload"),
+        ]
+
+    def __str__(self):
+        return f"{self.event_type} {self.resource}"

@@ -94,11 +94,15 @@ export default function Login() {
                 Ingresa con tu cuenta institucional para acceder a tus cursos y gestionar la asistencia.
               </p>
 
-            {error === "domain_not_allowed" && (
+              {error && (
                 <div className="portal-login-error" role="alert">
-                Solo se permiten correos del dominio institucional autorizado.
-              </div>
-            )}
+                  {error === "domain_not_allowed"
+                    ? "Solo se permiten correos del dominio institucional autorizado."
+                    : error === "account_exists"
+                      ? "Ya existe una cuenta con este correo. Vuelve a intentarlo con la misma cuenta de Google."
+                      : "No se pudo completar el inicio de sesión. Inténtalo de nuevo."}
+                </div>
+              )}
 
               <a className="portal-login-google" href={googleLoginUrl(next || undefined)}>
                 <span className="portal-login-google-icon" aria-hidden="true">

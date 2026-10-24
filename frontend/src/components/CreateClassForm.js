@@ -1,23 +1,6 @@
 import React, { useId, useState } from "react";
 import { adminUpdateGroupClass, createGroupClass, updateGroupClass } from "../services/academic";
-import { combineDateTimeToISO, todayISODate } from "../utils/dates";
-
-function isoToBogotaDateTime(iso) {
-  const d = new Date(iso);
-  const date = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Bogota",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(d);
-  const time = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "America/Bogota",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(d);
-  return { date, time };
-}
+import { combineDateTimeToISO, isoToBogotaDateTime, todayISODate } from "../utils/dates";
 
 export default function CreateClassForm({ groupId, initial = null, onCreated, onUpdated, onCancel, isAdmin = false }) {
   const seed = initial ? isoToBogotaDateTime(initial.start_time) : null;

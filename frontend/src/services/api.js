@@ -10,8 +10,6 @@ const isLocalDev =
 export const API_BASE = isLocalDev
   ? process.env.REACT_APP_API_BASE || "http://localhost:8000"
   : "";
-export const FRONTEND_BASE =
-  (typeof window !== "undefined" && window.location.origin) || "http://localhost:3000";
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -71,12 +69,18 @@ api.interceptors.request.use(async (config) => {
 // Reintento único ante 403 CSRF: el token en memoria puede desincronizarse
 // de la cookie (ej. login en el admin Django en otro tab rota el token).
 // Se refresca el token y se reintenta la petición una sola vez.
+// Política 401: la sesión de la SPA se limpia una vez (evento que escucha
+// App); /me y el login de admin gestionan su 401 en pantalla.
+const AUTH_EXEMPT = ["/api/auth/me/", "/api/auth/admin/login/"];
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const res = error?.response;
     const cfg = error?.config || {};
     const detail = res?.data?.detail || "";
+    if (res?.status === 401 && !AUTH_EXEMPT.some((p) => (cfg.url || "").includes(p))) {
+      window.dispatchEvent(new Event("siaqr:unauthorized"));
+    }
     if (res?.status === 403 && detail.includes("CSRF") && !cfg._csrfRetried) {
       cfg._csrfRetried = true;
       csrfReady = false;

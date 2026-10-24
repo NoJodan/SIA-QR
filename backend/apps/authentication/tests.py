@@ -64,6 +64,18 @@ class AuthenticationIntegrationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("domain_not_allowed", response.url)
 
+    def test_empty_allowed_domain_falls_back_to_institutional(self):
+        # Config existente pero vacía no debe bloquear todo el login.
+        SystemConfig.objects.create(config_key="ALLOWED_DOMAIN", config_value="   ")
+        adapter = InstitutionalGoogleAdapter()
+        account = SocialAccount(uid="sub-empty", extra_data={"email": "student@ut.edu.co"})
+        user = User(email="student@ut.edu.co")
+        sociallogin = SocialLogin(user=user, account=account)
+
+        adapter.pre_social_login(None, sociallogin)
+
+        self.assertEqual(sociallogin.user.email, "student@ut.edu.co")
+
     @override_settings(FRONTEND_URL="https://sia-qr.vercel.app")
     def test_google_callback_url_uses_frontend_domain(self):
         # El callback de Google debe ir por el dominio del SPA (proxy Vercel)
@@ -156,12 +168,38 @@ class ProfessorProfileUpdateTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
 
+    def test_patch_employee_code_race_returns_409(self):
+        from unittest.mock import patch
+
+        from django.db import IntegrityError
+
+        with patch(
+            "apps.authentication.models.Professor.save",
+            side_effect=IntegrityError("colisión"),
+        ):
+            response = self.client.patch(
+                "/api/auth/me/", {"employee_code": "UT-RACE"}, format="json"
+            )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.data["error"],
+            "Ese código de empleado ya está asignado a otro profesor",
+        )
+        self.prof.refresh_from_db()
+        self.assertEqual(self.prof.employee_code, "PROV-000001")
+
     def test_patch_rejects_empty_employee_code(self):
         response = self.client.patch("/api/auth/me/", {"employee_code": "   "}, format="json")
 
         self.assertEqual(response.status_code, 400)
         self.prof.refresh_from_db()
         self.assertEqual(self.prof.employee_code, "PROV-000001")
+
+    def test_patch_with_json_list_is_400(self):
+        response = self.client.patch("/api/auth/me/", [], format="json")
+
+        self.assertEqual(response.status_code, 400)
 
     def test_patch_forbidden_for_student(self):
         # M1: el PATCH de estudiante es el registro de perfil real

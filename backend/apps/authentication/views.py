@@ -1,5 +1,4 @@
 import re
-import uuid
 
 from django.contrib.auth import authenticate
 from django.contrib.auth import login as django_login
@@ -15,6 +14,7 @@ from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 
+from apps.attendance.services import log_event
 from apps.authentication.models import (
     AuthorizedProfessorEmail,
     Professor,
@@ -144,48 +144,14 @@ def admin_login_view(request):
         return Response(_GENERIC_ADMIN_LOGIN_ERROR, status=status.HTTP_401_UNAUTHORIZED)
 
     django_login(request, user)
+    log_event(
+        user,
+        "login_success",
+        f"user:{user.id}",
+        request=request,
+        payload={"method": "admin_password"},
+    )
     return Response(_me_payload(user), status=status.HTTP_200_OK)
-
-
-def _ensure_professor_profile(user, email=""):
-    """Crea el perfil Professor si falta (usado al promover tardíamente).
-
-    Idempotente: get_or_create + atomic; ante IntegrityError por carrera
-    reintenta el get en lugar de create() directo.
-    """
-    try:
-        return user.professor_profile
-    except Exception:
-        pass
-    try:
-        return Professor.objects.get(user=user)
-    except Professor.DoesNotExist:
-        pass
-    base = (email or user.email or "Profesor").split("@")[0].strip() or "Profesor"
-    for _ in range(3):
-        code = f"PROV-{uuid.uuid4().hex[:6].upper()}"
-        try:
-            with transaction.atomic():
-                prof, _ = Professor.objects.get_or_create(
-                    user=user,
-                    defaults={
-                        "employee_code": code,
-                        "first_name": base[:100],
-                        "last_name": "Docente",
-                        "department": None,
-                    },
-                )
-                return prof
-        except IntegrityError:
-            try:
-                return Professor.objects.get(user=user)
-            except Professor.DoesNotExist:
-                continue
-    # 🟢 BAJA (DoesNotExist→500): lectura final tolerante.
-    try:
-        return Professor.objects.get(user=user)
-    except Professor.DoesNotExist:
-        return None
 
 
 def reconcile_professor_role(user):
@@ -217,7 +183,9 @@ def reconcile_professor_role(user):
             user.refresh_from_db()
             changed = user.role == UserRole.ROLE_PROFESSOR
     try:
-        _ensure_professor_profile(user, email=user.email)
+        from apps.authentication.adapters import _ensure_professor_for_user
+
+        _ensure_professor_for_user(user, email=user.email)
     except Exception:
         # 🟢 BAJA: IntegrityError (carrera) o DoesNotExist (perfil
         # borrado entre get/create) nunca deben reventar con 500;
@@ -347,6 +315,11 @@ def _me_payload(user):
 
 
 def _patch_professor(request, user):
+    if not isinstance(request.data, dict):
+        return Response(
+            {"error": "El cuerpo debe ser un objeto JSON."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     prof = getattr(user, "professor_profile", None)
     if prof is None:
         try:
@@ -386,7 +359,15 @@ def _patch_professor(request, user):
         fields.append("department")
 
     prof.employee_code = employee_code
-    prof.save(update_fields=fields)
+    try:
+        with transaction.atomic():
+            prof.save(update_fields=fields)
+    except IntegrityError:
+        # Carrera entre el check previo y el save (UNIQUE employee_code).
+        return Response(
+            {"error": "Ese código de empleado ya está asignado a otro profesor"},
+            status=status.HTTP_409_CONFLICT,
+        )
     user.refresh_from_db()
     return Response(_me_payload(user))
 
@@ -400,6 +381,12 @@ def _patch_student(request, user):
     B1: check+create/update envueltos en transaction.atomic(); ante
     IntegrityError por carrera se re-chequea iexact y se responde 409
     legible (nunca 500)."""
+    if not isinstance(request.data, dict):
+        return Response(
+            {"error": "El cuerpo debe ser un objeto JSON."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    # Sin strip: los espacios se rechazan en la validación (no se normalizan).
     student_code = str(request.data.get("student_code") or "")
     document_number = str(request.data.get("document_number") or "")
     phone_number = str(request.data.get("phone_number") or "")
@@ -442,6 +429,16 @@ def _patch_student(request, user):
             except Student.DoesNotExist:
                 existing = None
                 me_qs = Student.objects.all()
+            if existing is not None:
+                # Registro "única vez": código y documento no cambian tras crear
+                # el perfil (comparación tolerante a mayúsculas/espacios).
+                immutable = {}
+                if str(existing.student_code or "").strip().lower() != student_code.lower():
+                    immutable["student_code"] = "El código estudiantil no se puede cambiar una vez registrado."
+                if str(existing.document_number or "").strip().lower() != document_number.lower():
+                    immutable["document_number"] = "El número de documento no se puede cambiar una vez registrado."
+                if immutable:
+                    return Response(immutable, status=status.HTTP_400_BAD_REQUEST)
             if me_qs.filter(student_code__iexact=student_code).exists():
                 return Response(
                     {"student_code": "Ese código estudiantil ya está registrado por otra cuenta."},
@@ -464,13 +461,13 @@ def _patch_student(request, user):
                     address=address,
                 )
             else:
-                existing.student_code = student_code
-                existing.document_number = document_number
                 existing.first_name = first_name
                 existing.last_name = last_name
                 existing.phone_number = phone_number
                 existing.address = address
-                existing.save(update_fields=["student_code", "document_number", "first_name", "last_name", "phone_number", "address"])
+                existing.save(
+                    update_fields=["first_name", "last_name", "phone_number", "address"]
+                )
     except IntegrityError:
         # B1: carrera entre check y create/update (UNIQUE) -> re-chequear
         # iexact y responder 409 legible, nunca 500.
@@ -496,6 +493,12 @@ def _patch_student(request, user):
             status=status.HTTP_409_CONFLICT,
         )
     user.refresh_from_db()
+    log_event(
+        user,
+        "student_profile_created" if existing is None else "student_profile_updated",
+        f"user:{user.id}",
+        request=request,
+    )
     return Response(_me_payload(user))
 
 
@@ -503,7 +506,9 @@ def _patch_student(request, user):
 @authentication_classes([SessionAuthentication401])
 @permission_classes([IsAuthenticated])
 def logout_view(request):
+    user = request.user
     django_logout(request)
+    log_event(user, "logout", f"user:{user.id}", request=request)
     return Response({"detail": "Sesión cerrada exitosamente"}, status=status.HTTP_200_OK)
 
 
@@ -519,6 +524,12 @@ def professors_whitelist(request):
         ]
         return Response(data, status=status.HTTP_200_OK)
 
+    if not isinstance(request.data, dict):
+        return Response(
+            {"error": "El cuerpo debe ser un objeto JSON."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     if request.method == "POST":
         email = request.data.get("email", "").strip().lower()
         if not email or "@" not in email:
@@ -528,6 +539,13 @@ def professors_whitelist(request):
         if not created:
             return Response({"error": "El correo ya está en la lista blanca"}, status=status.HTTP_400_BAD_REQUEST)
 
+        log_event(
+            request.user,
+            "whitelist_added",
+            f"whitelist:{obj.id}",
+            request=request,
+            payload={"email": obj.email},
+        )
         return Response(
             {"id": str(obj.id), "email": obj.email, "created_at": obj.created_at},
             status=status.HTTP_201_CREATED,
@@ -542,6 +560,13 @@ def professors_whitelist(request):
         if deleted_count == 0:
             return Response({"error": "Correo no encontrado en la lista blanca"}, status=status.HTTP_404_NOT_FOUND)
 
+        log_event(
+            request.user,
+            "whitelist_removed",
+            "whitelist",
+            request=request,
+            payload={"email": email},
+        )
         # Regla: Cuando se elimine un correo (DELETE), busca al User asociado.
         # Si existe, cámbiale el role a ROLE_STUDENT y guarda.
         # 🟡 MEDIA: nunca degradar ADMIN; 🟢 BAJA: match __iexact arriba.

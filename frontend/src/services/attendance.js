@@ -8,36 +8,12 @@ export const resolveToken = (token) =>
 export const markAttendance = (payload) =>
   api.post("/api/attendance/mark/", payload).then((r) => ({ data: r.data, status: r.status }));
 
-// A1 (deprecated, QR único): generar sesión QR sobre una clase.
-// Solo crea S1 una vez; la segunda llamada responde 410 rotation_disabled.
-// Se mantiene por compatibilidad, no usar en la UI (usar getCurrentSession).
-// @deprecated
-export const createClassSession = (groupId, classId, payload = {}) =>
-  api
-    .post(`/api/academic/groups/${groupId}/classes/${classId}/sessions/`, payload)
-    .then((r) => r.data);
-
 // QR automático: sesión vigente idempotente (profesor dueño).
 // Resuelve siempre a { data, status }: 200 live, 202 pending, 410 finished.
 // GET puro (sin CSRF); el backend responde `Cache-Control: no-store`.
 export const getCurrentSession = (groupId, classId) =>
   api
     .get(`/api/academic/groups/${groupId}/classes/${classId}/current-session/`)
-    .then((r) => ({ data: r.data, status: r.status }))
-    .catch((err) => {
-      if (err?.response) return { data: err.response.data, status: err.response.status };
-      throw err;
-    });
-
-// Rotate (deprecated, QR único): rotación deshabilitada.
-// Siempre responde 410 rotation_disabled en ventana (nunca 201).
-// Se mantiene por compatibilidad, no usar en la UI.
-// @deprecated
-// POST con CSRF (mutación). Resuelve a { data, status }: 201 live,
-// 202 pending, 410 finished, 409/503 reintentables.
-export const rotateCurrentSession = (groupId, classId, payload = {}) =>
-  api
-    .post(`/api/academic/groups/${groupId}/classes/${classId}/current-session/rotate/`, payload)
     .then((r) => ({ data: r.data, status: r.status }))
     .catch((err) => {
       if (err?.response) return { data: err.response.data, status: err.response.status };

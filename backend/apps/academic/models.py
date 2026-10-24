@@ -59,7 +59,7 @@ class ScheduledClass(models.Model):
     group = models.ForeignKey(AcademicGroup, on_delete=models.CASCADE, related_name="classes", db_column="group_id")
     title = models.CharField(max_length=150)
     start_time = models.DateTimeField()
-    duration_minutes = models.PositiveIntegerField()
+    duration_minutes = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     qr_duration_minutes = models.PositiveIntegerField(
         default=10, validators=[MinValueValidator(1), MaxValueValidator(120)]
     )
@@ -78,6 +78,12 @@ class ScheduledClass(models.Model):
     class Meta:
         db_table = "scheduled_classes"
         ordering = ["start_time"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(duration_minutes__gt=0),
+                name="class_duration_positive",
+            )
+        ]
 
     def __str__(self):
         return f"{self.title} ({self.start_time})"

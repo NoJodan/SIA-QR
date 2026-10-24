@@ -17,11 +17,10 @@ export default function ProfConfiguraciones({ user, onSaved }) {
     setSaved(false);
 
     try {
-      const { data } = await api.patch("/api/auth/me/", {
+      await api.patch("/api/auth/me/", {
         employee_code: employeeCode.trim(),
         department: department.trim(),
       });
-      void data;
 
       setSaved(true);
       if (onSaved) onSaved();
