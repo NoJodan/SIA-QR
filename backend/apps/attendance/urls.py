@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.attendance.views import (
+    AuditLogListView,
     MarkAttendanceView,
     ResolveTokenView,
     SessionAttendanceListView,
@@ -22,4 +23,6 @@ urlpatterns = [
     path("mark/", MarkAttendanceView.as_view(), name="mark"),
     # Reportes agregados (profesor dueño / admin global): JSON + XLSX + PDF.
     path("reports/", AttendanceReportView.as_view(), name="reports"),
+    # RF-ADM-07: consulta de auditoría (solo admin).
+    path("audit-logs/", AuditLogListView.as_view(), name="audit-logs"),
 ]

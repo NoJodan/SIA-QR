@@ -3,10 +3,14 @@ import React, { useEffect, useRef } from "react";
 export default function Modal({ title, onClose, children, icon }) {
   const panelRef = useRef(null);
   const previousFocusRef = useRef(null);
+  // onClose cambia en cada render del padre; el ref evita re-ejecutar el
+  // efecto (robo de foco) cada vez que el padre repinta por polling.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     previousFocusRef.current = document.activeElement;
-    const onKey = (e) => e.key === "Escape" && onClose && onClose();
+    const onKey = (e) => e.key === "Escape" && onCloseRef.current && onCloseRef.current();
     window.addEventListener("keydown", onKey);
     // AutoFocus primer input: espera al montaje del panel
     const t = setTimeout(() => {
@@ -24,7 +28,7 @@ export default function Modal({ title, onClose, children, icon }) {
         previousFocusRef.current.focus();
       }
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div

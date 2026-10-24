@@ -17,11 +17,10 @@ export default function ProfConfiguraciones({ user, onSaved }) {
     setSaved(false);
 
     try {
-      const { data } = await api.patch("/api/auth/me/", {
+      await api.patch("/api/auth/me/", {
         employee_code: employeeCode.trim(),
         department: department.trim(),
       });
-      void data;
 
       setSaved(true);
       if (onSaved) onSaved();
@@ -98,7 +97,7 @@ export default function ProfConfiguraciones({ user, onSaved }) {
               maxLength={100}
               onChange={(e) => setDepartment(e.target.value)}
               className={inputClass}
-              placeholder="No asignado"
+              placeholder="Ej. Ingeniería de Sistemas"
             />
           </div>
 

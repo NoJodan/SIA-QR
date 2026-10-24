@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import CourseForm from "../components/CourseForm";
 import Modal from "../components/Modal";
 import Pagination from "../components/Pagination";
@@ -17,17 +17,26 @@ export default function MisCursos({ onSelectGroup }) {
   const [page, setPage] = useState(1);
   const [count, setCount] = useState(0);
   const debounced = useDebounce(search, 300);
-  const PAGE_SIZE = 9;
+  const seqRef = useRef(0);
+  const PAGE_SIZE = 10;
 
   const load = (s, p) => {
+    const seq = seqRef.current + 1;
+    seqRef.current = seq;
     setLoading(true);
+    setError("");
     getMyGroups(s, p)
       .then((data) => {
+        if (seq !== seqRef.current) return;
         setGroups(data.results || []);
         setCount(data.count || 0);
       })
-      .catch(() => setError("No se pudieron cargar tus cursos."))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (seq === seqRef.current) setError("No se pudieron cargar tus cursos.");
+      })
+      .finally(() => {
+        if (seq === seqRef.current) setLoading(false);
+      });
   };
 
   useEffect(() => {
@@ -51,11 +60,12 @@ export default function MisCursos({ onSelectGroup }) {
 
   const handleDelete = async (id) => {
     if (!window.confirm("¿Eliminar este curso y todas sus clases?")) return;
-    await deleteMyGroup(id).catch(() => {
-      setError("No se pudo eliminar el curso.");
-      throw new Error("delete-failed");
-    });
-    load(debounced, page);
+    try {
+      await deleteMyGroup(id);
+      load(debounced, page);
+    } catch (err) {
+      setError(err?.response?.data?.error || "No se pudo eliminar el curso.");
+    }
   };
 
   return (

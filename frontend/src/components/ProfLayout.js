@@ -85,7 +85,7 @@ export default function ProfLayout({ user, onLogout, onRefreshUser }) {
           />
         )}
         {activeTab === "configuraciones" && (
-          <ProfConfiguraciones key={user?.employee_code} user={user} onSaved={onRefreshUser} />
+          <ProfConfiguraciones key={user?.id} user={user} onSaved={onRefreshUser} />
         )}
         {activeTab === "reportes" && <Reportes isAdmin={false} />}
       </main>

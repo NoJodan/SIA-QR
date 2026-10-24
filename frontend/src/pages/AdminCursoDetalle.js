@@ -1,30 +1,18 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import CreateClassForm from "../components/CreateClassForm";
 import Modal from "../components/Modal";
 import Pagination from "../components/Pagination";
 import SearchBar from "../components/SearchBar";
 import { adminGetGroupClasses } from "../services/academic";
+import {
+  CLASS_STATUS_COLORS,
+  CLASS_STATUS_LABELS,
+  MODALITY_LABELS,
+  effectiveClassStatus,
+} from "../utils/classMeta";
 import { formatBogota } from "../utils/dates";
 import useDebounce from "../utils/useDebounce";
-
-const modalityLabels = {
-  PRESENTIAL: "Presencial",
-  VIRTUAL: "Virtual",
-};
-
-const classStatusLabels = {
-  SCHEDULED: "Programada",
-  IN_PROGRESS: "En progreso",
-  COMPLETED: "Finalizada",
-  CANCELLED: "Cancelada",
-};
-
-const classStatusColors = {
-  SCHEDULED: "bg-amber-50 text-amber-700 border border-amber-200",
-  IN_PROGRESS: "bg-emerald-50 text-emerald-700 border border-emerald-200",
-  COMPLETED: "bg-slate-100 text-slate-600 border border-slate-200",
-  CANCELLED: "bg-red-50 text-red-700 border border-red-200",
-};
+import useNow from "../utils/useNow";
 
 export default function AdminCursoDetalle({ group, onBack }) {
   const [classes, setClasses] = useState([]);
@@ -36,25 +24,38 @@ export default function AdminCursoDetalle({ group, onBack }) {
   const [count, setCount] = useState(0);
   const [statusView, setStatusView] = useState("ALL");
   const debounced = useDebounce(search, 300);
+  const now = useNow();
+  const seqRef = useRef(0);
 
-  const load = (s = debounced, p = page) =>
-    adminGetGroupClasses(group.id, s, p).then((data) => {
-      setClasses(data.results || []);
-      setCount(data.count || 0);
-    });
+  const load = (s = debounced, p = page, st = statusView) => {
+    const seq = seqRef.current + 1;
+    seqRef.current = seq;
+    setError("");
+    return adminGetGroupClasses(group.id, s, p, st === "ALL" ? "" : st)
+      .then((data) => {
+        if (seq !== seqRef.current) return;
+        setClasses(data.results || []);
+        setCount(data.count || 0);
+      })
+      .catch(() => {
+        if (seq === seqRef.current) setError("No se pudieron cargar las clases.");
+      });
+  };
 
   useEffect(() => {
     setLoading(true);
-    load(debounced, page)
-      .catch(() => setError("No se pudieron cargar las clases."))
-      .finally(() => setLoading(false));
+    load(debounced, page).finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [group.id, debounced, page]);
+  }, [group.id, debounced, page, statusView]);
+
+  useEffect(() => {
+    // ponytail: polling 30s en lugar de WebSocket (restricción No-Redis)
+    const id = setInterval(() => load(), 30000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group.id, debounced, page, statusView]);
 
   const totalPages = Math.max(1, Math.ceil(count / 10));
-
-  const visibleClasses =
-    statusView === "ALL" ? classes : classes.filter((c) => c.status === statusView);
 
   return (
     <div>
@@ -81,7 +82,7 @@ export default function AdminCursoDetalle({ group, onBack }) {
           <select
             id="filtro-estado-admin"
             value={statusView}
-            onChange={(e) => setStatusView(e.target.value)}
+            onChange={(e) => { setStatusView(e.target.value); setPage(1); }}
             className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
           >
             <option value="ALL">Todas</option>
@@ -118,7 +119,7 @@ export default function AdminCursoDetalle({ group, onBack }) {
           {error}
         </p>
       )}
-      {!loading && !error && visibleClasses.length === 0 && (
+      {!loading && !error && classes.length === 0 && (
         <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
           <p aria-hidden="true" className="text-3xl">
             📅
@@ -127,7 +128,9 @@ export default function AdminCursoDetalle({ group, onBack }) {
         </div>
       )}
       <ul className="mt-4 grid gap-4 md:grid-cols-2">
-        {visibleClasses.map((c) => (
+        {classes.map((c) => {
+          const status = effectiveClassStatus(c, now);
+          return (
           <li
             key={c.id}
             className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md hover:border-[#B3200E]/20 transition"
@@ -138,12 +141,12 @@ export default function AdminCursoDetalle({ group, onBack }) {
             </p>
             <p className="mt-2 inline-flex flex-wrap items-center gap-1">
               <span className="inline-flex items-center text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-                {modalityLabels[c.modality] || c.modality}
+                {MODALITY_LABELS[c.modality] || c.modality}
               </span>
               <span
-                className={`inline-flex items-center text-xs px-2 py-1 rounded-full ${classStatusColors[c.status] || "bg-slate-100 text-slate-600 border border-slate-200"}`}
+                className={`inline-flex items-center text-xs px-2 py-1 rounded-full ${CLASS_STATUS_COLORS[status] || "bg-slate-100 text-slate-600 border border-slate-200"}`}
               >
-                {classStatusLabels[c.status] || c.status}
+                {CLASS_STATUS_LABELS[status] || status}
               </span>
             </p>
             <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100">
@@ -159,7 +162,8 @@ export default function AdminCursoDetalle({ group, onBack }) {
               </span>
             </div>
           </li>
-        ))}
+          );
+        })}
       </ul>
       <Pagination page={page} totalPages={totalPages} onChange={setPage} countLabel={`${count} clase(s)`} />
     </div>

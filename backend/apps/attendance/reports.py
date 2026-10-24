@@ -28,6 +28,8 @@ MAX_EXPORT_ROWS = 5000
 MAX_PDF_ROWS = 1000
 #: Rango máximo permitido entre fecha inicial y final (días, inclusivo).
 MAX_RANGE_DAYS = 366
+#: Tope de clases por filtro `class_id` (evita N SELECTs de pertenencia).
+MAX_CLASS_IDS = 50
 
 
 class MultipleUUIDField(serializers.Field):
@@ -38,6 +40,7 @@ class MultipleUUIDField(serializers.Field):
 
     default_error_messages = {
         "invalid": "Identificador de clase inválido.",
+        "too_many": "Puedes filtrar por un máximo de 50 clases.",
     }
 
     def to_internal_value(self, data):
@@ -61,6 +64,9 @@ class MultipleUUIDField(serializers.Field):
                 result.append(uuid_mod.UUID(str(value)))
             except (ValueError, AttributeError, TypeError):
                 self.fail("invalid")
+        result = list(dict.fromkeys(result))
+        if len(result) > MAX_CLASS_IDS:
+            self.fail("too_many")
         return result
 
     def to_representation(self, value):
@@ -252,12 +258,15 @@ def build_report_queryset(validated, user):
             ).first()
             if group is not None and group.professor.user_id != user.id:
                 raise PermissionDenied("No tienes acceso a ese grupo.")
-        for class_pk in validated.get("class_id") or []:
-            clase = ScheduledClass.objects.select_related("group__professor__user").filter(
-                pk=class_pk
-            ).first()
-            if clase is not None and clase.group.professor.user_id != user.id:
-                raise PermissionDenied("No tienes acceso a esa clase.")
+        class_ids = validated.get("class_id") or []
+        if class_ids:
+            owned = set(
+                ScheduledClass.objects.filter(
+                    pk__in=class_ids, group__professor__user=user
+                ).values_list("pk", flat=True)
+            )
+            if len(owned) != len(class_ids):
+                raise PermissionDenied("No tienes acceso a una o más clases.")
         session_id = validated.get("session_id")
         if session_id:
             session = AttendanceSession.objects.select_related(
@@ -373,6 +382,14 @@ def _fmt_bogota(value):
     return timezone.localtime(value, BOGOTA_TZ).strftime("%d/%m/%Y %H:%M")
 
 
+def _modality_label(value):
+    """Etiqueta legible para los exportes (JSON sigue exponiendo el código)."""
+    try:
+        return ClassModality(value).label
+    except Exception:
+        return value or ""
+
+
 _REPORT_COLUMNS = [
     "Estudiante",
     "Código",
@@ -391,6 +408,13 @@ _REPORT_COLUMNS = [
 _REPORT_WIDTHS = [30, 12, 14, 28, 28, 10, 28, 12, 14, 17, 17, 11]
 
 
+def _safe_cell(value):
+    """Evita que Excel/Sheets evalúe el texto como fórmula (=, +, -, @)."""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@"):
+        return "'" + value
+    return value
+
+
 def _row_cells(attendance):
     row = report_row(attendance)
     group_label = ""
@@ -406,7 +430,7 @@ def _row_cells(attendance):
         row["course_name"] or "",
         group_label,
         row["class_title"] or "",
-        row["modality"] or "",
+        _modality_label(row["modality"]),
         row["class_status"] or "",
         _fmt_bogota(row["class_start_time"]),
         _fmt_bogota(row["registered_at"]),
@@ -428,7 +452,7 @@ def export_xlsx(queryset):
     header_font = Font(bold=True, color="FFFFFF")
     header_cells = []
     for title in _REPORT_COLUMNS:
-        cell = WriteOnlyCell(ws, value=title)
+        cell = WriteOnlyCell(ws, value=_safe_cell(title))
         cell.fill = header_fill
         cell.font = header_font
         cell.alignment = Alignment(vertical="center")
@@ -453,7 +477,7 @@ def export_xlsx(queryset):
         pass
 
     for attendance in queryset.iterator(chunk_size=1000):
-        ws.append(_row_cells(attendance))
+        ws.append([_safe_cell(cell) for cell in _row_cells(attendance)])
 
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -483,6 +507,9 @@ def _filters_summary(validated):
     for key, label in labels.items():
         value = validated.get(key)
         if value not in (None, "", []):
+            # Modalidad en el resumen también en etiqueta legible (Mediada).
+            if key == "modality":
+                value = _modality_label(value)
             # Escapa input de usuario: Paragraph interpreta mini-HTML y
             # "<>&" sin escapar rompe el parse (500). Ver ALTO 1 QA.
             parts.append(f"{label}: {html.escape(str(value))}")

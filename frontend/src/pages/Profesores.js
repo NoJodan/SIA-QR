@@ -14,7 +14,7 @@ export default function Profesores() {
       const { data } = await api.get("/api/auth/professors-whitelist/");
       setEmails(data);
     } catch (err) {
-      setError(err?.response?.data?.error || err.message || "Error al cargar la lista");
+      setError(err?.response?.data?.error || "No se pudo cargar la lista de profesores.");
     } finally {
       setLoading(false);
     }
@@ -35,7 +35,7 @@ export default function Profesores() {
       setNewEmail("");
       loadEmails();
     } catch (err) {
-      setError(err?.response?.data?.error || err.message);
+      setError(err?.response?.data?.error || "No se pudo añadir el correo.");
     }
   };
 
@@ -50,7 +50,7 @@ export default function Profesores() {
 
       loadEmails();
     } catch (err) {
-      setError(err?.response?.data?.error || err.message);
+      setError(err?.response?.data?.error || "No se pudo revocar la autorización.");
     }
   };
 

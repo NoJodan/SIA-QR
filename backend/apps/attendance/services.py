@@ -4,6 +4,7 @@ Reutilizado por A1 (sesión sobre clase existente) y B3 (clase instantánea).
 """
 
 import hashlib
+import logging
 import secrets
 from datetime import timedelta
 
@@ -14,8 +15,63 @@ from rest_framework.exceptions import ValidationError
 
 from apps.academic.models import ClassStatus
 
+logger = logging.getLogger(__name__)
+
 MIN_TTL = 1
 MAX_TTL = 120
+
+# Radio terrestre medio (WGS-84) en metros.
+EARTH_RADIUS_M = 6371008.8
+
+
+def _client_ip(request):
+    xff = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if xff:
+        return xff.split(",")[0].strip()[:45]
+    return (request.META.get("REMOTE_ADDR") or "")[:45]
+
+
+def log_event(actor, event_type, resource, request=None, payload=None):
+    """Registra un evento de auditoría; nunca rompe la operación auditada."""
+    try:
+        from apps.attendance.models import AuditLog
+
+        if actor is not None and not getattr(actor, "is_authenticated", False):
+            actor = None
+        with transaction.atomic():
+            AuditLog.objects.create(
+                actor=actor,
+                event_type=str(event_type)[:100],
+                resource=str(resource)[:100],
+                ip_address=_client_ip(request) if request is not None else "",
+                payload=payload,
+            )
+    except Exception:
+        logger.exception("No se pudo registrar el evento de auditoría %s", event_type)
+
+
+def haversine_m(lat1, lon1, lat2, lon2):
+    """Distancia en metros entre dos coordenadas (fórmula haversine).
+
+    Precisión suficiente para un rango de salón (±25 m); sin dependencias.
+    """
+    from math import atan2, cos, radians, sin, sqrt
+
+    def to_float(value):
+        return float(value) if value is not None else None
+
+    lat1, lon1, lat2, lon2 = map(to_float, (lat1, lon1, lat2, lon2))
+    if None in (lat1, lon1, lat2, lon2):
+        return None
+
+    phi1, phi2 = radians(lat1), radians(lat2)
+    dphi = radians(lat2 - lat1)
+    dlambda = radians(lon2 - lon1)
+    a = sin(dphi / 2) ** 2 + cos(phi1) * cos(phi2) * sin(dlambda / 2) ** 2
+    # Redondeo en coordenadas casi antipodales deja a fuera de [0,1] y
+    # sqrt(1-a) lanzaría ValueError.
+    a = min(1.0, max(0.0, a))
+    return 2 * EARTH_RADIUS_M * atan2(sqrt(a), sqrt(1 - a))
 
 
 def get_default_qr_minutes():
@@ -75,7 +131,6 @@ def generate_session(clase, ttl_override=None):
     now = timezone.now()
     frontend = getattr(settings, "FRONTEND_URL", "http://localhost:3000").rstrip("/")
 
-    last_error = None
     for _ in range(3):  # reintento ante colisión del UNIQUE de token_hash
         raw = secrets.token_urlsafe(32)
         token_hash = hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -108,8 +163,8 @@ def generate_session(clase, ttl_override=None):
                 "expires_at": session.expires_at,
                 "ttl_minutes": ttl,
             }
-        except IntegrityError as exc:
-            last_error = exc
+        except IntegrityError:
+            continue
     # M3: nunca propagar IntegrityError crudo (sería 500). Las vistas lo
     # mapean a 409 con reintento; este ValidationError es el último recurso.
     raise ValidationError("No se pudo generar el código QR, intenta de nuevo.")

@@ -32,7 +32,7 @@ export default function CourseForm({ initialName = "", submitLabel = "Guardar", 
     <form onSubmit={submit} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 space-y-3">
       <input
         type="text"
-        placeholder="Nombre del curso"
+        placeholder="Ej. Cálculo diferencial"
         value={name}
         onChange={(e) => setName(e.target.value)}
         className="w-full border rounded-lg px-3 py-2 text-sm"

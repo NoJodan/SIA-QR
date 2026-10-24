@@ -16,15 +16,18 @@ from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.academic.models import AcademicGroup, ClassStatus, Course, ScheduledClass
+from apps.academic.models import AcademicGroup, ClassModality, ClassStatus, Course, ScheduledClass
 from apps.academic.pagination import StandardResultsPagination
 from apps.academic.permissions import IsProfessor
 from apps.academic.serializers import (
     AcademicGroupSerializer,
     AcademicGroupWriteSerializer,
+    ClassGeofenceSerializer,
     ScheduledClassSerializer,
 )
+from apps.academic.services import reopen_completed_if_future, sync_class_statuses
 from apps.authentication.views import IsAdminUserRole, SessionAuthentication401
+from apps.attendance.services import log_event
 
 BOGOTA_TZ = ZoneInfo("America/Bogota")
 _AUTH = [SessionAuthentication401]
@@ -41,6 +44,16 @@ def get_professor(user):
     from apps.authentication.models import Professor
 
     return get_object_or_404(Professor, user=user)
+
+
+def _filter_by_status(queryset, request):
+    """Filtro opcional ?status= (valores de ClassStatus; inválido -> 400)."""
+    value = (request.query_params.get("status") or "").strip()
+    if not value:
+        return queryset
+    if value not in ClassStatus.values:
+        raise ValidationError({"status": "Estado de clase inválido."})
+    return queryset.filter(status=value)
 
 
 class MyGroupsListView(generics.ListCreateAPIView):
@@ -84,6 +97,13 @@ class MyGroupsListView(generics.ListCreateAPIView):
             )
         out = AcademicGroupSerializer(group).data
         out["classes_count"] = 0
+        log_event(
+            request.user,
+            "group_created",
+            f"group:{group.id}",
+            request=request,
+            payload={"name": name},
+        )
         return Response(out, status=status.HTTP_201_CREATED)
 
 
@@ -114,7 +134,34 @@ class MyGroupDetailView(generics.RetrieveUpdateDestroyAPIView):
         # GET-serializado para respuesta consistente; PATCH/PUT solo renombran
         out = AcademicGroupSerializer(group).data
         out["classes_count"] = group.classes.count()
+        log_event(
+            request.user,
+            "group_updated",
+            f"group:{group.id}",
+            request=request,
+            payload={"name": group.course.name},
+        )
         return Response(out)
+
+    def destroy(self, request, *args, **kwargs):
+        from apps.attendance.models import Attendance
+
+        group = self.get_object()
+        if Attendance.objects.filter(session__scheduled_class__group=group).exists():
+            return Response(
+                {"error": "Tiene asistencias registradas; no se puede eliminar."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        group_id, group_name = group.id, group.course.name
+        self.perform_destroy(group)
+        log_event(
+            request.user,
+            "group_deleted",
+            f"group:{group_id}",
+            request=request,
+            payload={"name": group_name},
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     def perform_destroy(self, instance):
         course = instance.course
@@ -137,20 +184,22 @@ class ScheduledClassListCreateView(generics.ListCreateAPIView):
         return get_object_or_404(AcademicGroup, pk=self.kwargs["group_id"], professor=prof)
 
     def get_queryset(self):
-        return ScheduledClass.objects.filter(group=self.get_group()).order_by("start_time")
+        base = ScheduledClass.objects.filter(group=self.get_group())
+        try:
+            sync_class_statuses(base)
+        except Exception:
+            # Degradación: el listado sigue con el estado persistido, no 500.
+            logger.exception("sync_class_statuses falló (group=%s)", self.kwargs["group_id"])
+        return _filter_by_status(base.order_by("start_time"), self.request)
 
     def perform_create(self, serializer):
-        serializer.save(group=self.get_group(), status=ClassStatus.SCHEDULED)
-
-
-def _revoke_active_sessions(clase):
-    """C3: al cerrar una clase (COMPLETED/CANCELLED) revoca sus QR activos."""
-    from apps.attendance.models import AttendanceSession
-
-    if clase.status in (ClassStatus.COMPLETED, ClassStatus.CANCELLED):
-        AttendanceSession.objects.filter(
-            scheduled_class=clase, is_active=True
-        ).update(is_active=False)
+        clase = serializer.save(group=self.get_group(), status=ClassStatus.SCHEDULED)
+        log_event(
+            self.request.user,
+            "class_created",
+            f"class:{clase.id}",
+            request=self.request,
+        )
 
 
 class ScheduledClassDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -168,7 +217,104 @@ class ScheduledClassDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def perform_update(self, serializer):
         clase = serializer.save()
-        _revoke_active_sessions(clase)
+        reopen_completed_if_future(clase)
+        log_event(
+            self.request.user,
+            "class_updated",
+            f"class:{clase.id}",
+            request=self.request,
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        from apps.attendance.models import Attendance
+
+        clase = self.get_object()
+        if Attendance.objects.filter(session__scheduled_class=clase).exists():
+            return Response(
+                {"error": "Tiene asistencias registradas; no se puede eliminar."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        class_id, title = clase.id, clase.title
+        self.perform_destroy(clase)
+        log_event(
+            request.user,
+            "class_deleted",
+            f"class:{class_id}",
+            request=request,
+            payload={"title": title},
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ClassGeofenceView(generics.GenericAPIView):
+    """Rango del salón: fija (o reubica) la referencia GPS de una clase
+    presencial. Solo aplica a PRESENTIAL; se "apaga" solo al finalizar la
+    clase (geofence_active se deriva del status, sin cron ni tareas).
+
+    POST .../geofence/ (profesor dueño, CON CSRF por ser mutación):
+    - 200: rango fijado/actualizado (idempotente: un POST posterior
+      sobrescribe la ubicación, útil para reintentar si falló el GPS de la
+      instantánea o si el profesor se movió de salón).
+    - 400: modalidad no presencial, o sin coordenadas utilizables (permiso
+      denegado/no soportado).
+    - 409: clase finalizada o cancelada.
+    - 404 si el grupo/clase no existe o es de otro profesor.
+
+    GET sobre la misma ruta devuelve el estado (sin coordenadas)."""
+
+    authentication_classes = _AUTH
+    permission_classes = _PERMS
+
+    def get_clase(self, group_id, class_id):
+        prof = getattr(self.request.user, "professor_profile", None)
+        group = get_object_or_404(AcademicGroup, pk=group_id, professor=prof)
+        return get_object_or_404(ScheduledClass, pk=class_id, group=group)
+
+    def _payload(self, clase):
+        return {
+            "geofence_active": clase.geofence_active,
+            "geofence_radius_m": clase.geofence_radius_m,
+            "geofence_activated_at": clase.geofence_activated_at,
+            "status": clase.status,
+            "modality": clase.modality,
+        }
+
+    def get(self, request, group_id, class_id):
+        clase = self.get_clase(group_id, class_id)
+        return Response(
+            self._payload(clase),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    def post(self, request, group_id, class_id):
+        clase = self.get_clase(group_id, class_id)
+
+        if clase.modality != ClassModality.PRESENTIAL:
+            return Response(
+                {"error": "El rango de ubicación solo aplica a clases presenciales."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if clase.status in (ClassStatus.COMPLETED, ClassStatus.CANCELLED):
+            return Response(
+                {"error": "La clase ya finalizó, no se puede activar el rango."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        ser = ClassGeofenceSerializer(data=request.data or {})
+        ser.is_valid(raise_exception=True)
+        lat = ser.validated_data.get("latitude")
+        lng = ser.validated_data.get("longitude")
+        if lat is None or lng is None:
+            return Response(
+                {"error": "No se pudo obtener tu ubicación, revisa el permiso del navegador."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        clase.geofence_lat = lat
+        clase.geofence_lng = lng
+        clase.geofence_activated_at = timezone.now()
+        clase.save(update_fields=["geofence_lat", "geofence_lng", "geofence_activated_at", "updated_at"])
+        return Response(ScheduledClassSerializer(clase).data)
 
 
 # --- Vistas admin (solo lectura de cursos + edición de clases, sin post/delete) ---
@@ -213,7 +359,13 @@ class AdminClassListView(generics.ListAPIView):
     pagination_class = StandardResultsPagination
 
     def get_queryset(self):
-        return ScheduledClass.objects.filter(group_id=self.kwargs["group_id"]).order_by("start_time")
+        base = ScheduledClass.objects.filter(group_id=self.kwargs["group_id"])
+        try:
+            sync_class_statuses(base)
+        except Exception:
+            # Degradación: el listado sigue con el estado persistido, no 500.
+            logger.exception("sync_class_statuses falló (group=%s)", self.kwargs["group_id"])
+        return _filter_by_status(base.order_by("start_time"), self.request)
 
 
 class AdminClassUpdateView(generics.RetrieveUpdateAPIView):
@@ -230,91 +382,16 @@ class AdminClassUpdateView(generics.RetrieveUpdateAPIView):
 
     def perform_update(self, serializer):
         clase = serializer.save()
-        _revoke_active_sessions(clase)
-
-
-# --- Núcleo QR (Plan v2, QR único sin auto-rotación) ---
-class ClassSessionCreateView(generics.GenericAPIView):
-    """A1 (deprecated): genera la sesión QR única sobre una clase existente.
-
-    QR único sin auto-rotación: solo se permite crear S1 una vez por clase.
-    Si ya hubo alguna sesión (por class_id) responde 410
-    {state expired, reason rotation_disabled} y nunca 201. La ruta se
-    mantiene por compatibilidad pero no debe usarse (la UI usa
-    current-session automático).
-    """
-
-    authentication_classes = _AUTH
-    permission_classes = _PERMS
-
-    def post(self, request, group_id, class_id):
-        from apps.attendance.serializers import SessionCreateSerializer
-        from apps.attendance.services import generate_session
-
-        prof = getattr(request.user, "professor_profile", None)
-        group = get_object_or_404(AcademicGroup, pk=group_id, professor=prof)
-        clase = get_object_or_404(ScheduledClass, pk=class_id, group=group)
-
-        if clase.status in (ClassStatus.COMPLETED, ClassStatus.CANCELLED):
-            return Response(
-                {"error": f"No se puede generar QR en una clase {clase.status}."},
-                status=status.HTTP_409_CONFLICT,
-            )
-
-        # QR único (deprecated): bloquear segunda creación.
-        from apps.attendance.models import AttendanceSession as _AS
-
-        if _AS.objects.filter(scheduled_class=clase).exists():
-            last = (
-                _AS.objects.filter(scheduled_class=clase)
-                .order_by("-created_at")
-                .first()
-            )
-            return Response(
-                {
-                    "state": "expired",
-                    "status": clase.status,
-                    "reason": "rotation_disabled",
-                    "session_id": str(last.id) if last is not None else None,
-                    "expires_at": last.expires_at if last is not None else None,
-                },
-                status=status.HTTP_410_GONE,
-                headers={"Cache-Control": "no-store"},
-            )
-
-        ser = SessionCreateSerializer(data=request.data or {})
-        ser.is_valid(raise_exception=True)
-        try:
-            result = generate_session(
-                clase, ttl_override=ser.validated_data.get("qr_duration_minutes")
-            )
-        except (IntegrityError, ValidationError):
-            # M3/C2: colisión de token o carrera de single-active -> 409
-            # reintentable en el frontend (nunca 500).
-            return Response(
-                {"error": "No se pudo generar el código QR, intenta de nuevo."},
-                status=status.HTTP_409_CONFLICT,
-            )
-        except Exception:
-            # m3: cualquier otro fallo (claim/select_for_update, BD) -> 503
-            # reintentable con log (nunca 500 crudo).
-            logger.exception("generate_session falló (A1 group=%s class=%s)", group_id, class_id)
-            return Response(
-                {"error": "Servicio no disponible, intenta de nuevo."},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-        return Response(
-            {
-                "session_id": str(result["session"].id),
-                "token_raw": result["token_raw"],
-                "attend_url": result["attend_url"],
-                "expires_at": result["expires_at"],
-                "ttl_minutes": result["ttl_minutes"],
-            },
-            status=status.HTTP_201_CREATED,
+        reopen_completed_if_future(clase)
+        log_event(
+            self.request.user,
+            "class_updated",
+            f"class:{clase.id}",
+            request=self.request,
         )
 
 
+# --- Núcleo QR (QR único; rotación manual explícita) ---
 class InstantClassCreateView(generics.GenericAPIView):
     """B3: crea clase IN_PROGRESS 'al momento' + sesión QR en transacción atómica."""
 
@@ -342,6 +419,22 @@ class InstantClassCreateView(generics.GenericAPIView):
                 {"error": "Modalidad inválida (PRESENTIAL o VIRTUAL)."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # Geocerca automática (solo presencial): coords tolerantes. Si no
+        # llegan o son inválidas, la clase se crea igual sin rango (RNF-06:
+        # el GPS nunca impide dar clase); el profesor puede reintentar con
+        # el POST .../geofence/.
+        geofence_lat = geofence_lng = None
+        if modality == "PRESENTIAL":
+            geo_ser = ClassGeofenceSerializer(
+                data={
+                    "latitude": request.data.get("geofence_latitude"),
+                    "longitude": request.data.get("geofence_longitude"),
+                    "accuracy": request.data.get("geofence_accuracy"),
+                }
+            )
+            if geo_ser.is_valid():
+                geofence_lat = geo_ser.validated_data.get("latitude")
+                geofence_lng = geo_ser.validated_data.get("longitude")
         try:
             duration = int(request.data.get("duration_minutes") or 60)
         except (TypeError, ValueError):
@@ -365,6 +458,9 @@ class InstantClassCreateView(generics.GenericAPIView):
                 duration_minutes=duration,
                 modality=modality,
                 status=ClassStatus.IN_PROGRESS,
+                geofence_lat=geofence_lat,
+                geofence_lng=geofence_lng,
+                geofence_activated_at=dj_timezone.now() if geofence_lat is not None else None,
             )
             try:
                 result = generate_session(clase, ttl_override=ttl_override)
@@ -405,6 +501,13 @@ class InstantClassCreateView(generics.GenericAPIView):
             except Exception:
                 logger.exception("refresh_from_db falló tras persistir TTL (B3 group=%s)", group_id)
 
+        log_event(
+            request.user,
+            "class_created",
+            f"class:{clase.id}",
+            request=request,
+            payload={"instant": True, "session_id": str(result["session"].id)},
+        )
         return Response(
             {
                 "class": ScheduledClassSerializer(clase).data,
@@ -441,8 +544,8 @@ class ClassCurrentSessionView(generics.GenericAPIView):
     - 404 si el grupo/clase no existe o es de otro profesor.
 
     GET puro (sin CSRF) + `Cache-Control: no-store` (polling cada 10s).
-    A1 manual (`ClassSessionCreateView`) y rotate están deprecated
-    (bloquean segunda creación con 410 rotation_disabled).
+    Para mostrar el QR en otro dispositivo está la rotación manual explícita
+    (`ClassCurrentSessionRotateView`).
     """
 
     authentication_classes = _AUTH
@@ -569,15 +672,20 @@ class ClassCurrentSessionView(generics.GenericAPIView):
 
 
 class ClassCurrentSessionRotateView(generics.GenericAPIView):
-    """Rotate (deprecated): rotación deshabilitada (QR único, nunca 201).
+    """Rotación manual del QR (profesor dueño, CON CSRF por ser mutación).
 
     POST groups/<group_id>/classes/<class_id>/current-session/rotate/
-    (profesor dueño, CON CSRF por ser mutación). La ruta se mantiene por
-    compatibilidad pero ya no genera sesiones:
+    muestra el QR de nuevo en este dispositivo: genera una sesión nueva y
+    revoca la anterior (single-active); cada rotación deja su fila en
+    attendance_sessions para auditoría.
 
-    - 410 rotation_disabled: en ventana (haya o no sesión previa). Nunca 201.
+    - 201 live: {session_id, token_raw, attend_url, expires_at, ttl_minutes}
+      (el token crudo solo existe en esta respuesta).
     - 202 pending: aún fuera de ventana (no rota nada).
     - 410 finished: clase cerrada o ventana pasada (cierre perezoso).
+    - 409: fallo reintentable de generación (IntegrityError/ValidationError).
+    - 409: otra rotación concurrente ya entregó su token (reintenta).
+    - 503: fallo inesperado (con log, nunca 500).
     - 404 si el grupo/clase no existe o es de otro profesor.
     """
 
@@ -588,6 +696,7 @@ class ClassCurrentSessionRotateView(generics.GenericAPIView):
         from apps.academic.services import (
             class_window,
             get_early_grace_seconds,
+            get_valid_session,
             should_auto_start,
         )
 
@@ -595,75 +704,113 @@ class ClassCurrentSessionRotateView(generics.GenericAPIView):
         group = get_object_or_404(AcademicGroup, pk=group_id, professor=prof)
         clase = get_object_or_404(ScheduledClass, pk=class_id, group=group)
 
-        if clase.status in (ClassStatus.COMPLETED, ClassStatus.CANCELLED):
-            return Response(
-                {"state": "finished", "status": clase.status, "reason": "closed"},
-                status=status.HTTP_410_GONE,
-                headers={"Cache-Control": "no-store"},
+        # Sesión vigente ANTES de esperar el lock de la clase: si al entrar
+        # cambió, otra rotación concurrente ya entregó su token y revocarlo
+        # dejaría muerto el QR de esa respuesta.
+        previous = get_valid_session(clase)
+
+        with transaction.atomic():
+            clase = get_object_or_404(
+                ScheduledClass.objects.select_for_update(), pk=clase.pk
             )
 
-        try:
-            in_window = should_auto_start(clase, timezone.now())
-            start, end = class_window(clase)
-        except Exception:
-            logger.exception("rotate: ventana inválida (class=%s)", class_id)
-            return Response(
-                {"error": "Servicio no disponible, intenta de nuevo."},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                headers={"Cache-Control": "no-store", "Retry-After": "10"},
-            )
-
-        now = timezone.now()
-        if now >= end:
-            from apps.academic.services import _close_class
+            if clase.status in (ClassStatus.COMPLETED, ClassStatus.CANCELLED):
+                return Response(
+                    {"state": "finished", "status": clase.status, "reason": "closed"},
+                    status=status.HTTP_410_GONE,
+                    headers={"Cache-Control": "no-store"},
+                )
 
             try:
-                _close_class(clase)
+                in_window = should_auto_start(clase, timezone.now())
+                start, end = class_window(clase)
             except Exception:
-                logger.exception("rotate: cierre perezoso falló (class=%s)", class_id)
+                logger.exception("rotate: ventana inválida (class=%s)", class_id)
+                return Response(
+                    {"error": "Servicio no disponible, intenta de nuevo."},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    headers={"Cache-Control": "no-store", "Retry-After": "10"},
+                )
+
+            now = timezone.now()
+            if now >= end:
+                from apps.academic.services import _close_class
+
+                try:
+                    with transaction.atomic():
+                        _close_class(clase)
+                except Exception:
+                    logger.exception("rotate: cierre perezoso falló (class=%s)", class_id)
+                return Response(
+                    {
+                        "state": "finished",
+                        "status": ClassStatus.COMPLETED,
+                        "reason": "window_elapsed",
+                    },
+                    status=status.HTTP_410_GONE,
+                    headers={"Cache-Control": "no-store"},
+                )
+            if not in_window:
+                from datetime import timedelta as _td
+
+                grace = get_early_grace_seconds()
+                remaining = int(max(0, (start - _td(seconds=grace) - now).total_seconds()))
+                # Fallback al inicio real si la gracia ya pasó pero now < start.
+                remaining = max(remaining, int(max(0, (start - now).total_seconds())))
+                return Response(
+                    {
+                        "state": "pending",
+                        "status": clase.status,
+                        "starts_in_s": remaining,
+                        "start_time": start,
+                    },
+                    status=status.HTTP_202_ACCEPTED,
+                    headers={"Cache-Control": "no-store"},
+                )
+
+            current = get_valid_session(clase)
+            if current is not None and (
+                previous is None or current.pk != previous.pk
+            ):
+                return Response(
+                    {"error": "No se pudo generar el código QR, intenta de nuevo."},
+                    status=status.HTTP_409_CONFLICT,
+                    headers={"Cache-Control": "no-store"},
+                )
+
+            from apps.attendance.services import generate_session
+
+            try:
+                with transaction.atomic():
+                    result = generate_session(clase)
+            except (IntegrityError, ValidationError):
+                return Response(
+                    {"error": "No se pudo generar el código QR, intenta de nuevo."},
+                    status=status.HTTP_409_CONFLICT,
+                    headers={"Cache-Control": "no-store"},
+                )
+            except Exception:
+                logger.exception("rotate: generate_session falló (class=%s)", class_id)
+                return Response(
+                    {"error": "Servicio no disponible, intenta de nuevo."},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    headers={"Cache-Control": "no-store", "Retry-After": "10"},
+                )
+            log_event(
+                request.user,
+                "qr_rotated",
+                f"session:{result['session'].id}",
+                request=request,
+                payload={"class_id": str(clase.id), "ttl_minutes": result["ttl_minutes"]},
+            )
             return Response(
                 {
-                    "state": "finished",
-                    "status": ClassStatus.COMPLETED,
-                    "reason": "window_elapsed",
+                    "session_id": str(result["session"].id),
+                    "token_raw": result["token_raw"],
+                    "attend_url": result["attend_url"],
+                    "expires_at": result["expires_at"],
+                    "ttl_minutes": result["ttl_minutes"],
                 },
-                status=status.HTTP_410_GONE,
+                status=status.HTTP_201_CREATED,
                 headers={"Cache-Control": "no-store"},
             )
-        if not in_window:
-            from datetime import timedelta as _td
-
-            grace = get_early_grace_seconds()
-            remaining = int(max(0, (start - _td(seconds=grace) - now).total_seconds()))
-            # Fallback al inicio real si la gracia ya pasó pero now < start.
-            remaining = max(remaining, int(max(0, (start - now).total_seconds())))
-            return Response(
-                {
-                    "state": "pending",
-                    "status": clase.status,
-                    "starts_in_s": remaining,
-                    "start_time": start,
-                },
-                status=status.HTTP_202_ACCEPTED,
-                headers={"Cache-Control": "no-store"},
-            )
-
-        # QR único (deprecated): rotación deshabilitada, nunca 201.
-        from apps.attendance.models import AttendanceSession as _AS
-
-        last = (
-            _AS.objects.filter(scheduled_class=clase)
-            .order_by("-created_at")
-            .first()
-        )
-        return Response(
-            {
-                "state": "expired",
-                "status": clase.status,
-                "reason": "rotation_disabled",
-                "session_id": str(last.id) if last is not None else None,
-                "expires_at": last.expires_at if last is not None else None,
-            },
-            status=status.HTTP_410_GONE,
-            headers={"Cache-Control": "no-store"},
-        )

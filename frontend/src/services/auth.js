@@ -15,7 +15,3 @@ export async function adminLogin(email, password) {
   });
   return res.data;
 }
-
-const authService = { adminLogin };
-
-export default authService;

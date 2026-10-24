@@ -9,6 +9,7 @@ from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from allauth.core.exceptions import ImmediateHttpResponse
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from apps.attendance.models import SystemConfig
+from apps.attendance.services import log_event
 from apps.authentication.models import AuthorizedProfessorEmail, Professor, User, UserRole
 
 
@@ -112,13 +113,24 @@ class InstitutionalGoogleAdapter(DefaultSocialAccountAdapter):
         domain = email.split("@")[-1].lower() if "@" in email else ""
 
         # Obtener dominio permitido desde SystemConfig o default
+        allowed_domain = "ut.edu.co"
         try:
             config = SystemConfig.objects.get(config_key="ALLOWED_DOMAIN")
-            allowed_domain = config.config_value.strip().lower()
-        except SystemConfig.DoesNotExist:
-            allowed_domain = "ut.edu.co"
+            configured = (config.config_value or "").strip().lower()
+            if configured:
+                allowed_domain = configured
+        except Exception:
+            # Sin config, vacía o BD caída: no bloquear el dominio institucional.
+            pass
 
         if domain != allowed_domain:
+            log_event(
+                None,
+                "login_denied",
+                "auth:oidc",
+                request=request,
+                payload={"domain": domain or None},
+            )
             raise ImmediateHttpResponse(
                 HttpResponseRedirect(f"{_frontend()}/login?error=domain_not_allowed")
             )
@@ -272,6 +284,13 @@ class InstitutionalGoogleAdapter(DefaultSocialAccountAdapter):
         """M4: respeta ?next= del flujo /attend?token= (round-trip
         token -> login Google -> vuelta a /attend). Solo permite destinos
         del propio frontend o rutas locales para evitar open-redirect."""
+        log_event(
+            user,
+            "login_success",
+            f"user:{user.id}",
+            request=request,
+            payload={"provider": "google"},
+        )
         frontend = _frontend()
         nxt = None
         try:

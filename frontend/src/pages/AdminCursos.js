@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Pagination from "../components/Pagination";
 import SearchBar from "../components/SearchBar";
 import { adminGetGroups } from "../services/academic";
@@ -12,16 +12,25 @@ export default function AdminCursos({ onSelectGroup }) {
   const [page, setPage] = useState(1);
   const [count, setCount] = useState(0);
   const debounced = useDebounce(search, 300);
+  const seqRef = useRef(0);
 
   useEffect(() => {
+    const seq = seqRef.current + 1;
+    seqRef.current = seq;
     setLoading(true);
+    setError("");
     adminGetGroups(debounced, page)
       .then((data) => {
+        if (seq !== seqRef.current) return;
         setGroups(data.results || []);
         setCount(data.count || 0);
       })
-      .catch(() => setError("No se pudieron cargar los cursos."))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (seq === seqRef.current) setError("No se pudieron cargar los cursos.");
+      })
+      .finally(() => {
+        if (seq === seqRef.current) setLoading(false);
+      });
   }, [debounced, page]);
 
   const totalPages = Math.max(1, Math.ceil(count / 10));

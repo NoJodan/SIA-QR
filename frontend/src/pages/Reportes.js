@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Pagination from "../components/Pagination";
 import ProfHeader from "../components/ProfHeader";
 import SearchBar from "../components/SearchBar";
+import { getGroupsCache, setGroupsCache } from "../services/academic";
 import api from "../services/api";
 import {
   MAX_EXPORT_ROWS,
@@ -10,23 +11,10 @@ import {
   getReportPreview,
   reportErrorMessage,
 } from "../services/reports";
+import { CLASS_STATUS_COLORS, CLASS_STATUS_LABELS, MODALITY_LABELS } from "../utils/classMeta";
 import { formatBogota } from "../utils/dates";
 
 const PAGE_SIZE = 10;
-
-const modalityLabels = { PRESENTIAL: "Presencial", VIRTUAL: "Virtual" };
-const statusLabels = {
-  SCHEDULED: "Programada",
-  IN_PROGRESS: "En progreso",
-  COMPLETED: "Finalizada",
-  CANCELLED: "Cancelada",
-};
-const statusColors = {
-  SCHEDULED: "bg-amber-50 text-amber-700 border border-amber-200",
-  IN_PROGRESS: "bg-emerald-50 text-emerald-700 border border-emerald-200",
-  COMPLETED: "bg-slate-100 text-slate-600 border border-slate-200",
-  CANCELLED: "bg-red-50 text-red-700 border border-red-200",
-};
 
 const inputCls =
   "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20";
@@ -92,25 +80,39 @@ export default function Reportes({ isAdmin = false }) {
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(null);
   const [truncatedNote, setTruncatedNote] = useState("");
+  const searchSeq = useRef(0);
+  const classesSeq = useRef(0);
 
   // Carga en cascada: grupos propios (prof) o todos (admin).
   useEffect(() => {
-    setGroupsLoading(true);
     setTruncatedNote("");
+    const cached = getGroupsCache(isAdmin);
+    if (cached) {
+      setGroups(cached);
+      setGroupsLoading(false);
+      if (cached.length >= 1000) {
+        setTruncatedNote("La lista de grupos se truncó a 1000: refina filtros si falta alguno.");
+      }
+      return;
+    }
+    setGroupsLoading(true);
     const path = isAdmin ? "/api/academic/admin/groups/" : "/api/academic/my-groups/";
     fetchAll(path)
       .then((items) => {
+        setGroupsCache(isAdmin, items);
         setGroups(items);
         if (items.length >= 1000) {
           setTruncatedNote("La lista de grupos se truncó a 1000: refina filtros si falta alguno.");
         }
       })
-      .catch(() => setGroups([]))
+      .catch(() => setError("No se pudieron cargar los grupos para los filtros."))
       .finally(() => setGroupsLoading(false));
   }, [isAdmin]);
 
   // Clases del grupo seleccionado (cascada grupo -> clases).
   useEffect(() => {
+    const seq = classesSeq.current + 1;
+    classesSeq.current = seq;
     setClasses([]);
     if (!draft.groupId) return;
     setClassesLoading(true);
@@ -118,9 +120,15 @@ export default function Reportes({ isAdmin = false }) {
       ? `/api/academic/admin/groups/${draft.groupId}/classes/`
       : `/api/academic/groups/${draft.groupId}/classes/`;
     fetchAll(path)
-      .then(setClasses)
-      .catch(() => setClasses([]))
-      .finally(() => setClassesLoading(false));
+      .then((items) => {
+        if (seq === classesSeq.current) setClasses(items);
+      })
+      .catch(() => {
+        if (seq === classesSeq.current) setError("No se pudieron cargar las clases del grupo.");
+      })
+      .finally(() => {
+        if (seq === classesSeq.current) setClassesLoading(false);
+      });
   }, [draft.groupId, isAdmin]);
 
   const courses = useMemo(() => {
@@ -170,28 +178,28 @@ export default function Reportes({ isAdmin = false }) {
   }, [isAdmin]);
 
   const runSearch = useCallback(async (filters, pageNum) => {
+    const seq = searchSeq.current + 1;
+    searchSeq.current = seq;
     setLoading(true);
     setError("");
     try {
       const data = await getReportPreview(buildParams(filters), pageNum, PAGE_SIZE);
+      if (seq !== searchSeq.current) return;
       setResults(data.results || []);
       setCount(data.count || 0);
       setSearched(true);
     } catch (err) {
       const { status, message } = await reportErrorMessage(err, "No se pudo cargar el reporte.");
-      if (status === 401) {
-        window.location.href = isAdmin ? "/admin-login" : "/login";
-        return;
-      }
+      if (seq !== searchSeq.current) return;
       if (status === 403) {
         setError("No tienes permiso para ver este reporte.");
       } else {
         setError(message);
       }
     } finally {
-      setLoading(false);
+      if (seq === searchSeq.current) setLoading(false);
     }
-  }, [buildParams, isAdmin]);
+  }, [buildParams]);
 
   const handleBuscar = () => {
     // Usa draft.search directo: el valor con debounce quedaba stale si el
@@ -233,10 +241,6 @@ export default function Reportes({ isAdmin = false }) {
       await downloadReport(buildParams(applied), fmt);
     } catch (err) {
       const { status, message } = await reportErrorMessage(err, "No se pudo descargar el reporte.");
-      if (status === 401) {
-        window.location.href = isAdmin ? "/admin-login" : "/login";
-        return;
-      }
       if (status === 403) {
         setError("No tienes permiso para descargar este reporte.");
       } else {
@@ -409,7 +413,7 @@ export default function Reportes({ isAdmin = false }) {
             <select id="rep-modalidad" value={draft.modality} onChange={set("modality")} className={inputCls}>
               <option value="">Todas</option>
               <option value="PRESENTIAL">Presencial</option>
-              <option value="VIRTUAL">Virtual</option>
+              <option value="VIRTUAL">Mediada</option>
             </select>
           </div>
           <div>
@@ -507,13 +511,13 @@ export default function Reportes({ isAdmin = false }) {
                     </td>
                     <td className="px-4 py-3">
                       <p className="text-slate-700 break-words">{r.class_title}</p>
-                      <span className={`mt-1 inline-flex items-center text-xs px-2 py-0.5 rounded-full ${statusColors[r.class_status] || "bg-slate-100 text-slate-600 border border-slate-200"}`}>
-                        {statusLabels[r.class_status] || r.class_status}
+                      <span className={`mt-1 inline-flex items-center text-xs px-2 py-0.5 rounded-full ${CLASS_STATUS_COLORS[r.class_status] || "bg-slate-100 text-slate-600 border border-slate-200"}`}>
+                        {CLASS_STATUS_LABELS[r.class_status] || r.class_status}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-                        {modalityLabels[r.modality] || r.modality}
+                        {MODALITY_LABELS[r.modality] || r.modality}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{formatBogota(r.registered_at)}</td>
