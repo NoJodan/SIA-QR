@@ -16,7 +16,7 @@ def _mk_student_user(email, uid, given="Test", family="User", name=None):
     return u
 
 
-def _payload(code="123456789012", doc="123456789012", phone="3001234567", addr="Calle 1 #2-3"):
+def _payload(code="123456789012", doc="1234567890", phone="3001234567", addr="Calle 1 #2-3"):
     return {
         "student_code": code,
         "document_number": doc,
@@ -55,7 +55,7 @@ class B3MononymTests(TestCase):
         u = _mk_student_user("mad@ut.edu.co", "mad", name="Madonna")
         c = APIClient()
         c.force_login(u)
-        r = c.patch("/api/auth/me/", _payload(code="123456789012", doc="123456789012"), format="json")
+        r = c.patch("/api/auth/me/", _payload(code="123456789012", doc="1234567890"), format="json")
         self.assertEqual(r.status_code, 200)
         st = Student.objects.get(user=u)
         self.assertEqual(st.first_name, "Madonna")
@@ -84,6 +84,28 @@ class B5NumericFieldsTests(TestCase):
         r = c.patch("/api/auth/me/", _payload(phone="30012345678"), format="json")
         self.assertEqual(r.status_code, 400)
         self.assertIn("phone_number", r.data)
+
+    def test_document_out_of_range_is_400(self):
+        u = _mk_student_user("b5c@ut.edu.co", "b5c")
+        c = APIClient()
+        c.force_login(u)
+        r = c.patch("/api/auth/me/", _payload(doc="12345"), format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("document_number", r.data)
+        r = c.patch("/api/auth/me/", _payload(doc="12345678901"), format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("document_number", r.data)
+
+    def test_code_out_of_range_is_400(self):
+        u = _mk_student_user("b5d@ut.edu.co", "b5d")
+        c = APIClient()
+        c.force_login(u)
+        r = c.patch("/api/auth/me/", _payload(code="12345678901"), format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("student_code", r.data)
+        r = c.patch("/api/auth/me/", _payload(code="1234567890123"), format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("student_code", r.data)
 
 
 class B4IncompleteProfileTests(TestCase):
@@ -152,11 +174,11 @@ class B1AtomicityTests(TestCase):
         c1.force_login(u1)
         c2.force_login(u2)
         r1 = c1.patch(
-            "/api/auth/me/", _payload(code="123456789012", doc="123456789012"), format="json"
+            "/api/auth/me/", _payload(code="123456789012", doc="1234567890"), format="json"
         )
         self.assertIn(r1.status_code, (200, 201))
         r2 = c2.patch(
-            "/api/auth/me/", _payload(code="123456789012", doc="123456789013"), format="json"
+            "/api/auth/me/", _payload(code="123456789012", doc="1234567891"), format="json"
         )
         self.assertEqual(r2.status_code, 409)
         self.assertNotEqual(r2.status_code, 500)
@@ -167,7 +189,7 @@ class B1AtomicityTests(TestCase):
         c.force_login(u)
         for _ in range(2):
             r = c.patch(
-                "/api/auth/me/", _payload(code="123456789012", doc="123456789012"),
+                "/api/auth/me/", _payload(code="123456789012", doc="1234567890"),
                 format="json",
             )
             self.assertIn(r.status_code, (200, 201, 409))

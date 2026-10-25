@@ -53,6 +53,13 @@ function toFixedOrNull(v, dec) {
   return Number(n.toFixed(dec));
 }
 
+// Longitudes de las casillas numéricas del perfil (dígitos).
+const NUMERIC_RULES = {
+  document_number: { min: 6, max: 10 },
+  student_code: { min: 12, max: 12 },
+  phone_number: { min: 7, max: 10 },
+};
+
 // M1: registro inicial real del estudiante (RF-EST-03). El nombre viene de
 // Google (solo lectura); se exigen código/documento/teléfono/dirección
 // reales; el backend valida unicidad con 409 legible.
@@ -68,10 +75,9 @@ function StudentProfileForm({ initial, onSaved, notice }) {
   const [errors, setErrors] = useState({});
 
   // Casillas numéricas: solo dígitos y su longitud máxima real.
-  const NUMERIC_MAX = { document_number: 12, student_code: 12, phone_number: 10 };
   const set = (k) => (e) => {
-    const max = NUMERIC_MAX[k];
-    const value = max ? e.target.value.replace(/\D/g, "").slice(0, max) : e.target.value;
+    const rule = NUMERIC_RULES[k];
+    const value = rule ? e.target.value.replace(/\D/g, "").slice(0, rule.max) : e.target.value;
     setForm((f) => ({ ...f, [k]: value }));
   };
 
@@ -108,9 +114,9 @@ function StudentProfileForm({ initial, onSaved, notice }) {
   };
 
   const fields = [
-    { key: "document_number", label: "Número de documento", placeholder: "Solo números, máximo 12", autoComplete: "off", numeric: true },
-    { key: "student_code", label: "Código estudiantil", placeholder: "Solo números, máximo 12", autoComplete: "off", numeric: true },
-    { key: "phone_number", label: "Teléfono", placeholder: "Solo números, máximo 10", type: "tel", autoComplete: "tel", numeric: true },
+    { key: "document_number", label: "Número de documento", placeholder: "Solo números, entre 6 y 10 dígitos", autoComplete: "off", numeric: true },
+    { key: "student_code", label: "Código estudiantil", placeholder: "Solo números, 12 dígitos", autoComplete: "off", numeric: true },
+    { key: "phone_number", label: "Teléfono", placeholder: "Solo números, entre 7 y 10 dígitos", type: "tel", autoComplete: "tel", numeric: true },
     { key: "address", label: "Dirección", placeholder: "Ej. Calle 10 # 5-20", autoComplete: "street-address" },
   ];
 
@@ -148,33 +154,36 @@ function StudentProfileForm({ initial, onSaved, notice }) {
       )}
 
       <div className="attend-profile-fields">
-        {fields.map(({ key, label, placeholder, type, autoComplete, numeric }) => (
-          <div key={key} className={`attend-profile-field${key === "address" ? " is-wide" : ""}`}>
-            <label htmlFor={`student-${key}`}>
-              {label}<span aria-hidden="true"> *</span>
-            </label>
-            <input
-              id={`student-${key}`}
-              type={type || "text"}
-              inputMode={numeric ? "numeric" : undefined}
-              autoComplete={autoComplete}
-              placeholder={placeholder}
-              className="attend-profile-input"
-              value={form[key]}
-              onChange={set(key)}
-              maxLength={numeric ? NUMERIC_MAX[key] : key === "address" ? 500 : 50}
-              minLength={key === "phone_number" ? 7 : undefined}
-              required
-              aria-invalid={Boolean(errors[key])}
-              aria-describedby={errors[key] ? `student-${key}-error` : undefined}
-            />
-            {errors[key] && (
-              <p id={`student-${key}-error`} className="attend-profile-field-error">
-                {errors[key]}
-              </p>
-            )}
-          </div>
-        ))}
+        {fields.map(({ key, label, placeholder, type, autoComplete, numeric }) => {
+          const rule = NUMERIC_RULES[key];
+          return (
+            <div key={key} className={`attend-profile-field${key === "address" ? " is-wide" : ""}`}>
+              <label htmlFor={`student-${key}`}>
+                {label}<span aria-hidden="true"> *</span>
+              </label>
+              <input
+                id={`student-${key}`}
+                type={type || "text"}
+                inputMode={numeric ? "numeric" : undefined}
+                autoComplete={autoComplete}
+                placeholder={placeholder}
+                className="attend-profile-input"
+                value={form[key]}
+                onChange={set(key)}
+                maxLength={rule ? rule.max : key === "address" ? 500 : 50}
+                minLength={rule ? rule.min : undefined}
+                required
+                aria-invalid={Boolean(errors[key])}
+                aria-describedby={errors[key] ? `student-${key}-error` : undefined}
+              />
+              {errors[key] && (
+                <p id={`student-${key}-error`} className="attend-profile-field-error">
+                  {errors[key]}
+                </p>
+              )}
+            </div>
+          );
+        })}
       </div>
       {(errors._global || notice) && (
         <p className="attend-profile-global-error" role="alert">

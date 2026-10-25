@@ -221,7 +221,7 @@ class ProfessorProfileUpdateTests(TestCase):
         # ...y con datos reales crea el perfil (200).
         response = self.client.patch(
             "/api/auth/me/",
-            {"student_code": "123456789012", "document_number": "123456789012",
+            {"student_code": "123456789012", "document_number": "1234567890",
              "phone_number": "3001234567", "address": "Calle 1 #2-3",
              "first_name": "Est", "last_name": "Uno"},
             format="json",
