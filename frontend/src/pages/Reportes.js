@@ -494,15 +494,17 @@ export default function Reportes({ isAdmin = false }) {
               className={inputCls}
             />
           </Field>
-          <Field id="rep-sesion" icon="fa-qrcode" label="ID de sesión">
-            <input
-              id="rep-sesion"
-              value={draft.sessionId}
-              onChange={set("sessionId")}
-              placeholder="UUID de la sesión"
-              className={inputCls}
-            />
-          </Field>
+          {isAdmin && (
+            <Field id="rep-sesion" icon="fa-qrcode" label="ID de sesión">
+              <input
+                id="rep-sesion"
+                value={draft.sessionId}
+                onChange={set("sessionId")}
+                placeholder="UUID de la sesión"
+                className={inputCls}
+              />
+            </Field>
+          )}
         </div>
       </section>
 
@@ -564,25 +566,29 @@ export default function Reportes({ isAdmin = false }) {
             </ChevronSelect>
           </Field>
 
-          <Field id="rep-reg-desde" icon="fa-clock" label="Registro desde">
-            <input
-              id="rep-reg-desde"
-              type="date"
-              value={draft.registeredFrom}
-              onChange={set("registeredFrom")}
-              className={inputCls}
-            />
-          </Field>
+          {isAdmin && (
+            <>
+              <Field id="rep-reg-desde" icon="fa-clock" label="Registro desde">
+                <input
+                  id="rep-reg-desde"
+                  type="date"
+                  value={draft.registeredFrom}
+                  onChange={set("registeredFrom")}
+                  className={inputCls}
+                />
+              </Field>
 
-          <Field id="rep-reg-hasta" icon="fa-clock" label="Registro hasta">
-            <input
-              id="rep-reg-hasta"
-              type="date"
-              value={draft.registeredTo}
-              onChange={set("registeredTo")}
-              className={inputCls}
-            />
-          </Field>
+              <Field id="rep-reg-hasta" icon="fa-clock" label="Registro hasta">
+                <input
+                  id="rep-reg-hasta"
+                  type="date"
+                  value={draft.registeredTo}
+                  onChange={set("registeredTo")}
+                  className={inputCls}
+                />
+              </Field>
+            </>
+          )}
 
           {isAdmin && (
             <Field
