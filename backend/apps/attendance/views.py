@@ -235,7 +235,8 @@ class ResolveTokenView(Auth401Mixin, APIView):
                 needs_profile = True
             else:
                 already_marked = Attendance.objects.filter(
-                    session=session, student=student
+                    session__scheduled_class_id=session.scheduled_class_id,
+                    student=student,
                 ).exists()
         return Response(_session_payload(session, already_marked, needs_profile))
 
@@ -296,27 +297,50 @@ class MarkAttendanceView(Auth401Mixin, APIView):
 
         try:
             with transaction.atomic():
-                attendance, created = Attendance.objects.get_or_create(
-                    session=session,
-                    student=student,
-                    defaults={
-                        "latitude": ser.validated_data.get("latitude"),
-                        "longitude": ser.validated_data.get("longitude"),
-                        "accuracy": ser.validated_data.get("accuracy"),
-                        "ip_address": _client_ip(request),
-                        "user_agent": (request.META.get("HTTP_USER_AGENT") or "")[:2000],
-                    },
+                # Una marcación por clase: la rotación del QR crea sesiones
+                # nuevas. La clase es el punto de serialización (la rotación
+                # ya la bloquea con select_for_update).
+                ScheduledClass.objects.select_for_update().get(
+                    pk=session.scheduled_class_id
                 )
+                attendance = (
+                    Attendance.objects.filter(
+                        session__scheduled_class_id=session.scheduled_class_id,
+                        student=student,
+                    )
+                    .order_by("registered_at")
+                    .first()
+                )
+                if attendance is not None:
+                    created = False
+                else:
+                    attendance, created = Attendance.objects.get_or_create(
+                        session=session,
+                        student=student,
+                        defaults={
+                            "latitude": ser.validated_data.get("latitude"),
+                            "longitude": ser.validated_data.get("longitude"),
+                            "accuracy": ser.validated_data.get("accuracy"),
+                            "ip_address": _client_ip(request),
+                            "user_agent": (request.META.get("HTTP_USER_AGENT") or "")[:2000],
+                        },
+                    )
         except IntegrityError:
             # Carrera: otro request creó la marcación primero -> idempotente.
-            try:
-                attendance = Attendance.objects.get(session=session, student=student)
-                created = False
-            except Attendance.DoesNotExist:
+            attendance = (
+                Attendance.objects.filter(
+                    session__scheduled_class_id=session.scheduled_class_id,
+                    student=student,
+                )
+                .order_by("registered_at")
+                .first()
+            )
+            if attendance is None:
                 return Response(
                     {"error": "No se pudo registrar la asistencia, intenta de nuevo."},
                     status=status.HTTP_409_CONFLICT,
                 )
+            created = False
         except Exception:
             return Response(
                 {"error": "No se pudo registrar la asistencia, intenta de nuevo."},
@@ -325,7 +349,7 @@ class MarkAttendanceView(Auth401Mixin, APIView):
 
         data = {
             "attendance_id": str(attendance.id),
-            "session_id": str(session.id),
+            "session_id": str(attendance.session_id),
             "registered_at": attendance.registered_at,
             "already_marked": not created,
         }

@@ -677,6 +677,76 @@ class ClassAttendanceListViewTests(TestCase):
         self.assertEqual(resp.status_code, 403)
 
 
+class ClassWideAttendanceUniquenessTests(TestCase):
+    """Una sola marcación por clase aunque el QR rotado cree otra sesión."""
+
+    def _setup(self, email):
+        _, _, group = _make_prof_group(email=email)
+        clase = _make_class(group)
+        first, first_raw = _make_session(clase)
+        return clase, first, first_raw
+
+    def _mark(self, client, raw):
+        return client.post("/api/attendance/mark/", {"token": raw}, format="json")
+
+    def test_rescan_of_rotated_qr_is_duplicate(self):
+        from apps.attendance.services import generate_session
+
+        clase, first, first_raw = self._setup("rot1prof@ut.edu.co")
+        user, _ = _make_student("rot1@ut.edu.co", code="EST-ROT1", doc="DOC-ROT1")
+        client = APIClient()
+        client.force_login(user)
+        self.assertEqual(self._mark(client, first_raw).status_code, 201)
+
+        rotated = generate_session(clase)  # revoca la sesión anterior
+        resp = self._mark(client, rotated["token_raw"])
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.data["already_marked"])
+        # La marcación vive en la primera sesión, no en la rotada.
+        self.assertEqual(resp.data["session_id"], str(first.id))
+        self.assertEqual(
+            Attendance.objects.filter(session__scheduled_class=clase).count(), 1
+        )
+
+    def test_resolve_rotated_qr_reports_already_marked(self):
+        from apps.attendance.services import generate_session
+
+        clase, _, first_raw = self._setup("rot2prof@ut.edu.co")
+        user, _ = _make_student("rot2@ut.edu.co", code="EST-ROT2", doc="DOC-ROT2")
+        client = APIClient()
+        client.force_login(user)
+        self.assertEqual(self._mark(client, first_raw).status_code, 201)
+
+        rotated = generate_session(clase)
+        resp = client.get(
+            "/api/attendance/resolve/", {"token": rotated["token_raw"]}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.data["already_marked"])
+
+    def test_other_student_can_mark_on_rotated_qr(self):
+        from apps.attendance.services import generate_session
+
+        clase, _, first_raw = self._setup("rot3prof@ut.edu.co")
+        first_user, _ = _make_student(
+            "rot3a@ut.edu.co", code="EST-ROT3A", doc="DOC-ROT3A"
+        )
+        client = APIClient()
+        client.force_login(first_user)
+        self.assertEqual(self._mark(client, first_raw).status_code, 201)
+
+        rotated = generate_session(clase)
+        other_user, _ = _make_student(
+            "rot3b@ut.edu.co", code="EST-ROT3B", doc="DOC-ROT3B"
+        )
+        other = APIClient()
+        other.force_login(other_user)
+        self.assertEqual(self._mark(other, rotated["token_raw"]).status_code, 201)
+        self.assertEqual(
+            Attendance.objects.filter(session__scheduled_class=clase).count(), 2
+        )
+
+
 class AuditLogTests(TestCase):
     """RF-ADM-07: eventos de auditoría de marcaciones."""
 
