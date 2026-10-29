@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 
-export default function CourseForm({ initialName = "", submitLabel = "Guardar", onSubmit, onCancel }) {
+export default function CourseForm({ initialName = "", initialGroup = 1, submitLabel = "Guardar", onSubmit, onCancel }) {
   const [name, setName] = useState(initialName);
+  const [group, setGroup] = useState(initialGroup);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -16,13 +17,18 @@ export default function CourseForm({ initialName = "", submitLabel = "Guardar", 
       setError("Máximo 150 caracteres.");
       return;
     }
+    const groupNumber = Number(group);
+    if (!Number.isInteger(groupNumber) || groupNumber < 1 || groupNumber > 10) {
+      setError("El número de grupo debe estar entre 1 y 10.");
+      return;
+    }
     setError("");
     setSaving(true);
     try {
-      await onSubmit(clean);
+      await onSubmit(clean, groupNumber);
     } catch (err) {
       const data = err?.response?.data;
-      setError((data && (data.name?.[0] || data.detail)) || "No se pudo guardar el curso.");
+      setError((data && (data.name?.[0] || data.group_number?.[0] || data.detail)) || "No se pudo guardar el curso.");
     } finally {
       setSaving(false);
     }
@@ -39,6 +45,23 @@ export default function CourseForm({ initialName = "", submitLabel = "Guardar", 
         className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
         maxLength={150}
       />
+      <div>
+        <label htmlFor="course-group-number" className="mb-1 block text-sm font-medium text-slate-700">
+          Número de grupo
+        </label>
+        <select
+          id="course-group-number"
+          value={group}
+          onChange={(e) => setGroup(e.target.value)}
+          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
+        >
+          {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+            <option key={n} value={n}>
+              Grupo {String(n).padStart(2, "0")}
+            </option>
+          ))}
+        </select>
+      </div>
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       <div className="flex flex-wrap gap-2">
         <button

@@ -33,6 +33,17 @@ class AcademicGroupSerializer(serializers.ModelSerializer):
 
 class AcademicGroupWriteSerializer(serializers.Serializer):
     name = serializers.CharField(min_length=1, max_length=150)
+    group_number = serializers.IntegerField(
+        min_value=1,
+        max_value=10,
+        error_messages={
+            "required": "El número de grupo es obligatorio.",
+            "invalid": "El número de grupo debe ser un entero entre 1 y 10.",
+            "min_value": "El número de grupo debe estar entre 1 y 10.",
+            "max_value": "El número de grupo debe estar entre 1 y 10.",
+            "null": "El número de grupo es obligatorio.",
+        },
+    )
 
     def validate_name(self, value):
         value = value.strip()

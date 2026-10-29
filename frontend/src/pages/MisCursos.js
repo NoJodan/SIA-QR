@@ -46,14 +46,14 @@ export default function MisCursos({ onSelectGroup }) {
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
-  const handleCreate = async (name) => {
-    const created = await createMyGroup(name);
+  const handleCreate = async (name, groupNumber) => {
+    const created = await createMyGroup(name, groupNumber);
     setGroups((prev) => [...prev, created]);
     setShowForm(false);
   };
 
-  const handleUpdate = async (id, name) => {
-    const updated = await updateMyGroup(id, name);
+  const handleUpdate = async (id, name, groupNumber) => {
+    const updated = await updateMyGroup(id, name, groupNumber);
     setGroups((prev) => prev.map((g) => (g.id === id ? updated : g)));
     setEditingId(null);
   };
@@ -181,8 +181,9 @@ export default function MisCursos({ onSelectGroup }) {
                 <div className="relative">
                   <CourseForm
                     initialName={g.course?.name || ""}
+                    initialGroup={Number(g.group_code) || 1}
                     submitLabel="Guardar"
-                    onSubmit={(name) => handleUpdate(g.id, name)}
+                    onSubmit={(name, groupNumber) => handleUpdate(g.id, name, groupNumber)}
                     onCancel={() => setEditingId(null)}
                   />
                 </div>
@@ -195,10 +196,12 @@ export default function MisCursos({ onSelectGroup }) {
                     <div className="min-w-0 flex-1">
                       <button
                         onClick={() => onSelectGroup && onSelectGroup(g)}
-                        aria-label={`Ver ${g.course?.name}`}
+                        aria-label={`Ver ${g.course?.name} · Grupo ${g.group_code}`}
                         className="text-left w-full rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40"
                       >
-                        <h3 className="text-lg font-bold text-slate-900 break-words group-hover:text-[#B3200E]">{g.course?.name}</h3>
+                        <h3 className="text-lg font-bold text-slate-900 break-words group-hover:text-[#B3200E]">
+                          {g.course?.name} <span className="text-sm font-semibold text-slate-500">· Grupo {g.group_code}</span>
+                        </h3>
                       </button>
                       <p className="mt-0.5 text-sm text-slate-500">
                         {g.classes_count ?? 0} {(g.classes_count ?? 0) === 1 ? "clase" : "clases"}
@@ -208,7 +211,7 @@ export default function MisCursos({ onSelectGroup }) {
                   <div className="relative mt-auto flex flex-wrap items-center gap-2 pt-6">
                     <button
                       onClick={() => onSelectGroup && onSelectGroup(g)}
-                      aria-label={`Ver ${g.course?.name}`}
+                      aria-label={`Ver ${g.course?.name} · Grupo ${g.group_code}`}
                       className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40"
                     >
                       <i className="fa-regular fa-eye" aria-hidden="true"></i>
@@ -216,7 +219,7 @@ export default function MisCursos({ onSelectGroup }) {
                     </button>
                     <button
                       onClick={() => handleDelete(g.id)}
-                      aria-label={`Eliminar ${g.course?.name}`}
+                      aria-label={`Eliminar ${g.course?.name} · Grupo ${g.group_code}`}
                       className="inline-flex items-center gap-2 rounded-xl bg-red-50 px-3.5 py-2 text-xs font-semibold text-[#B3200E] transition hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40"
                     >
                       <i className="fa-regular fa-trash-can" aria-hidden="true"></i>
@@ -224,7 +227,7 @@ export default function MisCursos({ onSelectGroup }) {
                     </button>
                     <button
                       onClick={() => setEditingId(g.id)}
-                      aria-label={`Editar ${g.course?.name}`}
+                      aria-label={`Editar ${g.course?.name} · Grupo ${g.group_code}`}
                       className="inline-flex items-center gap-2 rounded-xl bg-[#B3200E] px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-[#941B0B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40"
                     >
                       <i className="fa-solid fa-pen" aria-hidden="true"></i>

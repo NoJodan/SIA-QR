@@ -83,6 +83,8 @@ class MyGroupsListView(generics.ListCreateAPIView):
         ser = AcademicGroupWriteSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         name = ser.validated_data["name"]
+        group_number = ser.validated_data["group_number"]
+        group_code = f"{group_number:02d}"
         with transaction.atomic():
             base = slugify(name)[:12].upper() or "CURSO"
             course = Course.objects.create(
@@ -92,7 +94,7 @@ class MyGroupsListView(generics.ListCreateAPIView):
             group = AcademicGroup.objects.create(
                 course=course,
                 professor=get_professor(request.user),
-                group_code="01",
+                group_code=group_code,
                 term_period=current_term(),
             )
         out = AcademicGroupSerializer(group).data
@@ -102,7 +104,7 @@ class MyGroupsListView(generics.ListCreateAPIView):
             "group_created",
             f"group:{group.id}",
             request=request,
-            payload={"name": name},
+            payload={"name": name, "group_code": group_code},
         )
         return Response(out, status=status.HTTP_201_CREATED)
 
@@ -129,9 +131,18 @@ class MyGroupDetailView(generics.RetrieveUpdateDestroyAPIView):
         group = self.get_object()
         ser = AcademicGroupWriteSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        group.course.name = ser.validated_data["name"]
-        group.course.save(update_fields=["name"])
-        # GET-serializado para respuesta consistente; PATCH/PUT solo renombran
+        with transaction.atomic():
+            group.course.name = ser.validated_data["name"]
+            group.course.save(update_fields=["name"])
+            group.group_code = f"{ser.validated_data['group_number']:02d}"
+            try:
+                group.save(update_fields=["group_code"])
+            except IntegrityError:
+                raise ValidationError(
+                    {"group_number": ["Ya existe un grupo con ese número en este periodo."]}
+                )
+        # GET-serializado para respuesta consistente; PATCH/PUT renombran y
+        # actualizan el número de grupo.
         out = AcademicGroupSerializer(group).data
         out["classes_count"] = group.classes.count()
         log_event(
@@ -139,7 +150,7 @@ class MyGroupDetailView(generics.RetrieveUpdateDestroyAPIView):
             "group_updated",
             f"group:{group.id}",
             request=request,
-            payload={"name": group.course.name},
+            payload={"name": group.course.name, "group_code": group.group_code},
         )
         return Response(out)
 

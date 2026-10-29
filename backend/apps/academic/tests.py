@@ -1141,3 +1141,105 @@ class RescheduleCompletedClassTests(TestCase):
         self.assertEqual(resp.data["status"], ClassStatus.COMPLETED)
         self.clase.refresh_from_db()
         self.assertEqual(self.clase.status, ClassStatus.COMPLETED)
+
+
+class GroupNumberTests(TestCase):
+    """Número de grupo (1..10) requerido, guardado como group_code de 2 dígitos."""
+
+    def setUp(self):
+        self.user, _, self.group = _make_prof_group(email="gn@ut.edu.co")
+        self.client = APIClient()
+        self.client.force_login(self.user)
+        self.url = "/api/academic/my-groups/"
+
+    def test_create_persists_two_digit_group_code(self):
+        resp = self.client.post(
+            self.url, {"name": "Cálculo Diferencial", "group_number": 7}, format="json"
+        )
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.data["group_code"], "07")
+        created = AcademicGroup.objects.get(pk=resp.data["id"])
+        self.assertEqual(created.group_code, "07")
+
+    def test_create_with_group_number_11_is_400(self):
+        before = AcademicGroup.objects.count()
+        resp = self.client.post(
+            self.url, {"name": "X", "group_number": 11}, format="json"
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("group_number", resp.data)
+        self.assertEqual(AcademicGroup.objects.count(), before)
+
+    def test_create_with_group_number_0_is_400(self):
+        resp = self.client.post(
+            self.url, {"name": "X", "group_number": 0}, format="json"
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("group_number", resp.data)
+
+    def test_create_without_group_number_is_400(self):
+        before = AcademicGroup.objects.count()
+        resp = self.client.post(self.url, {"name": "X"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("group_number", resp.data)
+        self.assertEqual(AcademicGroup.objects.count(), before)
+
+    def test_patch_updates_name_and_group_code(self):
+        resp = self.client.patch(
+            f"/api/academic/my-groups/{self.group.id}/",
+            {"name": "Nuevo", "group_number": 10},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data["course"]["name"], "Nuevo")
+        self.assertEqual(resp.data["group_code"], "10")
+        self.group.refresh_from_db()
+        self.group.course.refresh_from_db()
+        self.assertEqual(self.group.group_code, "10")
+        self.assertEqual(self.group.course.name, "Nuevo")
+
+    def test_create_with_non_integer_group_number_is_400(self):
+        before = AcademicGroup.objects.count()
+        resp = self.client.post(
+            self.url, {"name": "X", "group_number": "3.5"}, format="json"
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("group_number", resp.data)
+        self.assertEqual(AcademicGroup.objects.count(), before)
+
+    def test_patch_out_of_range_keeps_group_code(self):
+        resp = self.client.patch(
+            f"/api/academic/my-groups/{self.group.id}/",
+            {"name": "X", "group_number": 11},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.group_code, "01")
+
+    def test_patch_without_group_number_is_400(self):
+        resp = self.client.patch(
+            f"/api/academic/my-groups/{self.group.id}/", {"name": "X"}, format="json"
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("group_number", resp.data)
+
+    def test_patch_collision_is_400_and_rolls_back(self):
+        AcademicGroup.objects.create(
+            course=self.group.course,
+            professor=self.group.professor,
+            group_code="02",
+            term_period=self.group.term_period,
+        )
+        resp = self.client.patch(
+            f"/api/academic/my-groups/{self.group.id}/",
+            {"name": "Renombrado", "group_number": 2},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIsInstance(resp.data["group_number"], list)
+        self.assertIn("Ya existe", resp.data["group_number"][0])
+        self.group.refresh_from_db()
+        self.group.course.refresh_from_db()
+        self.assertEqual(self.group.course.name, "Curso Auto")
+        self.assertEqual(self.group.group_code, "01")
