@@ -383,7 +383,7 @@ class StudentProfileTests(TestCase):
 
         u1 = User.objects.create_user(email="s1@ut.edu.co", google_sub="s1", role="ROLE_STUDENT")
         Student.objects.create(
-            user=u1, student_code="123456789012", document_number="123456789012",
+            user=u1, student_code="123456789012", document_number="1234567890",
             first_name="A", last_name="B", phone_number="3001111111",
             address="Dir 1",
         )
@@ -396,7 +396,7 @@ class StudentProfileTests(TestCase):
         client.force_login(u2)
         resp = client.patch(
             "/api/auth/me/",
-            {"student_code": "123456789012", "document_number": "123456789013",
+            {"student_code": "123456789012", "document_number": "1234567891",
              "phone_number": "3002222222", "address": "Dir 2",
              "first_name": "C", "last_name": "D"},
             format="json",
@@ -772,7 +772,7 @@ class StudentProfileImmutabilityTests(TestCase):
     def test_changed_student_code_is_400(self):
         resp = self.client.patch(
             "/api/auth/me/",
-            {**self.body, "student_code": "999888777"},
+            {**self.body, "student_code": "999888777666"},
             format="json",
         )
         self.assertEqual(resp.status_code, 400)

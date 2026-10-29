@@ -7,6 +7,28 @@ export function formatBogota(isoString) {
   }).format(new Date(isoString));
 }
 
+// Fecha (dd/mm/aaaa) de Bogotá, separada de la hora.
+export function formatBogotaDate(isoString) {
+  if (!isoString) return "";
+  return new Intl.DateTimeFormat("es-CO", {
+    timeZone: "America/Bogota",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(isoString));
+}
+
+// Hora (8:33 p. m.) de Bogotá, separada de la fecha.
+export function formatBogotaTime(isoString) {
+  if (!isoString) return "";
+  return new Intl.DateTimeFormat("es-CO", {
+    timeZone: "America/Bogota",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(isoString));
+}
+
 export function todayISODate(timeZone = "America/Bogota") {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone,

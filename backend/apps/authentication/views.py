@@ -50,8 +50,8 @@ class AdminLoginThrottle(AnonRateThrottle):
 
 _GENERIC_ADMIN_LOGIN_ERROR = {"error": "Credenciales inválidas"}
 
-_STUDENT_CODE_RE = re.compile(r"^[0-9]{1,12}$")
-_DOCUMENT_NUMBER_RE = re.compile(r"^[0-9]{1,12}$")
+_STUDENT_CODE_RE = re.compile(r"^[0-9]{12}$")
+_DOCUMENT_NUMBER_RE = re.compile(r"^[0-9]{6,10}$")
 _PHONE_RE = re.compile(r"^[0-9]{7,10}$")
 
 
@@ -396,11 +396,11 @@ def _patch_student(request, user):
     if not student_code:
         errors["student_code"] = "El código estudiantil es obligatorio."
     elif not _STUDENT_CODE_RE.match(student_code):
-        errors["student_code"] = "El código estudiantil solo admite números (máximo 12, sin espacios)."
+        errors["student_code"] = "El código estudiantil debe tener exactamente 12 dígitos numéricos."
     if not document_number:
         errors["document_number"] = "El número de documento es obligatorio."
     elif not _DOCUMENT_NUMBER_RE.match(document_number):
-        errors["document_number"] = "El número de documento solo admite números (máximo 12, sin espacios)."
+        errors["document_number"] = "El número de documento debe tener entre 6 y 10 dígitos numéricos."
     if not phone_number:
         errors["phone_number"] = "El teléfono es obligatorio."
     elif not _PHONE_RE.match(phone_number):
