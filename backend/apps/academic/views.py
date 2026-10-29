@@ -538,7 +538,8 @@ class ClassCurrentSessionView(generics.GenericAPIView):
       ({state expired, reason qr_expired, session_id, expires_at, status}).
       Sin auto-rotación: no se genera S2.
     - 410 finished: clase cerrada o fuera de ventana (con cierre perezoso a
-      COMPLETED + revocación de QR activos).
+      COMPLETED + revocación de QR activos). Incluye `session_id` de la última
+      sesión (puede ser None) para listar sus marcaciones ya terminada.
     - 409: colisión/carrera sin sesión válida que reusar (reintentable).
     - 503: fallo inesperado del ensure (reintentable, con log; nunca 500).
     - 404 si el grupo/clase no existe o es de otro profesor.
@@ -632,6 +633,7 @@ class ClassCurrentSessionView(generics.GenericAPIView):
                     "state": "finished",
                     "status": outcome["status"],
                     "reason": outcome["reason"],
+                    "session_id": outcome.get("session_id"),
                 },
                 status=status.HTTP_410_GONE,
                 headers={"Cache-Control": "no-store"},
@@ -694,6 +696,7 @@ class ClassCurrentSessionRotateView(generics.GenericAPIView):
 
     def post(self, request, group_id, class_id):
         from apps.academic.services import (
+            _last_session_id,
             class_window,
             get_early_grace_seconds,
             get_valid_session,
@@ -716,7 +719,12 @@ class ClassCurrentSessionRotateView(generics.GenericAPIView):
 
             if clase.status in (ClassStatus.COMPLETED, ClassStatus.CANCELLED):
                 return Response(
-                    {"state": "finished", "status": clase.status, "reason": "closed"},
+                    {
+                        "state": "finished",
+                        "status": clase.status,
+                        "reason": "closed",
+                        "session_id": _last_session_id(clase),
+                    },
                     status=status.HTTP_410_GONE,
                     headers={"Cache-Control": "no-store"},
                 )
@@ -746,6 +754,7 @@ class ClassCurrentSessionRotateView(generics.GenericAPIView):
                         "state": "finished",
                         "status": ClassStatus.COMPLETED,
                         "reason": "window_elapsed",
+                        "session_id": _last_session_id(clase),
                     },
                     status=status.HTTP_410_GONE,
                     headers={"Cache-Control": "no-store"},

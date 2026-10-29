@@ -36,6 +36,7 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
   const [editing, setEditing] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [instantLoading, setInstantLoading] = useState(false);
+  const [instantOpen, setInstantOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -178,16 +179,28 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
           <p className="course-banner-desc">Crea clases de manera inmediata o programa para más tarde. Luego podrás verlas en la lista de abajo.</p>
 
           <div className="course-banner-actions mt-3">
-            <details className="group">
-              <summary
-                className="course-instant-summary"
-                aria-label="Opciones de clase inmediata"
-              >
-                <i className="fa-solid fa-bolt" aria-hidden="true" />
-                {instantLoading ? "Creando..." : "Clase inmediata"}
-                <span aria-hidden="true" className="course-summary-caret">›</span>
-              </summary>
-              <div className="course-instant-panel">
+            <button
+              type="button"
+              onClick={() => setInstantOpen((v) => !v)}
+              aria-expanded={instantOpen}
+              aria-controls="instant-panel"
+              className="course-instant-summary"
+            >
+              <i className="fa-solid fa-bolt" aria-hidden="true" />
+              {instantLoading ? "Creando..." : "Clase inmediata"}
+              <span aria-hidden="true" className="course-summary-caret">›</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              className="course-schedule-btn"
+            >
+              <i className="fa-regular fa-calendar" aria-hidden="true" /> Programar clase
+            </button>
+
+            {instantOpen && (
+              <div id="instant-panel" className="course-instant-panel">
                 <div>
                   <label htmlFor="instant-title" className="course-input-label">
                     Título inmediata (opcional)
@@ -248,6 +261,7 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={handleInstant}
                   disabled={instantLoading}
                   className="course-create-now"
@@ -256,15 +270,7 @@ export default function CursoDetalle({ group, onBack, onSelectClass }) {
                   {instantLoading ? "Creando..." : "Crear ahora"}
                 </button>
               </div>
-            </details>
-
-            <button
-              type="button"
-              onClick={() => setShowCreate(true)}
-              className="course-schedule-btn"
-            >
-              <i className="fa-regular fa-calendar" aria-hidden="true" /> Programar clase
-            </button>
+            )}
           </div>
         </div>
 

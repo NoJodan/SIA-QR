@@ -200,6 +200,19 @@ def _session_ttl_minutes(session, clase):
     return resolve_ttl(clase)
 
 
+def _last_session_id(clase):
+    """Última sesión de la clase: la vista terminada sigue mostrando su lista."""
+    from apps.attendance.models import AttendanceSession
+
+    last = (
+        AttendanceSession.objects.filter(scheduled_class=clase)
+        .order_by("-created_at")
+        .values_list("id", flat=True)
+        .first()
+    )
+    return str(last) if last else None
+
+
 def ensure_current_session(clase):
     """Asegura la sesión vigente de la clase (QR único, sin auto-rotación).
 
@@ -211,8 +224,10 @@ def ensure_current_session(clase):
       token crudo ya no existe (solo se guarda su hash) y `result` es None.
     - expired  {status, reason=qr_expired, session_id, expires_at} si el QR
       único expiró dentro de la ventana (no se genera S2; sin auto-rotación).
-    - finished {status, reason} si la clase está cerrada o pasó su ventana
-      (con cierre perezoso a COMPLETED + revocación).
+    - finished {status, reason, session_id} si la clase está cerrada o pasó su
+      ventana (con cierre perezoso a COMPLETED + revocación). `session_id` es
+      la última sesión (puede ser None) para que la vista terminada liste sus
+      marcaciones.
 
     QR único: si no hay sesión válida en ventana y ya hubo alguna sesión
     (`has_ever_had_session` por class_id) se retorna expired sin generar;
@@ -226,7 +241,12 @@ def ensure_current_session(clase):
     now = _ensure_aware(timezone.now())
 
     if clase.status in (ClassStatus.COMPLETED, ClassStatus.CANCELLED):
-        return {"outcome": "finished", "status": clase.status, "reason": "closed"}
+        return {
+            "outcome": "finished",
+            "status": clase.status,
+            "reason": "closed",
+            "session_id": _last_session_id(clase),
+        }
 
     start, end = class_window(clase)
 
@@ -236,6 +256,7 @@ def ensure_current_session(clase):
             "outcome": "finished",
             "status": ClassStatus.COMPLETED,
             "reason": "window_elapsed",
+            "session_id": _last_session_id(clase),
         }
 
     if now < start - timedelta(seconds=get_early_grace_seconds()):

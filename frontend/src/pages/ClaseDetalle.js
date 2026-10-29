@@ -187,9 +187,9 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
       } else if (cur.status === 410) {
         const reason = cur.data?.reason;
         const state = cur.data?.state;
+        const prev = sessionRef.current;
         if (state === "expired" || reason === "qr_expired" || reason === "rotation_disabled") {
           // QR expirado: fase expired (el poll se detiene por `stopped`).
-          const prev = sessionRef.current;
           setSession({
             session_id: cur.data?.session_id || prev?.session_id || null,
             attend_url: null,
@@ -201,7 +201,12 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
         } else {
           setPhase("finished");
           setStartsIn(null);
-          setSession(null);
+          // Conserva el id: la clase terminada sigue listando sus marcaciones.
+          setSession({
+            session_id: cur.data?.session_id || prev?.session_id || null,
+            attend_url: null,
+            expires_at: null,
+          });
           clearCached(classItem.id);
           setClassStatus(cur.data?.status === "CANCELLED" ? "CANCELLED" : "COMPLETED");
         }
@@ -280,12 +285,13 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
   );
 
   // Polling 5s de la lista viva (restricción No-Redis: sin WebSocket).
+  // Aun detenido (finished) se carga una vez: la clase terminada conserva su lista.
   useEffect(() => {
-    if (stopped) return undefined;
     const tick = () => {
       if (!document.hidden) loadList(page).catch(() => {});
     };
     tick();
+    if (stopped) return undefined;
     const id = setInterval(tick, LIST_MS);
     return () => clearInterval(id);
   }, [classItem.id, session?.session_id, page, loadList, stopped]);
@@ -350,7 +356,12 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
         setPhase("pending");
       } else if (status === 410) {
         clearCached(classItem.id);
-        setSession(null);
+        // Conserva el id para que la lista de la clase terminada no se borre.
+        setSession({
+          session_id: data?.session_id || sessionRef.current?.session_id || null,
+          attend_url: null,
+          expires_at: null,
+        });
         setStartsIn(null);
         setPhase("finished");
       } else {
@@ -611,7 +622,7 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
                 {insideCount} en rango · {outsideCount} fuera de rango
               </span>
             ) : null}
-            {session && (
+            {session && !stopped && (
               <span className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>en vivo (5s)</span>

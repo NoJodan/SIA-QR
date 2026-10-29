@@ -341,17 +341,12 @@
     font-size: 0.9rem;
     font-weight: 700;
     box-shadow: 0 6px 15px rgba(139, 0, 0, 0.25);
-    list-style: none;
     cursor: pointer;
     transition: background-color 200ms ease;
   }
 
   .course-instant-summary:hover {
     background: #941B0B;
-  }
-
-  .course-instant-summary::-webkit-details-marker {
-    display: none;
   }
 
   .course-dot {
@@ -366,12 +361,15 @@
   .course-summary-caret {
     font-size: 0.75rem;
     opacity: 0.9;
+    transition: transform 200ms ease;
+  }
+
+  .course-instant-summary[aria-expanded="true"] .course-summary-caret {
+    transform: rotate(90deg);
   }
 
   .course-instant-panel {
-    position: absolute;
-    z-index: 10;
-    margin-top: 10px;
+    flex: 1 0 100%;
     display: flex;
     flex-wrap: wrap;
     align-items: end;
@@ -380,7 +378,7 @@
     border: 1px solid rgba(148, 163, 184, 0.35);
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.98);
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
   }
 
   .course-input-label {
@@ -548,12 +546,6 @@
     .course-banner-illustration {
       max-width: 430px;
       margin-top: 30px;
-    }
-
-    .course-instant-panel {
-      position: static;
-      width: 100%;
-      margin-top: 10px;
     }
 
     .course-input {

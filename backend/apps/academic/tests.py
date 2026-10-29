@@ -601,6 +601,36 @@ class SingleSessionCreateTests(TestCase):
         clase.refresh_from_db()
         self.assertEqual(clase.status, ClassStatus.COMPLETED)
 
+    def test_finished_keeps_last_session_for_attendances(self):
+        # La clase terminada devuelve la última sesión: su lista no se pierde.
+        user, _, group = _make_prof_group(email="a4@ut.edu.co")
+        clase = _make_class(group, start_delta_min=-1)
+        client = APIClient()
+        client.force_login(user)
+        url = f"/api/academic/groups/{group.id}/classes/{clase.id}/current-session/"
+        live = client.get(url)
+        self.assertEqual(live.status_code, 200)
+        sid = live.data["session_id"]
+
+        estudiante = _make_student(email="a4est@ut.edu.co")
+        Attendance.objects.create(
+            session_id=sid,
+            student=estudiante.student_profile,
+            ip_address="127.0.0.1",
+            user_agent="test",
+        )
+        list_url = f"/api/attendance/sessions/{sid}/attendances/"
+        self.assertEqual(client.get(list_url).data["count"], 1)
+
+        clase.start_time = timezone.now() - timedelta(minutes=120)
+        clase.save(update_fields=["start_time"])
+
+        resp = client.get(url)
+        self.assertEqual(resp.status_code, 410)
+        self.assertEqual(resp.data["state"], "finished")
+        self.assertEqual(resp.data["session_id"], sid)
+        self.assertEqual(client.get(list_url).data["count"], 1)
+
 
 class SingleActiveConcurrencyTests(TransactionTestCase):
     """m5: carrera de hilos sobre generate_session mantiene single-active."""
