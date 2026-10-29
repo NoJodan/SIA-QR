@@ -20,8 +20,8 @@ export const getCurrentSession = (groupId, classId) =>
       throw err;
     });
 
-// A2: lista paginada de marcaciones de una sesión (profesor dueño).
-export const getSessionAttendances = (sessionId, page = 1) =>
+// A2: marcaciones de la clase, todas sus sesiones (profesor dueño).
+export const getClassAttendances = (classId, page = 1) =>
   api
-    .get(`/api/attendance/sessions/${sessionId}/attendances/`, { params: { page } })
+    .get(`/api/attendance/classes/${classId}/attendances/`, { params: { page } })
     .then((r) => r.data);

@@ -586,6 +586,97 @@ class AttendanceRangeTests(TestCase):
         self.assertNotIn("longitude", rows[0])
 
 
+class ClassAttendanceListViewTests(TestCase):
+    """A2 (clase): historial de la clase aunque el QR haya rotado de sesión."""
+
+    def _setup(self):
+        owner, _, group = _make_prof_group(email="classprof@ut.edu.co")
+        clase = _make_class(group)
+        # Rotar el QR revoca la sesión previa: solo una activa por clase.
+        first, _ = _make_session(clase, active=False)
+        second, _ = _make_session(clase)
+        _, student_a = _make_student("cla@ut.edu.co", code="EST-CLA", doc="DOC-CLA")
+        _, student_b = _make_student("clb@ut.edu.co", code="EST-CLB", doc="DOC-CLB")
+        Attendance.objects.create(
+            session=first, student=student_a,
+            ip_address="127.0.0.1", user_agent="test",
+        )
+        Attendance.objects.create(
+            session=second, student=student_b,
+            ip_address="127.0.0.1", user_agent="test",
+        )
+        return owner, clase
+
+    def test_owner_lists_every_session_of_the_class(self):
+        owner, clase = self._setup()
+        client = APIClient()
+        client.force_login(owner)
+        resp = client.get(f"/api/attendance/classes/{clase.id}/attendances/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 2)
+        self.assertEqual(
+            {r["student_code"] for r in resp.data["results"]},
+            {"EST-CLA", "EST-CLB"},
+        )
+
+    def test_newest_mark_is_on_page_one_across_sessions(self):
+        owner, _, group = _make_prof_group(email="liveprof@ut.edu.co")
+        clase = _make_class(group)
+        first, _ = _make_session(clase, active=False)
+        second, _ = _make_session(clase)
+        base = timezone.now() - timedelta(minutes=12)
+        for i, session in enumerate([first] * 6 + [second] * 6):
+            _, student = _make_student(
+                f"live{i}@ut.edu.co", code=f"EST-L{i}", doc=f"DOC-L{i}"
+            )
+            mark = Attendance.objects.create(
+                session=session, student=student,
+                ip_address="127.0.0.1", user_agent="test",
+            )
+            # auto_now_add fija registered_at: se sobrescribe para tener orden real.
+            Attendance.objects.filter(pk=mark.pk).update(
+                registered_at=base + timedelta(minutes=i)
+            )
+        client = APIClient()
+        client.force_login(owner)
+        resp = client.get(f"/api/attendance/classes/{clase.id}/attendances/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 12)
+        self.assertEqual(len(resp.data["results"]), 10)
+        # La marcación más reciente (sesión 2) encabeza la página 1.
+        self.assertEqual(resp.data["results"][0]["student_code"], "EST-L11")
+
+    def test_completed_class_still_lists_marks(self):
+        owner, clase = self._setup()
+        # Clase finalizada y con la ventana ya vencida: el historial no se oculta.
+        ScheduledClass.objects.filter(pk=clase.pk).update(
+            status=ClassStatus.COMPLETED,
+            start_time=timezone.now() - timedelta(hours=3),
+        )
+        client = APIClient()
+        client.force_login(owner)
+        resp = client.get(f"/api/attendance/classes/{clase.id}/attendances/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 2)
+        self.assertEqual(len(resp.data["results"]), 2)
+
+    def test_other_professor_gets_404(self):
+        _, clase = self._setup()
+        other, _, _ = _make_prof_group(email="otherprof@ut.edu.co")
+        client = APIClient()
+        client.force_login(other)
+        resp = client.get(f"/api/attendance/classes/{clase.id}/attendances/")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_student_gets_403(self):
+        _, clase = self._setup()
+        student_user, _ = _make_student("clestud@ut.edu.co", code="EST-CLE", doc="DOC-CLE")
+        client = APIClient()
+        client.force_login(student_user)
+        resp = client.get(f"/api/attendance/classes/{clase.id}/attendances/")
+        self.assertEqual(resp.status_code, 403)
+
+
 class AuditLogTests(TestCase):
     """RF-ADM-07: eventos de auditoría de marcaciones."""
 

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import QrDisplay from "../components/QrDisplay";
-import { getCurrentSession, getSessionAttendances } from "../services/attendance";
+import { getClassAttendances, getCurrentSession } from "../services/attendance";
 import { getGroupClass, rotateCurrentSession, setClassGeofence } from "../services/academic";
 import {
   CLASS_STATUS_COLORS,
@@ -12,8 +12,8 @@ import { formatBogota, formatBogotaNumeric } from "../utils/dates";
 import { getDevicePosition } from "../utils/geolocation";
 import useNow from "../utils/useNow";
 
-// QR único: ensure (clase + sesión vigente) cada 10s y lista viva POR SESIÓN
-// ÚNICA cada 5s (getSessionAttendances por session_id). Ambos polls se
+// QR único: ensure (clase + sesión vigente) cada 10s y lista de marcaciones de
+// la CLASE (todas sus sesiones QR, getClassAttendances) cada 5s. Ambos polls se
 // detienen al terminar: expired | finished | error.
 // Fases: loading | pending | live | expired | finished | error.
 // - expired (410 qr_expired): QR únicos vencidos; "Mostrar QR de nuevo" rota.
@@ -262,18 +262,12 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
     return () => clearInterval(id);
   }, [phase, hasStartsIn]);
 
-  // Lista viva POR SESIÓN ÚNICA (sin acumulada multi-sesión).
+  // Marcaciones de la clase (todas sus sesiones QR, no solo la vigente).
   const loadList = useCallback(
     async (p = page) => {
       const seq = listSeqRef.current + 1;
       listSeqRef.current = seq;
-      const sid = sessionRef.current?.session_id;
-      if (!sid) {
-        setRows([]);
-        setCount(0);
-        return;
-      }
-      const data = await getSessionAttendances(sid, p);
+      const data = await getClassAttendances(classItem.id, p);
       if (seq !== listSeqRef.current) return;
       const total = data.count ?? (Array.isArray(data) ? data.length : 0);
       setRows(Array.isArray(data) ? data : data.results || []);
@@ -281,10 +275,10 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
       // El total puede bajar (página eliminada): vuelve a la primera.
       if (p > 1 && (p - 1) * 10 >= total) setPage(1);
     },
-    [page]
+    [classItem.id, page]
   );
 
-  // Polling 5s de la lista viva (restricción No-Redis: sin WebSocket).
+  // Polling 5s de la lista de la clase (restricción No-Redis: sin WebSocket).
   // Aun detenido (finished) se carga una vez: la clase terminada conserva su lista.
   useEffect(() => {
     const tick = () => {
@@ -294,7 +288,7 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
     if (stopped) return undefined;
     const id = setInterval(tick, LIST_MS);
     return () => clearInterval(id);
-  }, [classItem.id, session?.session_id, page, loadList, stopped]);
+  }, [classItem.id, page, loadList, stopped]);
 
   // Fija la referencia GPS del salón con la ubicación actual del profesor.
   // Idempotente: un nuevo POST sobrescribe (reubicar/reintentar).

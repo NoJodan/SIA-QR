@@ -2,6 +2,7 @@ from django.urls import path
 
 from apps.attendance.views import (
     AuditLogListView,
+    ClassAttendanceListView,
     MarkAttendanceView,
     ResolveTokenView,
     SessionAttendanceListView,
@@ -16,6 +17,12 @@ urlpatterns = [
         "sessions/<uuid:session_id>/attendances/",
         SessionAttendanceListView.as_view(),
         name="session-attendances",
+    ),
+    # A2 (clase): marcaciones de todas las sesiones (profesor dueño).
+    path(
+        "classes/<uuid:class_id>/attendances/",
+        ClassAttendanceListView.as_view(),
+        name="class-attendances",
     ),
     # B1: resolver token QR (cualquier usuario autenticado).
     path("resolve/", ResolveTokenView.as_view(), name="resolve"),

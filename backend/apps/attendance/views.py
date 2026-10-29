@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.academic.models import ClassStatus
+from apps.academic.models import ClassStatus, ScheduledClass
 from apps.academic.pagination import StandardResultsPagination
 from apps.attendance.models import Attendance, AttendanceSession, AuditLog
 from apps.attendance.permissions import IsOwnerProfessor
@@ -143,6 +143,45 @@ class SessionAttendanceListView(generics.ListAPIView):
             Attendance.objects.filter(session=session)
             .select_related("student")
             .order_by("registered_at")
+        )
+
+
+class ClassAttendanceListView(generics.ListAPIView):
+    """A2 (clase): marcaciones de todas las sesiones de la clase (profesor dueño).
+
+    La rotación del QR crea una sesión nueva por cada "Mostrar QR de nuevo";
+    las marcaciones quedan en su sesión, así que el historial de la clase se
+    lee por clase y no por sesión. Orden más reciente primero: al entrar al
+    panel se ve la primera página, así que las marcaciones nuevas aparecen sin
+    paginar.
+    """
+
+    authentication_classes = _AUTH
+    permission_classes = [IsAuthenticated, IsOwnerProfessor]
+    serializer_class = AttendanceListSerializer
+    pagination_class = StandardResultsPagination
+
+    def get_class(self):
+        # Memoizado: queryset y contexto comparten la misma clase (1 query).
+        if not hasattr(self, "_class_cache"):
+            profesor = getattr(self.request.user, "professor_profile", None)
+            self._class_cache = get_object_or_404(
+                ScheduledClass.objects.select_related("group__professor__user"),
+                pk=self.kwargs["class_id"],
+                group__professor=profesor,
+            )
+        return self._class_cache
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["class"] = self.get_class()
+        return ctx
+
+    def get_queryset(self):
+        return (
+            Attendance.objects.filter(session__scheduled_class=self.get_class())
+            .select_related("student")
+            .order_by("-registered_at", "-id")
         )
 
 
