@@ -3,6 +3,7 @@ import React from "react";
 export default function Sidebar({ activeTab, onSelectTab, onLogout, userEmail }) {
   const tabs = [
     { id: "profesores", label: "Profesores", icon: "fa-solid fa-chalkboard-user" },
+    { id: "estudiantes", label: "Estudiantes", icon: "fa-solid fa-user-graduate" },
     { id: "cursos", label: "Cursos", icon: "fa-regular fa-bookmark" },
     { id: "reportes", label: "Reportes", icon: "fa-solid fa-file-export" },
   ];

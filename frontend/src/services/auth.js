@@ -15,3 +15,15 @@ export async function adminLogin(email, password) {
   });
   return res.data;
 }
+
+export async function adminGetStudents(search = "", page = 1) {
+  const params = { page };
+  if (search) params.search = search;
+  const res = await api.get("/api/auth/admin/students/", { params });
+  return res.data;
+}
+
+export async function adminClearUsers() {
+  const res = await api.post("/api/auth/admin/clear-users/");
+  return res.data;
+}

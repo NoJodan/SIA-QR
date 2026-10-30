@@ -7,13 +7,17 @@ from django.db import IntegrityError, transaction
 from django.middleware.csrf import get_token
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
-from rest_framework import status
+from rest_framework import generics, serializers, status
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
+from rest_framework.filters import SearchFilter
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 
+from apps.academic.models import AcademicGroup, Course, ScheduledClass
+from apps.academic.pagination import StandardResultsPagination
+from apps.attendance.models import Attendance, AttendanceSession
 from apps.attendance.services import log_event
 from apps.authentication.models import (
     AuthorizedProfessorEmail,
@@ -22,6 +26,9 @@ from apps.authentication.models import (
     User,
     UserRole,
 )
+
+# Única cuenta con permiso para ejecutar la limpieza destructiva.
+PURGE_ADMIN_EMAIL = "admin_sia@ut.edu.co"
 
 
 class SessionAuthentication401(SessionAuthentication):
@@ -573,3 +580,97 @@ def professors_whitelist(request):
         User.objects.filter(email__iexact=email).exclude(role=UserRole.ROLE_ADMIN).update(role=UserRole.ROLE_STUDENT)
 
         return Response({"detail": "Correo eliminado y rol actualizado si correspondía"}, status=status.HTTP_200_OK)
+
+
+class AdminStudentSerializer(serializers.ModelSerializer):
+    user_id = serializers.UUIDField(source="user.id", read_only=True)
+    email = serializers.CharField(source="user.email", read_only=True)
+    full_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Student
+        fields = [
+            "id",
+            "user_id",
+            "student_code",
+            "document_number",
+            "first_name",
+            "last_name",
+            "full_name",
+            "email",
+            "phone_number",
+            "address",
+            "created_at",
+        ]
+
+    def get_full_name(self, obj):
+        return f"{obj.first_name} {obj.last_name}".strip()
+
+
+class AdminStudentListView(generics.ListAPIView):
+    authentication_classes = [SessionAuthentication401]
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    serializer_class = AdminStudentSerializer
+    filter_backends = [SearchFilter]
+    search_fields = [
+        "first_name",
+        "last_name",
+        "student_code",
+        "document_number",
+        "user__email",
+    ]
+    pagination_class = StandardResultsPagination
+    queryset = Student.objects.select_related("user").order_by(
+        "last_name", "first_name", "student_code"
+    )
+
+
+@api_view(["POST"])
+@authentication_classes([SessionAuthentication401])
+@permission_classes([IsAdminUserRole])
+def admin_clear_users(request):
+    """Elimina profesores, estudiantes y toda su actividad académica.
+
+    Gate por email exacto: ser ROLE_ADMIN no alcanza. La whitelist, admins,
+    SystemConfig y AuditLog se preservan.
+    """
+    if (request.user.email or "").strip().lower() != PURGE_ADMIN_EMAIL:
+        return Response(
+            {"error": "Solo el administrador autorizado puede ejecutar esta acción."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    with transaction.atomic():
+        counts = {
+            "students": Student.objects.count(),
+            "professors": Professor.objects.count(),
+            "groups": AcademicGroup.objects.count(),
+            "classes": ScheduledClass.objects.count(),
+            "sessions": AttendanceSession.objects.count(),
+            "attendances": Attendance.objects.count(),
+            "courses": Course.objects.count(),
+        }
+        # Orden obligatorio: los grupos (RESTRICT) deben caer antes que los
+        # profesores; sus clases/sesiones/asistencias caen en cascada.
+        # shortcut: borrado sin lotes, trocear si la BD crece.
+        AcademicGroup.objects.all().delete()
+        # Perfiles huérfanos (rol cambiado a mano) también se eliminan.
+        Professor.objects.all().delete()
+        Student.objects.all().delete()
+        User.objects.filter(
+            role__in=[UserRole.ROLE_PROFESSOR, UserRole.ROLE_STUDENT]
+        ).delete()
+        # Sin grupos, todo curso queda huérfano.
+        Course.objects.all().delete()
+
+        # Dentro de la transacción: una limpieza irreversible nunca debe
+        # quedar sin registro de auditoría.
+        log_event(
+            request.user,
+            "admin_clear_users",
+            "users:all",
+            request=request,
+            payload=counts,
+        )
+
+    return Response(counts, status=status.HTTP_200_OK)
