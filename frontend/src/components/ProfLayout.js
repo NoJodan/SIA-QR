@@ -64,7 +64,8 @@ export default function ProfLayout({ user, onLogout, onRefreshUser }) {
         activeTab={activeTab}
         onSelectTab={handleSelectTab}
         onLogout={onLogout}
-        userEmail={user?.email}
+        onGoHome={goToGroups}
+        user={user}
       />
       <main
         className={isClassDetail

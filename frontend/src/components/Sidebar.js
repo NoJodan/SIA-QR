@@ -1,6 +1,6 @@
 import React from "react";
 
-export default function Sidebar({ activeTab, onSelectTab, onLogout, userEmail }) {
+export default function Sidebar({ activeTab, onSelectTab, onLogout }) {
   const tabs = [
     { id: "profesores", label: "Profesores", icon: "fa-solid fa-chalkboard-user" },
     { id: "estudiantes", label: "Estudiantes", icon: "fa-solid fa-user-graduate" },
@@ -18,15 +18,17 @@ export default function Sidebar({ activeTab, onSelectTab, onLogout, userEmail })
     <>
       <aside
         onPointerMove={updatePointerPosition}
-        className="hidden md:flex md:w-64 md:h-dvh sidebar-gradient sidebar-pointer-glow text-white flex-shrink-0 flex-col justify-between p-5 shadow-xl rounded-r-3xl z-10"
+        className="hidden md:flex md:w-64 md:h-dvh app-sidebar text-white flex-shrink-0 flex-col justify-between p-3 z-10"
       >
-        <div className="space-y-6">
-          <div className="mb-8 pt-2 px-1">
-            <h1 className="text-xl font-bold tracking-tight text-white">SIA-QR Admin</h1>
-            <p className="text-xs text-red-200 opacity-80 mt-0.5 truncate">{userEmail}</p>
+        <span className="app-sidebar__motion-gradient" aria-hidden="true"></span>
+        <div className="app-sidebar__top">
+          <div className="app-sidebar__brand">
+            <i className="fa-solid fa-graduation-cap" aria-hidden="true"></i>
+            <h1>SIA-QR</h1>
+            <p>Sistema de Asistencia</p>
           </div>
 
-          <nav className="space-y-2">
+          <nav className="app-sidebar__nav">
             {tabs.map((t) => {
               const isActive =
                 activeTab === t.id || (t.id === "cursos" && activeTab === "curso-detalle-admin");
@@ -35,13 +37,13 @@ export default function Sidebar({ activeTab, onSelectTab, onLogout, userEmail })
                 <button
                   key={t.id}
                   onClick={() => onSelectTab && onSelectTab(t.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                  className={`app-sidebar__item ${
                     isActive
-                      ? "sidebar-active-item text-white shadow-sm"
-                      : "sidebar-hover-item text-red-100 opacity-80 hover:opacity-100"
+                      ? "app-sidebar__item--active"
+                      : ""
                   }`}
                 >
-                  <i className={`${t.icon} text-base w-5 text-center`}></i>
+                  <i className={t.icon} aria-hidden="true"></i>
                   <span>{t.label}</span>
                 </button>
               );
@@ -49,12 +51,12 @@ export default function Sidebar({ activeTab, onSelectTab, onLogout, userEmail })
           </nav>
         </div>
 
-        <div className="pt-6 mt-auto border-t border-red-800/40">
+        <div className="app-sidebar__admin-logout">
           <button
             onClick={onLogout}
-            className="w-full sidebar-hover-item flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-100 opacity-80 hover:opacity-100 transition-all"
+            className="app-sidebar__item"
           >
-            <i className="fa-solid fa-arrow-right-from-bracket text-base w-5 text-center"></i>
+            <i className="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
             <span>Cerrar Sesión</span>
           </button>
         </div>
