@@ -58,6 +58,7 @@ export default function ProfLayout({ user, onLogout, onRefreshUser }) {
   };
 
   const isClassDetail = activeTab === "clase-detalle";
+  const isSummary = activeTab === "resumen";
 
   return (
     <div className="fixed inset-0 flex h-dvh flex-col overflow-hidden bg-[#f4f5f8] md:flex-row">
@@ -69,9 +70,11 @@ export default function ProfLayout({ user, onLogout, onRefreshUser }) {
         user={user}
       />
       <main
-        className={isClassDetail
-          ? "min-h-0 min-w-0 flex-1 overflow-y-auto bg-white p-4 pb-24 md:m-4 md:rounded-[24px] md:border md:border-slate-200 md:shadow-[0_12px_24px_rgba(15,23,42,0.05)] md:p-6 md:pb-8"
-          : "min-h-0 min-w-0 flex-1 overflow-y-auto bg-white p-4 pb-24 md:m-4 md:max-w-[1280px] md:rounded-[24px] md:border md:border-slate-200 md:shadow-[0_12px_24px_rgba(15,23,42,0.05)] md:p-6 md:pb-8"}
+        className={isSummary
+          ? "summary-layout-main min-h-0 min-w-0 flex-1 overflow-y-auto p-0 pb-24 md:m-0 md:rounded-none md:border-0 md:shadow-none md:p-0 md:pb-0"
+          : isClassDetail
+            ? "min-h-0 min-w-0 flex-1 overflow-y-auto bg-white p-4 pb-24 md:m-4 md:rounded-[24px] md:border md:border-slate-200 md:shadow-[0_12px_24px_rgba(15,23,42,0.05)] md:p-6 md:pb-8"
+            : "min-h-0 min-w-0 flex-1 overflow-y-auto bg-white p-4 pb-24 md:m-4 md:max-w-[1280px] md:rounded-[24px] md:border md:border-slate-200 md:shadow-[0_12px_24px_rgba(15,23,42,0.05)] md:p-6 md:pb-8"}
       >
         {activeTab === "mis-cursos" && <MisCursos onSelectGroup={selectGroup} />}
         {activeTab === "curso-detalle" && selectedGroup && (

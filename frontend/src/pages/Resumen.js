@@ -6,6 +6,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -134,7 +135,6 @@ function SummaryToolbar({ period, onPeriodChange, courseId, onCourseChange, cour
             Información de tus clases y estudiantes
           </p>
         </div>
-        <span className="mx-1 hidden h-7 w-px bg-[#a33a3a]/30 sm:block" aria-hidden="true" />
       </div>
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
         <FilterSelect
@@ -169,7 +169,7 @@ function SummaryToolbar({ period, onPeriodChange, courseId, onCourseChange, cour
 
 function Panel({ title, icon, subtitle, children, className = "" }) {
   return (
-    <section className={`${cardClass} ${className}`}>
+    <section className={`${cardClass} min-w-0 ${className}`}>
       <div className="flex min-h-10 items-center justify-between gap-2 bg-gradient-to-r from-[#871510] to-[#68100b] px-3 py-2 text-white">
         <h2 className="flex items-center gap-2 text-xs font-semibold">
           <i className={`fa-solid ${icon}`} aria-hidden="true" />
@@ -177,7 +177,7 @@ function Panel({ title, icon, subtitle, children, className = "" }) {
         </h2>
         {subtitle && <span className="text-[9px] text-white/75">{subtitle}</span>}
       </div>
-      <div className="p-3">{children}</div>
+      <div className="min-w-0 p-3">{children}</div>
     </section>
   );
 }
@@ -198,46 +198,47 @@ function CourseAttendanceChart({ courses }) {
   }
 
   return (
-    <div className="max-h-[320px] overflow-y-auto overflow-x-hidden">
-      <div style={{ height: Math.max(210, chartCourses.length * 38) }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={chartCourses}
-            layout="vertical"
-            margin={{ top: 2, right: 12, bottom: 2, left: 0 }}
+    <div className="h-[220px] w-full min-w-0">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={chartCourses} margin={{ top: 18, right: 5, bottom: 0, left: -20 }}>
+          <CartesianGrid stroke="#f1e7e8" vertical={false} />
+          <XAxis
+            dataKey="name"
+            tickFormatter={(name) => (name.length > 12 ? `${name.slice(0, 11)}…` : name)}
+            interval={0}
+            tick={{ fontSize: 8, fill: "#475569" }}
+            axisLine={{ stroke: "#e2d5d7" }}
+            tickLine={false}
+            tickMargin={7}
+          />
+          <YAxis
+            domain={[0, 100]}
+            ticks={[0, 25, 50, 75, 100]}
+            tickFormatter={(value) => `${value}%`}
+            tick={{ fontSize: 8, fill: "#64748b" }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <Tooltip
+            formatter={(value) => [`${percentFormat.format(value)}%`, "Asistencia del roster"]}
+            contentStyle={{ borderRadius: 10, borderColor: "#f3d9dc", fontSize: 11 }}
+          />
+          <Bar
+            dataKey="rate"
+            name="Asistencia del roster"
+            fill="#c91c2a"
+            radius={[5, 5, 0, 0]}
+            maxBarSize={34}
           >
-            <CartesianGrid stroke="#f1e7e8" horizontal={false} />
-            <XAxis
-              type="number"
-              domain={[0, 100]}
-              tickFormatter={(value) => `${value}%`}
-              tick={{ fontSize: 10, fill: "#64748b" }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <YAxis
-              type="category"
-              dataKey="name"
-              width={105}
-              tick={{ fontSize: 10, fill: "#475569" }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <Tooltip
-              formatter={(value) => [`${percentFormat.format(value)}%`, "Asistencia del roster"]}
-              labelFormatter={(label) => label}
-              contentStyle={{ borderRadius: 10, borderColor: "#f3d9dc", fontSize: 11 }}
-            />
-            <Bar
+            <LabelList
               dataKey="rate"
-              name="Asistencia del roster"
-              fill="#c91c2a"
-              radius={[0, 5, 5, 0]}
-              barSize={16}
+              position="top"
+              formatter={(value) => `${percentFormat.format(value)}%`}
+              style={{ fill: "#334155", fontSize: 9, fontWeight: 600 }}
             />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -253,8 +254,8 @@ function AttendanceDonut({ attendance }) {
   ];
 
   return (
-    <div className="flex min-h-[205px] flex-col items-center justify-center gap-2 sm:flex-row sm:gap-1">
-      <div className="relative h-44 w-full min-w-0 sm:w-1/2">
+    <div className="flex min-h-[220px] items-center justify-center gap-1">
+      <div className="relative h-[190px] w-[58%] min-w-0">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -278,21 +279,24 @@ function AttendanceDonut({ attendance }) {
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <span className="text-xl font-bold text-slate-800">{formatPercent(attendance.rate)}</span>
-          <span className="text-[10px] text-slate-500">del roster</span>
+          <span className="text-[10px] text-slate-500">asistencia</span>
         </div>
       </div>
-      <div className="flex w-full flex-col gap-3 sm:w-1/2">
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
         {data.map((item, index) => (
-          <div key={item.name} className="flex items-start gap-2 text-[11px]">
+          <div key={item.name} className="flex min-w-0 items-start gap-1.5 text-[10px]">
             <span
-              className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full"
+              className="mt-0.5 h-2 w-2 shrink-0 rounded-full"
               style={{ backgroundColor: CHART_COLORS[index] }}
               aria-hidden="true"
             />
             <span className="min-w-0 text-slate-600">
               {item.name}
-              <strong className="ml-1 block text-slate-800">
-                {numberFormat.format(item.value)}
+              <strong className="block text-slate-800">
+                {numberFormat.format(item.value)}{" "}
+                <span className="font-normal text-slate-500">
+                  ({formatPercent(attendance.expected ? item.value * 100 / attendance.expected : null)})
+                </span>
               </strong>
             </span>
           </div>
@@ -310,7 +314,7 @@ function AttendanceTrend({ trend }) {
   const chartData = trend.map((item) => ({
     ...item,
     label: shortMonthFormat
-      .format(new Date(`${item.month}-01T12:00:00`))
+      .format(new Date(`${item.month}T12:00:00`))
       .replace(".", ""),
   }));
 
@@ -352,10 +356,18 @@ function AttendanceTrend({ trend }) {
             dataKey="rate"
             connectNulls={false}
             stroke="#c91c2a"
-            strokeWidth={2.5}
+            strokeWidth={2}
             fill="url(#attendanceTrendFill)"
+            dot={{ r: 3, fill: "#c91c2a", strokeWidth: 0 }}
             activeDot={{ r: 4, fill: "#c91c2a" }}
-          />
+          >
+            <LabelList
+              dataKey="rate"
+              position="top"
+              formatter={(value) => `${percentFormat.format(value)}%`}
+              style={{ fill: "#334155", fontSize: 9, fontWeight: 600 }}
+            />
+          </Area>
         </AreaChart>
       </ResponsiveContainer>
     </div>
@@ -438,38 +450,50 @@ function RecentClasses({ classes }) {
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[380px] border-collapse text-left text-[10px]">
+    <div className="w-full min-w-0">
+      <table className="w-full table-fixed border-collapse text-left text-[9px] sm:text-[10px]">
+        <colgroup>
+          <col className="w-[26%]" />
+          <col className="w-[49%]" />
+          <col className="w-[25%]" />
+        </colgroup>
         <thead>
           <tr className="bg-rose-50 text-[#70100a]">
-            <th className="rounded-l-lg px-2 py-2 font-semibold">Fecha</th>
-            <th className="px-2 py-2 font-semibold">Curso / clase</th>
-            <th className="rounded-r-lg px-2 py-2 text-right font-semibold">Asistencia</th>
+            <th className="rounded-l-lg px-1.5 py-2 font-semibold sm:px-2">Fecha</th>
+            <th className="px-1.5 py-2 font-semibold sm:px-2">Curso</th>
+            <th className="rounded-r-lg px-1.5 py-2 text-right font-semibold sm:px-2">
+              Asistencia
+            </th>
           </tr>
         </thead>
         <tbody>
           {classes.map((classItem) => (
             <tr key={classItem.id} className="border-b border-slate-100 last:border-0">
-              <td className="whitespace-nowrap px-2 py-2 text-slate-600">
+              <td className="whitespace-nowrap px-1.5 py-2 text-slate-600 sm:px-2">
                 {dateFormat.format(new Date(classItem.start_time))}
               </td>
-              <td className="max-w-[150px] px-2 py-2">
+              <td className="overflow-hidden px-1.5 py-2 sm:px-2">
                 <span className="block truncate font-medium text-slate-700">
                   {classItem.course_name}
                 </span>
-                <span className="block truncate text-[9px] text-slate-400">
+                <span className="block truncate text-[8px] text-slate-400 sm:text-[9px]">
                   {classItem.title}
                 </span>
               </td>
-              <td className="whitespace-nowrap px-2 py-2 text-right">
+              <td className="whitespace-nowrap px-1.5 py-2 text-right sm:px-2">
                 {classItem.rate === null ? (
                   <span className="text-slate-400">Sin roster</span>
                 ) : (
-                  <span className="font-semibold text-slate-700">
+                  <span
+                    className="inline-flex max-w-full items-center justify-end gap-1 font-semibold text-slate-700"
+                    title={`${numberFormat.format(classItem.present)} de ${numberFormat.format(classItem.expected)} estudiantes del roster`}
+                    aria-label={`${formatPercent(classItem.rate)}: ${numberFormat.format(classItem.present)} de ${numberFormat.format(classItem.expected)} estudiantes del roster`}
+                  >
+                    <i
+                      className="fa-solid fa-circle-check shrink-0 text-[11px] text-emerald-500"
+                      aria-hidden="true"
+                    />
                     {formatPercent(classItem.rate)}
-                    <span className="ml-1 font-normal text-slate-400">
-                      ({numberFormat.format(classItem.present)}/{numberFormat.format(classItem.expected)})
-                    </span>
                   </span>
                 )}
               </td>
@@ -542,10 +566,11 @@ export default function Resumen() {
       : PERIOD_OPTIONS.find((option) => option.value === period)?.label;
 
   return (
-    <section className="mx-auto w-full max-w-7xl">
-      <header className="mb-3 flex min-h-12 items-center border-l border-[#d8c8cb] pl-3.5 sm:mb-4 sm:pl-4">
+    <section className="relative z-10 mx-auto min-h-full w-full max-w-7xl px-4 py-4 sm:px-6 sm:py-5">
+      <header className="mb-3 flex min-h-12 items-center sm:mb-4">
         <div>
-          <h1 className="text-[25px] font-bold leading-none tracking-tight text-[#7d120c] sm:text-[28px]">
+          <h1 className="flex items-center gap-2.5 text-[25px] font-bold leading-none tracking-tight text-[#7d120c] sm:text-[28px]">
+            <i className="fa-solid fa-chart-simple text-[21px] sm:text-2xl" aria-hidden="true" />
             Resumen
           </h1>
           <p className="mt-1.5 text-[11px] leading-tight text-slate-600 sm:text-xs">
@@ -606,7 +631,7 @@ export default function Resumen() {
               />
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-[1.25fr_0.85fr_1.2fr]">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.85fr)_minmax(0,1.2fr)]">
               <Panel title="Asistencia por curso" icon="fa-chart-column">
                 <CourseAttendanceChart courses={stats.courses} />
               </Panel>
@@ -618,7 +643,7 @@ export default function Resumen() {
               </Panel>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-[1fr_1.05fr_1.25fr]">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)_minmax(0,1.25fr)]">
               <Panel title="Cursos con mayor y menor asistencia" icon="fa-trophy">
                 <CourseExtremes courses={stats.courses} />
               </Panel>

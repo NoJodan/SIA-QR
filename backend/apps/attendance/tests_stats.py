@@ -206,6 +206,17 @@ class ProfessorSummaryStatsTests(TestCase):
         self.assertEqual(response.data["attendance"]["expected"], 3)
         self.assertEqual(response.data["attendance"]["present"], 2)
         self.assertEqual(response.data["attendance"]["absent_estimated"], 1)
+        self.assertEqual(sum(point["expected"] for point in response.data["trend"]), 3)
+        self.assertEqual(sum(point["present"] for point in response.data["trend"]), 2)
+        self.assertEqual(len(response.data["trend"]), 12)
+        self.assertEqual(
+            sum(course["expected"] for course in response.data["courses"]),
+            response.data["attendance"]["expected"],
+        )
+        self.assertEqual(
+            sum(course["present"] for course in response.data["courses"]),
+            response.data["attendance"]["present"],
+        )
 
     def test_invalid_period_returns_validation_error(self):
         response = self.client.get(STATS_URL, {"period": "2m"})
