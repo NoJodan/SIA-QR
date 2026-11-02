@@ -5,6 +5,7 @@ import CursoDetalle from "../pages/CursoDetalle";
 import MisCursos from "../pages/MisCursos";
 import ProfConfiguraciones from "../pages/ProfConfiguraciones";
 import Reportes from "../pages/Reportes";
+import Resumen from "../pages/Resumen";
 
 export default function ProfLayout({ user, onLogout, onRefreshUser }) {
   const [activeTab, setActiveTab] = useState("mis-cursos");
@@ -49,7 +50,7 @@ export default function ProfLayout({ user, onLogout, onRefreshUser }) {
       goToGroups();
       return;
     }
-    if (tab === "configuraciones" || tab === "reportes") {
+    if (tab === "configuraciones" || tab === "reportes" || tab === "resumen") {
       setSelectedClass(null);
       setSelectedInitialSession(null);
     }
@@ -89,6 +90,7 @@ export default function ProfLayout({ user, onLogout, onRefreshUser }) {
           <ProfConfiguraciones key={user?.id} user={user} onSaved={onRefreshUser} />
         )}
         {activeTab === "reportes" && <Reportes isAdmin={false} />}
+        {activeTab === "resumen" && <Resumen />}
       </main>
     </div>
   );

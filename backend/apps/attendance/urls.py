@@ -8,6 +8,7 @@ from apps.attendance.views import (
     SessionAttendanceListView,
 )
 from apps.attendance.views_reports import AttendanceReportView
+from apps.attendance.views_stats import ProfessorSummaryStatsView
 
 app_name = "attendance"
 
@@ -30,6 +31,8 @@ urlpatterns = [
     path("mark/", MarkAttendanceView.as_view(), name="mark"),
     # Reportes agregados (profesor dueño / admin global): JSON + XLSX + PDF.
     path("reports/", AttendanceReportView.as_view(), name="reports"),
+    # Métricas del resumen (solo profesor autenticado y sus propios grupos).
+    path("stats/", ProfessorSummaryStatsView.as_view(), name="stats"),
     # RF-ADM-07: consulta de auditoría (solo admin).
     path("audit-logs/", AuditLogListView.as_view(), name="audit-logs"),
 ]

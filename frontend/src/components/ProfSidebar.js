@@ -96,6 +96,13 @@ export default function ProfSidebar({ activeTab, onSelectTab, onLogout, onGoHome
               Mis Cursos
             </button>
             <button
+              onClick={() => onSelectTab && onSelectTab("resumen")}
+              className={`app-sidebar__item${activeTab === "resumen" ? " app-sidebar__item--active" : ""}`}
+            >
+              <i className="fa-solid fa-chart-simple" aria-hidden="true"></i>
+              Resumen
+            </button>
+            <button
               onClick={() => onSelectTab && onSelectTab("reportes")}
               className={`app-sidebar__item${activeTab === "reportes" ? " app-sidebar__item--active" : ""}`}
             >
@@ -141,6 +148,17 @@ export default function ProfSidebar({ activeTab, onSelectTab, onLogout, onGoHome
           <span className={`absolute inset-x-4 top-0 h-1 rounded-b-full ${isCoursesActive ? "bg-white/80" : "bg-transparent"}`}></span>
           <i className="fa-solid fa-book-open text-xl" aria-hidden="true"></i>
           <span className="truncate">Mis Cursos</span>
+        </button>
+        <button
+          onClick={() => onSelectTab && onSelectTab("resumen")}
+          aria-current={activeTab === "resumen" ? "page" : undefined}
+          className={`relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-t-xl px-1 text-xs transition-colors ${
+            activeTab === "resumen" ? "sidebar-active-item text-white" : "text-red-100/80 hover:text-white"
+          }`}
+        >
+          <span className={`absolute inset-x-4 top-0 h-1 rounded-b-full ${activeTab === "resumen" ? "bg-white/80" : "bg-transparent"}`}></span>
+          <i className="fa-solid fa-chart-simple text-xl" aria-hidden="true"></i>
+          <span className="truncate">Resumen</span>
         </button>
         <button
           onClick={() => onSelectTab && onSelectTab("reportes")}
