@@ -104,20 +104,24 @@ function MetricCard({ title, value, icon, decorativeIcon, change }) {
   );
 }
 
-function FilterSelect({ label, value, onChange, children, className = "" }) {
+function FilterSelect({ label, icon, value, onChange, children, className = "" }) {
   return (
-    <label className="relative inline-flex items-center">
+    <label className="relative inline-flex min-w-0 flex-1 items-center sm:flex-none">
       <span className="sr-only">{label}</span>
+      <i
+        className={`fa-solid ${icon} pointer-events-none absolute left-3 text-[11px] text-[#9b211b]`}
+        aria-hidden="true"
+      />
       <select
         aria-label={label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className={`h-9 max-w-full appearance-none rounded-lg border border-white/80 bg-white/75 px-3 pr-8 text-[11px] font-medium text-slate-700 outline-none transition hover:bg-white focus:border-[#b3200e]/40 focus:ring-2 focus:ring-[#b3200e]/15 ${className}`}
+        className={`h-10 w-full min-w-0 appearance-none rounded-xl border border-rose-100 bg-[#fffafa] pl-9 pr-9 text-[11px] font-semibold text-slate-700 shadow-sm outline-none transition hover:border-rose-200 hover:bg-white focus:border-[#b3200e]/50 focus:ring-2 focus:ring-[#b3200e]/10 sm:w-auto ${className}`}
       >
         {children}
       </select>
       <i
-        className="fa-solid fa-chevron-down pointer-events-none absolute right-3 text-[9px] text-slate-500"
+        className="fa-solid fa-chevron-down pointer-events-none absolute right-3 text-[9px] text-slate-400"
         aria-hidden="true"
       />
     </label>
@@ -126,22 +130,25 @@ function FilterSelect({ label, value, onChange, children, className = "" }) {
 
 function SummaryToolbar({ period, onPeriodChange, courseId, onCourseChange, courses }) {
   return (
-    <div className="mb-3 flex flex-col gap-3 rounded-xl border border-rose-100 bg-gradient-to-r from-[#fce1e6] to-[#fbdde4] px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-2.5">
+    <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-white/80 bg-white/75 p-3 shadow-[0_8px_24px_rgba(115,13,7,0.07)] backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:gap-5 sm:px-4 sm:py-3">
       <div className="flex min-w-0 items-center gap-3">
-        <i className="fa-solid fa-graduation-cap text-xl text-[#7d120c]" aria-hidden="true" />
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#951b16] to-[#67100b] text-white shadow-[0_4px_10px_rgba(103,16,11,0.2)]">
+          <i className="fa-solid fa-graduation-cap text-lg" aria-hidden="true" />
+        </span>
         <div className="min-w-0">
-          <p className="text-xs font-bold leading-tight text-[#70100a]">Mis cursos</p>
-          <p className="mt-0.5 truncate text-[10px] leading-tight text-slate-600">
+          <p className="text-[13px] font-bold leading-tight text-[#70100a]">Mis cursos</p>
+          <p className="mt-1 truncate text-[10px] leading-tight text-slate-500">
             Información de tus clases y estudiantes
           </p>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+      <div className="flex min-w-0 items-center gap-2 sm:justify-end">
         <FilterSelect
           label="Filtrar por curso"
+          icon="fa-book-open"
           value={courseId}
           onChange={onCourseChange}
-          className="min-w-[132px]"
+          className="sm:min-w-[156px]"
         >
           <option value="">Todos los cursos</option>
           {courses.map((course) => (
@@ -152,9 +159,10 @@ function SummaryToolbar({ period, onPeriodChange, courseId, onCourseChange, cour
         </FilterSelect>
         <FilterSelect
           label="Filtrar estadísticas por periodo"
+          icon="fa-calendar-days"
           value={period}
           onChange={onPeriodChange}
-          className="min-w-[132px]"
+          className="sm:min-w-[148px]"
         >
           {PERIOD_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
