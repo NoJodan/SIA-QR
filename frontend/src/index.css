@@ -10,15 +10,55 @@
 }
 
 @layer components {
-  .summary-layout-main {
+  .professor-app-shell {
     background-color: #f7e2e1;
     background-image:
       linear-gradient(145deg, transparent 0 69%, rgb(238 174 185 / 72%) 69% 81%, transparent 81%),
       linear-gradient(35deg, transparent 0 76%, rgb(248 225 198 / 88%) 76% 87%, transparent 87%),
       linear-gradient(218deg, transparent 0 74%, rgb(243 190 198 / 78%) 74% 84%, transparent 84%),
       linear-gradient(135deg, #f5d9dc 0%, #fff5f0 48%, #f8e8d9 100%);
-    background-attachment: local;
-    background-size: 100% 100%;
+    background-attachment: fixed;
+    background-size: cover;
+  }
+  .professor-app-shell--mis-cursos {
+    background-color: #f6e1de;
+    background-image:
+      linear-gradient(35deg, transparent 0 69%, rgb(244 183 190 / 76%) 69% 80%, transparent 80%),
+      linear-gradient(145deg, transparent 0 79%, rgb(249 229 204 / 88%) 79% 88%, transparent 88%),
+      linear-gradient(220deg, transparent 0 72%, rgb(239 184 194 / 76%) 72% 83%, transparent 83%),
+      linear-gradient(135deg, #f4d8dc 0%, #fff5ef 50%, #f7e7d8 100%);
+  }
+  .professor-app-shell--curso-detalle {
+    background-color: #f7e4df;
+    background-image:
+      linear-gradient(155deg, transparent 0 68%, rgb(243 182 192 / 74%) 68% 79%, transparent 79%),
+      linear-gradient(28deg, transparent 0 80%, rgb(249 231 204 / 90%) 80% 89%, transparent 89%),
+      linear-gradient(225deg, transparent 0 72%, rgb(237 177 190 / 72%) 72% 83%, transparent 83%),
+      linear-gradient(135deg, #f8dfdf 0%, #fff7f1 52%, #f5e5d9 100%);
+  }
+  .professor-app-shell--clase-detalle {
+    background-color: #f6e2e2;
+    background-image:
+      linear-gradient(25deg, transparent 0 73%, rgb(238 177 190 / 76%) 73% 84%, transparent 84%),
+      linear-gradient(150deg, transparent 0 78%, rgb(250 230 202 / 88%) 78% 88%, transparent 88%),
+      linear-gradient(215deg, transparent 0 67%, rgb(241 191 198 / 72%) 67% 79%, transparent 79%),
+      linear-gradient(135deg, #f4dadd 0%, #fff6f1 53%, #f7e8dc 100%);
+  }
+  .professor-app-shell--reportes {
+    background-color: #f7e1e2;
+    background-image:
+      linear-gradient(145deg, transparent 0 72%, rgb(239 179 191 / 75%) 72% 82%, transparent 82%),
+      linear-gradient(35deg, transparent 0 75%, rgb(250 231 205 / 90%) 75% 86%, transparent 86%),
+      linear-gradient(220deg, transparent 0 68%, rgb(240 188 197 / 75%) 68% 80%, transparent 80%),
+      linear-gradient(135deg, #f5dade 0%, #fff6f2 51%, #f8e7d9 100%);
+  }
+  .professor-app-shell--configuraciones {
+    background-color: #f5e0df;
+    background-image:
+      linear-gradient(35deg, transparent 0 72%, rgb(242 180 190 / 76%) 72% 83%, transparent 83%),
+      linear-gradient(145deg, transparent 0 77%, rgb(250 229 200 / 88%) 77% 87%, transparent 87%),
+      linear-gradient(215deg, transparent 0 70%, rgb(237 180 192 / 73%) 70% 82%, transparent 82%),
+      linear-gradient(135deg, #f4d9dd 0%, #fff6f0 49%, #f7e8da 100%);
   }
 
   .app-sidebar {
