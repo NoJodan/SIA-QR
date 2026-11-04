@@ -900,7 +900,7 @@ class ReportFormulaInjectionTests(TestCase):
         resp = client.get("/api/attendance/reports/", {"format": "xlsx"})
         self.assertEqual(resp.status_code, 200)
         workbook = load_workbook(io.BytesIO(resp.content))
-        value = workbook["Reporte"].cell(row=2, column=1).value
+        value = workbook["Página 1"].cell(row=6, column=1).value
         self.assertTrue(str(value).startswith("'"))
 
 

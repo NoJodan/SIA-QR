@@ -5,10 +5,12 @@ construcción del queryset y los exportadores XLSX/PDF. La vista está en
 ``views_reports.py`` y la ruta en ``urls.py`` (``reports/``).
 """
 
-import html
 import io
+import re
+import unicodedata
 import uuid as uuid_mod
 from datetime import datetime, time
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from django.db.models import Q
@@ -376,36 +378,28 @@ def report_row(attendance):
     }
 
 
-def _fmt_bogota(value):
-    if not value:
-        return ""
-    return timezone.localtime(value, BOGOTA_TZ).strftime("%d/%m/%Y %H:%M")
-
-
-def _modality_label(value):
-    """Etiqueta legible para los exportes (JSON sigue exponiendo el código)."""
-    try:
-        return ClassModality(value).label
-    except Exception:
-        return value or ""
-
-
-_REPORT_COLUMNS = [
-    "Estudiante",
-    "Código",
-    "Documento",
-    "Correo",
-    "Curso",
-    "Grupo",
-    "Clase",
-    "Modalidad",
-    "Estado",
-    "Inicio clase",
-    "Registrado",
-    "Ubicación",
-]
-
-_REPORT_WIDTHS = [30, 12, 14, 28, 28, 10, 28, 12, 14, 17, 17, 11]
+#: Filas de datos de la planilla FO-P06-F08 (filas 6-27 del XLSX).
+_PLANILLA_ROWS = 22
+#: Recursos de la plantilla institucional (A4 apaisada, escala 55 %).
+_PLANILLA_DIR = Path(__file__).resolve().parent / "resources"
+_PLANILLA_TEMPLATE = _PLANILLA_DIR / "planilla_asistencia.xlsx"
+_PLANILLA_LOGO = _PLANILLA_DIR / "logo_ut.png"
+_PLANILLA_SHEET = "FO-P06-F08"
+#: Etiquetas de cabecera; los guiones bajos son la línea de escritura.
+_PLANILLA_LABELS = {
+    "A3": "AREA:  _____________________________",
+    "B3": "PROGRAMA: ____________________________",
+    "E3": "CURSO:  ____________________________",
+    "F3": "CÓDIGO: ______________",
+    "A4": "SEMESTRE: _________________________",
+    "B4": "GRUPO: ____________  ",
+    "D4": "AULA No. ______________",
+    "E4": "SEDE: ________________________________",
+    "F4": "FECHA.: _______________",
+}
+#: Geometría nominal del bloque en mm (403,1 x 288,9 mm), tomada del XLSX.
+_PDF_COL_MM = (79.726, 33.626, 38.567, 50.295, 92.894, 54.0, 54.0)
+_PDF_ROW_MM = (9.525, 16.933, 5.715, 11.22, 12.7) + (10.583,) * _PLANILLA_ROWS
 
 
 def _safe_cell(value):
@@ -415,180 +409,396 @@ def _safe_cell(value):
     return value
 
 
-def _row_cells(attendance):
-    row = report_row(attendance)
-    group_label = ""
-    if row["group_code"]:
-        group_label = row["group_code"]
-        if row["term_period"]:
-            group_label = f"{group_label} ({row['term_period']})"
-    return [
-        row["student_name"] or "",
-        row["student_code"] or "",
-        row["document_number"] or "",
-        row["email"] or "",
-        row["course_name"] or "",
-        group_label,
-        row["class_title"] or "",
-        _modality_label(row["modality"]),
-        row["class_status"] or "",
-        _fmt_bogota(row["class_start_time"]),
-        _fmt_bogota(row["registered_at"]),
-        "Sí" if row["has_location"] else "No",
-    ]
+def _fill_label(label, value):
+    """Reemplaza la primera línea de guiones bajos por el dato (vacío: la deja)."""
+    if not value:
+        return label
+    return re.sub(r"_+", lambda _match: str(value), label, count=1)
+
+
+def _sort_text(text):
+    """Clave alfabética sin acentos: ``Álvarez`` ordena antes que ``Zeta``."""
+    return (
+        unicodedata.normalize("NFKD", text or "")
+        .encode("ascii", "ignore")
+        .decode("ascii")
+        .lower()
+    )
+
+
+def _planilla_values(block):
+    """Datos de cabecera de la planilla (vacío si el reporte no tiene clases)."""
+    if block is None:
+        return {}
+    return {
+        "E3": block["course_name"],
+        "F3": block["course_code"],
+        "B4": block["group_code"],
+        "F4": timezone.localtime(block["start_time"], BOGOTA_TZ).strftime(
+            "%d/%m/%Y"
+        ),
+    }
+
+
+def _planilla_pages(queryset):
+    """Agrupa las marcaciones por clase y las reparte en páginas de 22 filas.
+
+    Devuelve ``[(clase, filas), ...]`` ordenado por ``start_time`` y, dentro
+    de cada clase, por apellido/nombre. Sin marcaciones devuelve una planilla
+    en blanco (``clase`` = ``None``).
+    """
+    blocks = {}
+    for attendance in queryset.iterator(chunk_size=1000):
+        clase = attendance.session.scheduled_class
+        block = blocks.get(clase.id)
+        if block is None:
+            group = clase.group
+            block = blocks[clase.id] = {
+                "id": clase.id,
+                "start_time": clase.start_time,
+                "course_name": group.course.name,
+                "course_code": group.course.code,
+                "group_code": group.group_code,
+                "rows": [],
+            }
+        student = attendance.student
+        row = report_row(attendance)
+        block["rows"].append(
+            (
+                (_sort_text(student.last_name), _sort_text(student.first_name)),
+                [
+                    row["student_name"] or "",
+                    row["document_number"] or "",
+                    row["student_code"] or "",
+                    student.phone_number or "",
+                    student.address or "",
+                    row["email"] or "",
+                    timezone.localtime(
+                        attendance.registered_at, BOGOTA_TZ
+                    ).strftime("%H:%M"),
+                ],
+            )
+        )
+
+    pages = []
+    ordered = sorted(blocks.values(), key=lambda b: (b["start_time"], b["id"]))
+    for block in ordered:
+        rows = [row for _key, row in sorted(block["rows"], key=lambda item: item[0])]
+        for start in range(0, len(rows), _PLANILLA_ROWS):
+            pages.append((block, rows[start:start + _PLANILLA_ROWS]))
+    return pages or [(None, [])]
+
+
+def _planilla_header(ws, block, page, total):
+    """Rellena la cabecera institucional y el número de página."""
+    values = _planilla_values(block)
+    for coordinate, label in _PLANILLA_LABELS.items():
+        ws[coordinate] = _safe_cell(_fill_label(label, values.get(coordinate)))
+    ws["G1"] = f"Página {page} de {total}"
+
+
+def _planilla_rows(ws, rows):
+    """Escribe las filas de la página respetando el estilo de la plantilla."""
+    # La columna 4 es el teléfono: un "+57..." legítimo no debe llevar apóstrofo.
+    protected = (1, 2, 3, 5, 6)
+    for offset, values in enumerate(rows):
+        for column, value in enumerate(values, start=1):
+            if value:
+                ws.cell(row=6 + offset, column=column).value = (
+                    _safe_cell(value) if column in protected else value
+                )
+
+
+def _planilla_logo(ws):
+    """Añade el logo UT sobre A1 (copy_worksheet no copia imágenes)."""
+    from openpyxl.drawing.image import Image
+    from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
+    from openpyxl.drawing.xdr import XDRPositiveSize2D
+
+    logo = Image(str(_PLANILLA_LOGO))
+    # Posición y tamaño del logo en la plantilla original (EMU).
+    logo.anchor = OneCellAnchor(
+        _from=AnchorMarker(col=0, colOff=952500, row=0, rowOff=54329),
+        ext=XDRPositiveSize2D(899583, 875594),
+    )
+    ws.add_image(logo)
 
 
 def export_xlsx(queryset):
-    """Genera el XLSX del reporte (cabecera #B3200E, fechas dd/mm/aaaa hh:mm)."""
-    from openpyxl import Workbook
-    from openpyxl.cell import WriteOnlyCell
-    from openpyxl.styles import Alignment, Font, PatternFill
-    from openpyxl.utils import get_column_letter
+    """Genera el XLSX institucional: una hoja FO-P06-F08 por página."""
+    from openpyxl import load_workbook
+    from openpyxl.worksheet.properties import PageSetupProperties
 
-    wb = Workbook(write_only=True)
-    ws = wb.create_sheet("Reporte")
+    pages = _planilla_pages(queryset)
+    wb = load_workbook(_PLANILLA_TEMPLATE)
+    template = wb[_PLANILLA_SHEET]
+    template._images.clear()
+    sheets = []
+    for _ in pages:
+        # copy_worksheet copia celdas, estilos, merges y página, no imágenes.
+        sheets.append(template if not sheets else wb.copy_worksheet(template))
+    total = len(sheets)
 
-    header_fill = PatternFill("solid", fgColor="B3200E")
-    header_font = Font(bold=True, color="FFFFFF")
-    header_cells = []
-    for title in _REPORT_COLUMNS:
-        cell = WriteOnlyCell(ws, value=_safe_cell(title))
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(vertical="center")
-        header_cells.append(cell)
-    ws.append(header_cells)
-
-    for idx, width in enumerate(_REPORT_WIDTHS, start=1):
-        try:
-            ws.column_dimensions[get_column_letter(idx)].width = width
-        except Exception:
-            pass
-    try:
-        # WriteOnlyWorksheet ignora vistas; no fallar si no soporta freeze.
-        ws.freeze_panes = "A2"
-    except Exception:
-        pass
-    last_letter = get_column_letter(len(_REPORT_COLUMNS))
-    try:
-        total = queryset.count()
-        ws.auto_filter.ref = f"A1:{last_letter}{total + 1}"
-    except Exception:
-        pass
-
-    for attendance in queryset.iterator(chunk_size=1000):
-        ws.append([_safe_cell(cell) for cell in _row_cells(attendance)])
+    for index, ws in enumerate(sheets, start=1):
+        ws.title = f"Página {index}"
+        ws.print_area = "A1:G27"
+        # Ajustar a 1x1 garantiza una sola página A4 apaisada por hoja.
+        ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 1
+        _planilla_logo(ws)
+        block, rows = pages[index - 1]
+        _planilla_header(ws, block, index, total)
+        _planilla_rows(ws, rows)
 
     buffer = io.BytesIO()
     wb.save(buffer)
     return buffer.getvalue()
 
 
-def _filters_summary(validated):
-    parts = []
+def _pdf_wrap(pdf, text, font, size, max_width):
+    """Parte el texto en líneas que quepan en ``max_width`` sin cortar palabras."""
+    lines, current = [], ""
+    for word in text.split():
+        candidate = f"{current} {word}".strip()
+        if current and pdf.stringWidth(candidate, font, size) > max_width:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return lines or [""]
+
+
+def _pdf_text(
+    pdf,
+    text,
+    x,
+    y,
+    width,
+    height,
+    font,
+    size,
+    color,
+    align="left",
+    valign="middle",
+    underline=False,
+    wrap=False,
+):
+    """Texto de una celda de la planilla (``y`` y ``height``: base y alto)."""
+    text = str(text or "")
+    if not text:
+        return
+    pad = size * 0.12
+    pdf.saveState()
+    clip = pdf.beginPath()
+    clip.rect(x, y, width, height)
+    pdf.clipPath(clip, stroke=0, fill=0)
+    pdf.setFillColor(color)
+    pdf.setFont(font, size)
+    lines = (
+        _pdf_wrap(pdf, text, font, size, width - 2 * pad)
+        if wrap
+        else text.split("\n")
+    )
+    line_height = size * 1.15
+    if valign == "bottom":
+        baseline = y + size * 0.25 - (len(lines) - 1) * line_height
+    else:
+        baseline = (
+            y
+            + height / 2
+            - size * 0.35
+            + (len(lines) - 1) * line_height / 2
+        )
+    for index, line in enumerate(lines):
+        line_baseline = baseline - index * line_height
+        text_width = pdf.stringWidth(line, font, size)
+        if align == "center":
+            left = x + (width - text_width) / 2
+        elif align == "right":
+            left = x + width - pad - text_width
+        else:
+            left = x + pad
+        pdf.drawString(left, line_baseline, line)
+        if underline:
+            pdf.setStrokeColor(color)
+            pdf.setLineWidth(size * 0.05)
+            pdf.line(
+                left,
+                line_baseline - size * 0.12,
+                left + text_width,
+                line_baseline - size * 0.12,
+            )
+    pdf.restoreState()
+
+
+def _pdf_page(pdf, block, rows, page, total, col_x, row_y, block_w, block_h, logo):
+    """Dibuja una planilla completa en coordenadas nominales (sin escalar)."""
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+
+    bold = "Helvetica-Bold"
+    regular = "Helvetica"
+    black = colors.black
+    columns = "ABCDEFG"
+
+    # Rejilla: fina interior, banda gruesa bajo las filas 1-4 y marco exterior.
+    pdf.setStrokeColor(black)
+    pdf.setLineWidth(0.5)
+    for y in row_y[1:-1]:
+        pdf.line(col_x[0], y, col_x[-1], y)
+    # Cabecera A1:F4 fusionada: las verticales interiores solo existen en la
+    # tabla (desde el borde superior de la fila 5). El bloque G1:G4 va aparte.
+    for x in col_x[1:-1]:
+        pdf.line(x, row_y[4], x, row_y[-1])
+    pdf.line(col_x[6], row_y[0], col_x[6], row_y[4])
+    pdf.setLineWidth(1.6)
+    for boundary in (1, 2, 3, 4):
+        pdf.line(col_x[0], row_y[boundary], col_x[-1], row_y[boundary])
+    pdf.setLineWidth(1.0)
+    pdf.rect(0, 0, block_w, block_h, stroke=1, fill=0)
+
+    # Logo UT sobre A1:A2 (misma posición que la plantilla).
+    pdf.drawImage(
+        logo,
+        col_x[0] + 26.38 * mm,
+        row_y[0] - 1.51 * mm - 24.31 * mm,
+        width=24.98 * mm,
+        height=24.31 * mm,
+        mask="auto",
+    )
+
+    def cell(
+        coordinate,
+        text,
+        font=bold,
+        size=12,
+        color=black,
+        align="left",
+        valign="middle",
+        underline=False,
+        wrap=False,
+        span=1,
+    ):
+        column = columns.index(coordinate[0])
+        row = int(coordinate[1:])
+        _pdf_text(
+            pdf,
+            text,
+            col_x[column],
+            row_y[row],
+            col_x[column + span] - col_x[column],
+            row_y[row - 1] - row_y[row],
+            font,
+            size,
+            color,
+            align,
+            valign,
+            underline,
+            wrap,
+        )
+
+    values = _planilla_values(block)
     labels = {
-        "course_id": "Curso",
-        "group_id": "Grupo",
-        "session_id": "Sesión",
-        "professor_id": "Profesor",
-        "date_from": "Desde",
-        "date_to": "Hasta",
-        "registered_from": "Registro desde",
-        "registered_to": "Registro hasta",
-        "document": "Documento",
-        "student_code": "Código",
-        "search": "Búsqueda",
-        "class_status": "Estado",
-        "modality": "Modalidad",
-        "has_location": "Ubicación",
+        coordinate: _fill_label(text, values.get(coordinate))
+        for coordinate, text in _PLANILLA_LABELS.items()
     }
-    if validated.get("class_id"):
-        parts.append(f"Clases: {len(validated['class_id'])} seleccionada(s)")
-    for key, label in labels.items():
-        value = validated.get(key)
-        if value not in (None, "", []):
-            # Modalidad en el resumen también en etiqueta legible (Mediada).
-            if key == "modality":
-                value = _modality_label(value)
-            # Escapa input de usuario: Paragraph interpreta mini-HTML y
-            # "<>&" sin escapar rompe el parse (500). Ver ALTO 1 QA.
-            parts.append(f"{label}: {html.escape(str(value))}")
-    return "; ".join(parts) if parts else "Sin filtros (todos los registros)"
+
+    cell(
+        "B1",
+        "PLANIFICACIÓN, DESARROLLO Y VERIFICACIÓN DE LA LABOR ACADÉMICA ",
+        size=14,
+        color=colors.HexColor("#006600"),
+        align="center",
+        span=5,
+    )
+    cell(
+        "B2",
+        "CONTROL ASISTENCIA ESTUDIANTES",
+        size=14,
+        color=colors.HexColor("#FF0000"),
+        align="center",
+        span=5,
+    )
+    cell("G1", f"Página {page} de {total}", align="center")
+    cell("G2", "Código: FO-P06-F08", align="center")
+    cell("G3", "Versión: 06", align="center")
+    cell("G4", "Fecha Aprobación:\n24-08-2024", align="center")
+
+    # A3/A4 y D4 se recortan en su columna; B3 y B4 desbordan sobre C/D,
+    # que están vacías en la plantilla.
+    cell("A3", labels["A3"], valign="bottom")
+    cell("B3", labels["B3"], valign="bottom", span=3)
+    cell("E3", labels["E3"], valign="bottom")
+    cell("F3", labels["F3"], valign="bottom")
+    cell("A4", labels["A4"], valign="bottom")
+    cell("B4", labels["B4"], valign="bottom", span=2)
+    cell("D4", labels["D4"], valign="bottom")
+    cell("E4", labels["E4"], valign="bottom")
+    cell("F4", labels["F4"], valign="bottom")
+
+    for coordinate, text, size, align in (
+        ("A5", "NOMBRE ESTUDIANTE", 12, "center"),
+        ("B5", "DOCUMENTO IDENTIFICACIÓN", 11, "left"),
+        ("C5", "CÓDIGO", 12, "left"),
+        ("D5", "TELEFONO ", 10, "center"),
+        ("E5", "DIRECCIÓN", 12, "center"),
+        ("F5", "CORREO ELECTRÓNICO", 12, "center"),
+        ("G5", "FIRMA", 12, "center"),
+    ):
+        cell(coordinate, text, size=size, align=align, wrap=True)
+
+    signature = colors.HexColor("#0000FF")
+    for offset, values_row in enumerate(rows):
+        for column, value in enumerate(values_row):
+            cell(
+                f"{columns[column]}{6 + offset}",
+                value,
+                font=regular,
+                size=10 if column == 5 else 12,
+                color=signature if column == 6 else black,
+                align="center" if column == 6 else "left",
+                underline=column == 6,
+            )
 
 
 def export_pdf(queryset, validated=None):
-    """Genera el PDF del reporte (A4 horizontal, Helvetica, sin emojis)."""
-    from reportlab.lib import colors
-    from reportlab.lib.colors import HexColor
+    """Genera el PDF institucional FO-P06-F08 (A4 apaisada, 1 página por bloque)."""
     from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.lib.styles import getSampleStyleSheet
     from reportlab.lib.units import mm
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas as pdf_canvas
 
-    validated = validated or {}
+    pages = _planilla_pages(queryset)
+    width, height = landscape(A4)
+    margin = 10 * mm
+    block_w = sum(_PDF_COL_MM) * mm
+    block_h = sum(_PDF_ROW_MM) * mm
+    # Transformación uniforme: el bloque nominal (403 x 289 mm) cabe completo.
+    scale = min((width - 2 * margin) / block_w, (height - 2 * margin) / block_h)
+    origin_x = (width - block_w * scale) / 2
+    origin_y = (height - block_h * scale) / 2
+
+    col_x = [0.0]
+    for value in _PDF_COL_MM:
+        col_x.append(col_x[-1] + value * mm)
+    row_y = [block_h]
+    for value in _PDF_ROW_MM:
+        row_y.append(row_y[-1] - value * mm)
+
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=landscape(A4),
-        leftMargin=12 * mm,
-        rightMargin=12 * mm,
-        topMargin=14 * mm,
-        bottomMargin=14 * mm,
-        title="Reporte de asistencia SIA-QR",
-    )
-    styles = getSampleStyleSheet()
-    brand = HexColor("#B3200E")
-    generated = timezone.localtime(timezone.now(), BOGOTA_TZ).strftime("%d/%m/%Y %H:%M")
-
-    story = [
-        Paragraph("Reporte de asistencia SIA-QR", styles["Heading1"]),
-        Paragraph(f"Filtros: {_filters_summary(validated)}", styles["Normal"]),
-        Paragraph(f"Generado: {generated} (America/Bogota)", styles["Normal"]),
-        Spacer(1, 6),
-    ]
-
-    header = ["Estudiante", "Código", "Curso", "Clase", "Inicio", "Registrado", "Ubic."]
-    data = [header]
-    for attendance in queryset.iterator(chunk_size=1000):
-        cells = _row_cells(attendance)
-        data.append([cells[0], cells[1], cells[4], cells[6], cells[9], cells[10], cells[11]])
-
-    usable = landscape(A4)[0] - 24 * mm
-    col_widths = [
-        usable * 0.24,
-        usable * 0.10,
-        usable * 0.20,
-        usable * 0.20,
-        usable * 0.10,
-        usable * 0.10,
-        usable * 0.06,
-    ]
-    table = Table(data, colWidths=col_widths, repeatRows=1)
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), brand),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-                ("FONTSIZE", (0, 0), (-1, -1), 8),
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
-            ]
-        )
-    )
-    story.append(table)
-
-    def _footer(canvas, _doc):
-        canvas.saveState()
-        canvas.setFont("Helvetica", 8)
-        canvas.drawRightString(
-            landscape(A4)[0] - 12 * mm,
-            10 * mm,
-            f"Página {canvas.getPageNumber()}",
-        )
-        canvas.restoreState()
-
-    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    pdf = pdf_canvas.Canvas(buffer, pagesize=(width, height), pageCompression=1)
+    pdf.setTitle("Reporte de asistencia SIA-QR")
+    logo = ImageReader(str(_PLANILLA_LOGO))
+    total = len(pages)
+    for page, (block, rows) in enumerate(pages, start=1):
+        pdf.saveState()
+        pdf.translate(origin_x, origin_y)
+        pdf.scale(scale, scale)
+        _pdf_page(pdf, block, rows, page, total, col_x, row_y, block_w, block_h, logo)
+        pdf.restoreState()
+        pdf.showPage()
+    pdf.save()
     return buffer.getvalue()
