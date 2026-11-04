@@ -5,6 +5,7 @@ import CursoDetalle from "../pages/CursoDetalle";
 import MisCursos from "../pages/MisCursos";
 import ProfConfiguraciones from "../pages/ProfConfiguraciones";
 import Reportes from "../pages/Reportes";
+import Resumen from "../pages/Resumen";
 
 export default function ProfLayout({ user, onLogout, onRefreshUser }) {
   const [activeTab, setActiveTab] = useState("mis-cursos");
@@ -49,27 +50,29 @@ export default function ProfLayout({ user, onLogout, onRefreshUser }) {
       goToGroups();
       return;
     }
-    if (tab === "configuraciones" || tab === "reportes") {
+    if (tab === "configuraciones" || tab === "reportes" || tab === "resumen") {
       setSelectedClass(null);
       setSelectedInitialSession(null);
     }
     setActiveTab(tab);
   };
 
-  const isClassDetail = activeTab === "clase-detalle";
+  const isSummary = activeTab === "resumen";
+  const shellClass = `professor-app-shell professor-app-shell--${activeTab}`;
 
   return (
-    <div className="fixed inset-0 flex h-dvh flex-col overflow-hidden bg-[#f4f5f8] md:flex-row">
+    <div className={`fixed inset-0 flex h-dvh flex-col overflow-hidden md:flex-row ${shellClass}`}>
       <ProfSidebar
         activeTab={activeTab}
         onSelectTab={handleSelectTab}
         onLogout={onLogout}
-        userEmail={user?.email}
+        onGoHome={goToGroups}
+        user={user}
       />
       <main
-        className={isClassDetail
-          ? "min-h-0 min-w-0 flex-1 overflow-y-auto bg-white p-4 pb-24 md:m-4 md:rounded-[24px] md:border md:border-slate-200 md:shadow-[0_12px_24px_rgba(15,23,42,0.05)] md:p-6 md:pb-8"
-          : "min-h-0 min-w-0 flex-1 overflow-y-auto bg-white p-4 pb-24 md:m-4 md:max-w-[1280px] md:rounded-[24px] md:border md:border-slate-200 md:shadow-[0_12px_24px_rgba(15,23,42,0.05)] md:p-6 md:pb-8"}
+        className={isSummary
+          ? "min-h-0 min-w-0 flex-1 overflow-y-auto bg-transparent p-0 pb-24 md:m-0 md:rounded-none md:border-0 md:shadow-none md:p-0 md:pb-0"
+          : "min-h-0 min-w-0 flex-1 overflow-y-auto bg-transparent p-4 pb-24 md:m-4 md:max-w-[1280px] md:rounded-[24px] md:border md:border-white/60 md:shadow-[0_12px_24px_rgba(15,23,42,0.05)] md:p-6 md:pb-8"}
       >
         {activeTab === "mis-cursos" && <MisCursos onSelectGroup={selectGroup} />}
         {activeTab === "curso-detalle" && selectedGroup && (
@@ -88,6 +91,7 @@ export default function ProfLayout({ user, onLogout, onRefreshUser }) {
           <ProfConfiguraciones key={user?.id} user={user} onSaved={onRefreshUser} />
         )}
         {activeTab === "reportes" && <Reportes isAdmin={false} />}
+        {activeTab === "resumen" && <Resumen />}
       </main>
     </div>
   );

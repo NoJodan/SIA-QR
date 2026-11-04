@@ -1,0 +1,186 @@
+import React, { useEffect, useState } from "react";
+import {
+  AttendanceDonut,
+  AttendanceTrend,
+  CourseAttendanceChart,
+  CourseExtremes,
+  LoadingGrid,
+  MetricCard,
+  Panel,
+  PERIOD_OPTIONS,
+  RecentClasses,
+  StatsToolbar,
+  TopAbsences,
+} from "../components/StatsPanels";
+import { getStats } from "../services/stats";
+
+export default function AdminResumen() {
+  const [period, setPeriod] = useState("3m");
+  const [courseId, setCourseId] = useState("");
+  const [professorId, setProfessorId] = useState("");
+  const [stats, setStats] = useState(null);
+  const [courses, setCourses] = useState([]);
+  const [professors, setProfessors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setStats(null);
+    setLoading(true);
+    setError("");
+
+    getStats({ period, courseId, professorId }, { signal: controller.signal })
+      .then((response) => {
+        setStats(response);
+        setCourses(response.filters?.courses || []);
+        setProfessors(response.filters?.professors || []);
+      })
+      .catch((requestError) => {
+        if (requestError.name !== "CanceledError") {
+          setError("No se pudieron cargar las estadísticas. Intenta de nuevo.");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [period, courseId, professorId, reload]);
+
+  const handleProfessorChange = (value) => {
+    setProfessorId(value);
+    setCourseId("");
+  };
+
+  const institution = stats?.institution;
+  const selectedCourseLabel = courses.find((course) => course.id === courseId)?.name;
+  const trendLabel =
+    period === "all"
+      ? "Histórico"
+      : PERIOD_OPTIONS.find((option) => option.value === period)?.label;
+
+  return (
+    <section className="relative z-10 mx-auto min-h-full w-full max-w-7xl px-4 py-4 sm:px-6 sm:py-5">
+      <header className="mb-3 flex min-h-12 items-center sm:mb-4">
+        <div>
+          <h1 className="flex items-center gap-2.5 text-[25px] font-bold leading-none tracking-tight text-[#7d120c] sm:text-[28px]">
+            <i className="fa-solid fa-chart-simple text-[21px] sm:text-2xl" aria-hidden="true" />
+            Resumen
+          </h1>
+          <p className="mt-1.5 text-[11px] leading-tight text-slate-600 sm:text-xs">
+            Estadísticas generales de la institución.
+          </p>
+        </div>
+      </header>
+
+      <StatsToolbar
+        icon="fa-building-columns"
+        title="Institucional"
+        subtitle="Cursos, profesores, estudiantes y asistencia"
+        period={period}
+        onPeriodChange={setPeriod}
+        courseId={courseId}
+        onCourseChange={setCourseId}
+        courses={courses}
+        professorId={professorId}
+        onProfessorChange={handleProfessorChange}
+        professors={professors}
+      />
+
+      {error && (
+        <div
+          role="alert"
+          className="mb-4 flex items-center justify-between gap-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setReload((current) => current + 1)}
+            className="shrink-0 font-semibold underline underline-offset-2"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+
+      {loading && !stats ? (
+        <LoadingGrid count={5} />
+      ) : (
+        stats && (
+          <div className={`space-y-3 ${loading ? "opacity-60" : ""}`}>
+            <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-5">
+              <MetricCard
+                title="Estudiantes registrados"
+                value={institution?.students_registered}
+                icon="fa-users"
+              />
+              <MetricCard
+                title="Profesores"
+                value={institution?.professors}
+                icon="fa-chalkboard-user"
+              />
+              <MetricCard
+                title="Cursos y grupos"
+                value={institution?.courses}
+                icon="fa-book-open"
+                hint={institution?.groups != null ? `${institution.groups} grupos` : undefined}
+              />
+              <MetricCard
+                title="Clases realizadas"
+                value={stats.totals?.classes_completed}
+                icon="fa-calendar-check"
+                change={stats.changes?.classes_completed}
+                hasComparison={period !== "all"}
+              />
+              <MetricCard
+                title="Asistencia promedio"
+                value={stats.attendance?.rate}
+                icon="fa-percent"
+                suffix="%"
+                hint="del roster estimado"
+              />
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.85fr)_minmax(0,1.2fr)]">
+              <Panel title="Asistencia por curso" icon="fa-chart-column">
+                <CourseAttendanceChart courses={stats.courses} />
+              </Panel>
+              <Panel title="Estado de asistencia" icon="fa-chart-pie">
+                <AttendanceDonut attendance={stats.attendance} />
+              </Panel>
+              <Panel title="Evolución de la asistencia" icon="fa-chart-line" subtitle={trendLabel}>
+                <AttendanceTrend trend={stats.trend} granularity={stats.granularity} />
+              </Panel>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)_minmax(0,1.25fr)]">
+              <Panel title="Cursos con mayor y menor asistencia" icon="fa-trophy">
+                <CourseExtremes courses={stats.courses} />
+              </Panel>
+              <Panel title="Estudiantes con más inasistencias" icon="fa-user-xmark">
+                <TopAbsences students={stats.top_absences} />
+              </Panel>
+              <Panel title="Últimas clases registradas" icon="fa-clock">
+                <RecentClasses classes={stats.recent_classes} />
+              </Panel>
+            </div>
+          </div>
+        )
+      )}
+
+      {stats && (
+        <p className="mt-3 text-[10px] leading-relaxed text-slate-400">
+          {selectedCourseLabel ? `Curso seleccionado: ${selectedCourseLabel}. ` : ""}
+          Los indicadores institucionales (estudiantes registrados, profesores, cursos y grupos) son
+          globales y no dependen de los filtros; las variaciones comparan estudiantes y clases con el
+          periodo anterior equivalente. Las ausencias y porcentajes se estiman con el roster
+          registrado en la primera clase finalizada con registros de asistencia de cada grupo;
+          estudiantes fuera de ese roster no generan faltas estimadas. El sistema no registra
+          ausencias justificadas.
+        </p>
+      )}
+    </section>
+  );
+}

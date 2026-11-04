@@ -84,6 +84,12 @@ class ScheduledClass(models.Model):
                 name="class_duration_positive",
             )
         ]
+        indexes = [
+            models.Index(
+                fields=["group", "status", "start_time"],
+                name="idx_sched_group_status_start",
+            )
+        ]
 
     def __str__(self):
         return f"{self.title} ({self.start_time})"

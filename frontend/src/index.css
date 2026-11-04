@@ -10,6 +10,347 @@
 }
 
 @layer components {
+  .professor-app-shell {
+    background-color: #f7e2e1;
+    background-image:
+      linear-gradient(145deg, transparent 0 69%, rgb(238 174 185 / 72%) 69% 81%, transparent 81%),
+      linear-gradient(35deg, transparent 0 76%, rgb(248 225 198 / 88%) 76% 87%, transparent 87%),
+      linear-gradient(218deg, transparent 0 74%, rgb(243 190 198 / 78%) 74% 84%, transparent 84%),
+      linear-gradient(135deg, #f5d9dc 0%, #fff5f0 48%, #f8e8d9 100%);
+    background-attachment: fixed;
+    background-size: cover;
+  }
+  .professor-app-shell--mis-cursos {
+    background-color: #f6e1de;
+    background-image:
+      linear-gradient(35deg, transparent 0 69%, rgb(244 183 190 / 76%) 69% 80%, transparent 80%),
+      linear-gradient(145deg, transparent 0 79%, rgb(249 229 204 / 88%) 79% 88%, transparent 88%),
+      linear-gradient(220deg, transparent 0 72%, rgb(239 184 194 / 76%) 72% 83%, transparent 83%),
+      linear-gradient(135deg, #f4d8dc 0%, #fff5ef 50%, #f7e7d8 100%);
+  }
+  .professor-app-shell--curso-detalle {
+    background-color: #f7e4df;
+    background-image:
+      linear-gradient(155deg, transparent 0 68%, rgb(243 182 192 / 74%) 68% 79%, transparent 79%),
+      linear-gradient(28deg, transparent 0 80%, rgb(249 231 204 / 90%) 80% 89%, transparent 89%),
+      linear-gradient(225deg, transparent 0 72%, rgb(237 177 190 / 72%) 72% 83%, transparent 83%),
+      linear-gradient(135deg, #f8dfdf 0%, #fff7f1 52%, #f5e5d9 100%);
+  }
+  .professor-app-shell--clase-detalle {
+    background-color: #f6e2e2;
+    background-image:
+      linear-gradient(25deg, transparent 0 73%, rgb(238 177 190 / 76%) 73% 84%, transparent 84%),
+      linear-gradient(150deg, transparent 0 78%, rgb(250 230 202 / 88%) 78% 88%, transparent 88%),
+      linear-gradient(215deg, transparent 0 67%, rgb(241 191 198 / 72%) 67% 79%, transparent 79%),
+      linear-gradient(135deg, #f4dadd 0%, #fff6f1 53%, #f7e8dc 100%);
+  }
+  .professor-app-shell--reportes {
+    background-color: #f7e1e2;
+    background-image:
+      linear-gradient(145deg, transparent 0 72%, rgb(239 179 191 / 75%) 72% 82%, transparent 82%),
+      linear-gradient(35deg, transparent 0 75%, rgb(250 231 205 / 90%) 75% 86%, transparent 86%),
+      linear-gradient(220deg, transparent 0 68%, rgb(240 188 197 / 75%) 68% 80%, transparent 80%),
+      linear-gradient(135deg, #f5dade 0%, #fff6f2 51%, #f8e7d9 100%);
+  }
+  .professor-app-shell--configuraciones {
+    background-color: #f5e0df;
+    background-image:
+      linear-gradient(35deg, transparent 0 72%, rgb(242 180 190 / 76%) 72% 83%, transparent 83%),
+      linear-gradient(145deg, transparent 0 77%, rgb(250 229 200 / 88%) 77% 87%, transparent 87%),
+      linear-gradient(215deg, transparent 0 70%, rgb(237 180 192 / 73%) 70% 82%, transparent 82%),
+      linear-gradient(135deg, #f4d9dd 0%, #fff6f0 49%, #f7e8da 100%);
+  }
+
+  .app-sidebar {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border-radius: 0 16px 16px 0;
+    background: linear-gradient(180deg, #7d120c 0%, #690d08 58%, #480704 100%);
+  }
+  .app-sidebar__motion-gradient {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: -1;
+    width: 200%;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgb(115 13 7 / 22%) 24%,
+      rgb(179 32 14 / 48%) 70%,
+      rgb(95 8 4 / 18%) 88%,
+      transparent 100%
+    );
+    background-size: 50% 100%;
+    background-repeat: repeat-x;
+    filter: blur(22px);
+    pointer-events: none;
+    animation: sidebar-cylinder-roll 15s linear infinite;
+  }
+  .app-sidebar::before {
+    position: absolute;
+    right: -112px;
+    bottom: -126px;
+    z-index: -1;
+    width: 310px;
+    height: 310px;
+    border-radius: 50%;
+    background: rgb(174 42 32 / 22%);
+    content: "";
+    pointer-events: none;
+    animation: prof-sidebar-circle-float 10s ease-in-out infinite alternate;
+  }
+  .app-sidebar::after {
+    position: absolute;
+    right: 38px;
+    bottom: -190px;
+    z-index: -1;
+    width: 370px;
+    height: 370px;
+    border: 1px solid rgb(255 220 215 / 10%);
+    border-radius: 50%;
+    box-shadow: 0 0 0 24px rgb(255 220 215 / 3%);
+    content: "";
+    pointer-events: none;
+    animation: prof-sidebar-circle-float 14s ease-in-out infinite alternate-reverse;
+  }
+  .app-sidebar__brand {
+    display: flex;
+    width: 100%;
+    min-height: 112px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    margin-bottom: 14px;
+    border: 0;
+    padding: 12px 8px;
+    color: inherit;
+    background: transparent;
+    text-align: center;
+  }
+  button.app-sidebar__brand {
+    cursor: pointer;
+  }
+  .app-sidebar__brand:focus-visible,
+  .app-sidebar__account-button:focus-visible,
+  .app-sidebar__mobile-account-button:focus-visible,
+  .app-sidebar__profile-menu-item:focus-visible {
+    outline: 2px solid rgb(255 255 255 / 90%);
+    outline-offset: 3px;
+  }
+  .app-sidebar__brand:hover h1,
+  .app-sidebar__brand:hover p {
+    color: #fff;
+  }
+  .app-sidebar__top {
+    display: flex;
+    flex-direction: column;
+    padding-top: 6px;
+  }
+  .app-sidebar__brand > i {
+    font-size: 38px;
+  }
+  .app-sidebar__brand h1 {
+    color: #fff;
+    font-size: 23px;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+  .app-sidebar__brand p {
+    color: rgb(255 255 255 / 90%);
+    font-size: 10px;
+    line-height: 1.2;
+  }
+  .app-sidebar__nav {
+    display: grid;
+    gap: 8px;
+  }
+  .app-sidebar__item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 12px;
+    border: 0;
+    border-radius: 12px;
+    padding: 12px 16px;
+    color: rgb(255 239 236 / 88%);
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.25;
+    text-align: left;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+  .app-sidebar__item > i {
+    width: 20px;
+    flex: 0 0 20px;
+    font-size: 16px;
+    text-align: center;
+  }
+  .app-sidebar__item:hover {
+    color: #fff;
+    background: rgb(255 255 255 / 9%);
+  }
+  .app-sidebar__item--active,
+  .app-sidebar__item--active:hover {
+    color: #fff;
+    background: rgb(255 255 255 / 17%);
+  }
+  .app-sidebar__admin-logout {
+    margin-top: auto;
+    border-top: 1px solid rgb(255 221 215 / 15%);
+    padding-top: 14px;
+  }
+  .app-sidebar__account {
+    position: relative;
+    margin-top: auto;
+    border-top: 1px solid rgb(255 221 215 / 15%);
+    padding-top: 14px;
+  }
+  .app-sidebar__account-button {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 9px;
+    border: 0;
+    border-radius: 10px;
+    padding: 8px;
+    color: #fff;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+  }
+  .app-sidebar__account-button:hover,
+  .app-sidebar__mobile-account-button:hover {
+    background: rgb(255 255 255 / 10%);
+  }
+  .app-sidebar__avatar {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    place-items: center;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 20%);
+    font-size: 15px;
+  }
+  .app-sidebar__account-copy {
+    display: grid;
+    min-width: 0;
+    flex: 1;
+    gap: 2px;
+  }
+  .app-sidebar__account-name {
+    overflow: hidden;
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .app-sidebar__account-role {
+    color: rgb(255 239 236 / 72%);
+    font-size: 10px;
+  }
+  .app-sidebar__account-chevron {
+    font-size: 10px;
+  }
+  .app-sidebar__profile-menu {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 10px);
+    left: 0;
+    z-index: 20;
+    overflow: hidden;
+    border: 1px solid rgb(255 255 255 / 14%);
+    border-radius: 12px;
+    padding: 6px;
+    color: #fff;
+    background: #5b0b07;
+    box-shadow: 0 12px 28px rgb(25 3 2 / 35%);
+  }
+  .app-sidebar__profile-details {
+    display: grid;
+    gap: 3px;
+    border-bottom: 1px solid rgb(255 255 255 / 14%);
+    padding: 8px 9px 10px;
+  }
+  .app-sidebar__profile-name {
+    overflow: hidden;
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .app-sidebar__profile-role {
+    color: rgb(255 239 236 / 70%);
+    font-size: 10px;
+  }
+  .app-sidebar__profile-email {
+    overflow: hidden;
+    color: rgb(255 239 236 / 62%);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .app-sidebar__profile-menu-item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 9px;
+    border: 0;
+    border-radius: 8px;
+    padding: 9px;
+    color: rgb(255 255 255 / 92%);
+    background: transparent;
+    cursor: pointer;
+    font-size: 12px;
+    text-align: left;
+  }
+  .app-sidebar__profile-menu-item:hover {
+    color: #fff;
+    background: rgb(255 255 255 / 10%);
+  }
+  .app-sidebar__profile-menu-item > i {
+    width: 16px;
+    text-align: center;
+  }
+  .app-sidebar__mobile-account {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    align-items: stretch;
+    justify-content: center;
+  }
+  .app-sidebar__mobile-account-button {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    border: 0;
+    border-radius: 12px 12px 0 0;
+    color: rgb(255 239 236 / 88%);
+    background: transparent;
+    cursor: pointer;
+    font-size: 11px;
+  }
+  .app-sidebar__mobile-account-button > i {
+    font-size: 18px;
+  }
+  .app-sidebar__mobile-account .app-sidebar__profile-menu {
+    position: fixed;
+    right: 12px;
+    bottom: calc(76px + env(safe-area-inset-bottom) + 10px);
+    left: auto;
+    z-index: 50;
+    width: min(280px, calc(100vw - 24px));
+  }
+
   .sidebar-gradient {
     background: linear-gradient(180deg, #70100A 0%, #4B0804 52%, #200201 100%);
   }
@@ -589,8 +930,23 @@
   }
 }
 
+@keyframes prof-sidebar-circle-float {
+  from {
+    transform: translate3d(-7px, 5px, 0) scale(0.98);
+  }
+  to {
+    transform: translate3d(9px, -10px, 0) scale(1.03);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .sidebar-gradient::after {
+    animation: none;
+  }
+
+  .app-sidebar__motion-gradient,
+  .app-sidebar::before,
+  .app-sidebar::after {
     animation: none;
   }
 
