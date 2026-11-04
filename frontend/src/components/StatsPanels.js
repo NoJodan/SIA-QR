@@ -140,7 +140,7 @@ export function MetricCard({
 
 export function FilterSelect({ label, icon, value, onChange, children, className = "" }) {
   return (
-    <label className="relative inline-flex w-full min-w-0 flex-none items-center lg:w-auto">
+    <label className="relative inline-flex w-full min-w-0 flex-none items-center lg:w-auto xl:max-w-[220px]">
       <span className="sr-only">{label}</span>
       <i
         className={`fa-solid ${icon} pointer-events-none absolute left-3 text-[11px] text-[#9b211b]`}
@@ -150,7 +150,7 @@ export function FilterSelect({ label, icon, value, onChange, children, className
         aria-label={label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className={`h-10 w-full min-w-0 appearance-none rounded-xl border border-rose-100 bg-[#fffafa] pl-9 pr-9 text-[11px] font-semibold text-slate-700 shadow-sm outline-none transition hover:border-rose-200 hover:bg-white focus:border-[#b3200e]/50 focus:ring-2 focus:ring-[#b3200e]/10 ${className}`}
+        className={`h-10 w-full min-w-0 appearance-none truncate rounded-xl border border-rose-100 bg-[#fffafa] pl-9 pr-9 text-[11px] font-semibold text-slate-700 shadow-sm outline-none transition hover:border-rose-200 hover:bg-white focus:border-[#b3200e]/50 focus:ring-2 focus:ring-[#b3200e]/10 ${className}`}
       >
         {children}
       </select>
@@ -188,7 +188,7 @@ export function StatsToolbar({
           </p>
         </div>
       </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-2 xl:flex-nowrap xl:justify-end">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 xl:justify-end">
         {professors.length > 0 && (
           <FilterSelect
             label="Filtrar por profesor"
