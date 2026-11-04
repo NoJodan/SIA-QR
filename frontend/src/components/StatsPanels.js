@@ -188,14 +188,14 @@ export function StatsToolbar({
           </p>
         </div>
       </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-2 lg:flex-nowrap lg:justify-end">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 xl:flex-nowrap xl:justify-end">
         {professors.length > 0 && (
           <FilterSelect
             label="Filtrar por profesor"
             icon="fa-chalkboard-user"
             value={professorId}
             onChange={onProfessorChange}
-            className="lg:min-w-[158px]"
+            className="xl:min-w-[158px]"
           >
             <option value="">Todos los profesores</option>
             {professors.map((professor) => (
@@ -210,7 +210,7 @@ export function StatsToolbar({
           icon="fa-book-open"
           value={courseId}
           onChange={onCourseChange}
-          className="lg:min-w-[156px]"
+          className="xl:min-w-[156px]"
         >
           <option value="">Todos los cursos</option>
           {courses.map((course) => (
@@ -224,7 +224,7 @@ export function StatsToolbar({
           icon="fa-calendar-days"
           value={period}
           onChange={onPeriodChange}
-          className="lg:min-w-[148px]"
+          className="xl:min-w-[148px]"
         >
           {PERIOD_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>

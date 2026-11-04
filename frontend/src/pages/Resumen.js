@@ -156,7 +156,7 @@ export default function Resumen() {
       {stats && (
         <p className="mt-3 text-[10px] leading-relaxed text-slate-400">
           {selectedCourseLabel ? `Curso seleccionado: ${selectedCourseLabel}. ` : ""}
-          El total de cursos corresponde a {courseId ? "el curso filtrado" : "tus cursos asignados"}. Las
+          El total de cursos corresponde {courseId ? "al curso filtrado" : "a tus cursos asignados"}. Las
           variaciones comparan estudiantes y clases con el periodo anterior equivalente. Las ausencias y
           porcentajes se estiman con el roster de la primera clase finalizada con registros de asistencia
           de cada grupo; estudiantes fuera de ese roster no generan faltas estimadas. El sistema no
