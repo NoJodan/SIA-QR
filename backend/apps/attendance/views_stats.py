@@ -1,26 +1,17 @@
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.attendance.permissions import IsProfessorOrAdmin
 from apps.attendance.stats import StatsFilterSerializer, build_stats
-from apps.authentication.models import UserRole
 from apps.authentication.views import SessionAuthentication401
 
 
-class IsProfessor(BasePermission):
-    def has_permission(self, request, view):
-        return bool(
-            request.user
-            and request.user.is_authenticated
-            and request.user.role == UserRole.ROLE_PROFESSOR
-        )
-
-
-class ProfessorSummaryStatsView(APIView):
-    """GET /api/attendance/stats/ — resumen del profesor autenticado."""
+class SummaryStatsView(APIView):
+    """GET /api/attendance/stats/ — resumen del profesor o global (admin)."""
 
     authentication_classes = [SessionAuthentication401]
-    permission_classes = [IsAuthenticated, IsProfessor]
+    permission_classes = [IsAuthenticated, IsProfessorOrAdmin]
 
     def get(self, request):
         serializer = StatsFilterSerializer(data=request.query_params)
@@ -31,5 +22,6 @@ class ProfessorSummaryStatsView(APIView):
                 request.user,
                 serializer.validated_data["period"],
                 serializer.validated_data.get("course_id"),
+                serializer.validated_data.get("professor_id"),
             )
         )
