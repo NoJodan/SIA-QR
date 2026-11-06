@@ -1,4 +1,4 @@
-"""Métricas agregadas y estimaciones de asistencia para el resumen."""
+"""Métricas agregadas y conteos de asistencia para el resumen."""
 
 import calendar
 from datetime import date, timedelta
@@ -221,52 +221,11 @@ def build_stats(user, period, course_id=None, professor_id=None):
             "classes_completed": _growth(classes_completed, previous_classes.count()),
         }
 
-    # Roster: primera clase finalizada con al menos una marcación por grupo.
-    baseline_classes = list(
-        ScheduledClass.objects.filter(
-            group_id__in=group_ids,
-            status=ClassStatus.COMPLETED,
-            attendance_sessions__attendances__isnull=False,
-        )
-        .order_by("group_id", "start_time", "id")
-        .distinct("group_id")
-        .values("id", "group_id")
-    )
-    baseline_group_ids = {row["group_id"] for row in baseline_classes}
-    baseline_ids = [row["id"] for row in baseline_classes]
-    roster_rows = Attendance.objects.filter(
-        session__scheduled_class_id__in=baseline_ids
-    ).values(
-        "session__scheduled_class__group_id",
-        "student_id",
-        "student__first_name",
-        "student__last_name",
-    ).distinct()
-
-    roster_by_group = {group_id: set() for group_id in baseline_group_ids}
-    student_names = {}
-    for row in roster_rows:
-        group_id = row["session__scheduled_class__group_id"]
-        student_id = row["student_id"]
-        roster_by_group[group_id].add(student_id)
-        student_names[student_id] = (
-            f'{row["student__first_name"]} {row["student__last_name"]}'.strip()
-            or "Estudiante"
-        )
-
-    class_bucket_rows = (
-        completed_classes.annotate(bucket=trunc("start_time", tzinfo=BOGOTA_TZ))
-        .values("group_id", "bucket")
-        .annotate(class_count=Count("id"))
-    )
-    classes_by_group_bucket = {}
     classes_by_group = {}
-    for row in class_bucket_rows:
-        group_id = row["group_id"]
-        bucket = _bucket_date(row["bucket"], granularity)
-        count = row["class_count"]
-        classes_by_group_bucket[(group_id, bucket)] = count
-        classes_by_group[group_id] = classes_by_group.get(group_id, 0) + count
+    for row in (
+        completed_classes.values("group_id").annotate(class_count=Count("id"))
+    ):
+        classes_by_group[row["group_id"]] = row["class_count"]
 
     mark_rows = (
         Attendance.objects.filter(
@@ -283,6 +242,10 @@ def build_stats(user, period, course_id=None, professor_id=None):
             "session__scheduled_class__group_id",
             "session__scheduled_class_id",
             "student_id",
+            "student__first_name",
+            "student__last_name",
+            "latitude",
+            "longitude",
             "bucket",
         )
     )
@@ -290,24 +253,33 @@ def build_stats(user, period, course_id=None, professor_id=None):
         mark_rows, "session__scheduled_class__start_time", current_window
     )
 
+    group_course = {group["id"]: group["course_id"] for group in groups}
     seen_marks = set()
-    present_by_group_student = {}
     present_by_group = {}
     present_by_group_bucket = {}
     present_by_class = {}
+    attendance_by_student = {}
+    students_by_course = {course_id: set() for course_id in course_ids}
+    student_names = {}
+    with_location_marks = set()
     for row in mark_rows:
         group_id = row["session__scheduled_class__group_id"]
         student_id = row["student_id"]
-        if student_id not in roster_by_group.get(group_id, ()):
-            continue
         class_id = row["session__scheduled_class_id"]
         key = (group_id, student_id, class_id)
+        has_location = row["latitude"] is not None and row["longitude"] is not None
         if key in seen_marks:
+            # Varias sesiones para una misma clase: basta una marcación con ubicación.
+            if has_location:
+                with_location_marks.add(key)
             continue
         seen_marks.add(key)
+        if has_location:
+            with_location_marks.add(key)
 
-        present_by_group_student[(group_id, student_id)] = (
-            present_by_group_student.get((group_id, student_id), 0) + 1
+        student_names[student_id] = (
+            f'{row["student__first_name"]} {row["student__last_name"]}'.strip()
+            or "Estudiante"
         )
         present_by_group[group_id] = present_by_group.get(group_id, 0) + 1
         bucket = _bucket_date(row["bucket"], granularity)
@@ -315,56 +287,30 @@ def build_stats(user, period, course_id=None, professor_id=None):
             present_by_group_bucket.get((group_id, bucket), 0) + 1
         )
         present_by_class.setdefault(class_id, set()).add(student_id)
+        attendance_by_student[student_id] = attendance_by_student.get(student_id, 0) + 1
+        students_by_course[group_course[group_id]].add(student_id)
 
-    expected_total = 0
-    present_total = 0
-    expected_by_course = {course_id: 0 for course_id in course_ids}
+    present_total = len(seen_marks)
+    with_location = len(with_location_marks)
+    without_location = present_total - with_location
     present_by_course = {course_id: 0 for course_id in course_ids}
     course_classes = {course_id: 0 for course_id in course_ids}
-    absence_by_student = {}
 
     for group in groups:
-        group_id = group["id"]
         course_id_for_group = group["course_id"]
-        roster = roster_by_group.get(group_id, set())
-        group_classes = classes_by_group.get(group_id, 0)
-        group_present = present_by_group.get(group_id, 0)
-        group_expected = len(roster) * group_classes
-
-        expected_total += group_expected
-        present_total += group_present
-        expected_by_course[course_id_for_group] += group_expected
-        present_by_course[course_id_for_group] += group_present
-        course_classes[course_id_for_group] += group_classes
-
-        if group_classes and roster:
-            for student_id in roster:
-                present = present_by_group_student.get((group_id, student_id), 0)
-                missed = max(group_classes - present, 0)
-                if missed:
-                    absence_by_student[student_id] = (
-                        absence_by_student.get(student_id, 0) + missed
-                    )
-
-    total_absences = max(expected_total - present_total, 0)
-    attendance_rate = (
-        round(present_total * 100 / expected_total, 1) if expected_total else None
-    )
+        present_by_course[course_id_for_group] += present_by_group.get(group["id"], 0)
+        course_classes[course_id_for_group] += classes_by_group.get(group["id"], 0)
 
     courses_by_id = {row["course_id"]: row["course__name"] for row in all_courses}
     courses_stats = []
     for course_id_for_group in course_ids:
-        expected = expected_by_course[course_id_for_group]
-        present = present_by_course[course_id_for_group]
         courses_stats.append(
             {
                 "course_id": str(course_id_for_group),
                 "name": courses_by_id[course_id_for_group],
                 "classes_completed": course_classes[course_id_for_group],
-                "present": present,
-                "absent_estimated": max(expected - present, 0),
-                "expected": expected,
-                "rate": round(present * 100 / expected, 1) if expected else None,
+                "present": present_by_course[course_id_for_group],
+                "students": len(students_by_course[course_id_for_group]),
             }
         )
     courses_stats.sort(
@@ -398,33 +344,22 @@ def build_stats(user, period, course_id=None, professor_id=None):
     )
     trend = []
     for bucket in buckets:
-        expected = 0
-        present = 0
-        for group_id in group_ids:
-            group_roster_size = len(roster_by_group.get(group_id, set()))
-            class_count = classes_by_group_bucket.get((group_id, bucket), 0)
-            expected += group_roster_size * class_count
-            present += present_by_group_bucket.get((group_id, bucket), 0)
-        trend.append(
-            {
-                "month": bucket.isoformat(),
-                "present": present,
-                "absent_estimated": max(expected - present, 0),
-                "expected": expected,
-                "rate": round(present * 100 / expected, 1) if expected else None,
-            }
+        present = sum(
+            present_by_group_bucket.get((group_id, bucket), 0)
+            for group_id in group_ids
         )
+        trend.append({"month": bucket.isoformat(), "present": present})
 
-    top_absences = sorted(
+    top_attendance = sorted(
         (
             {
                 "student_id": str(student_id),
                 "name": student_names.get(student_id, "Estudiante"),
-                "absences": absences,
+                "attendances": count,
             }
-            for student_id, absences in absence_by_student.items()
+            for student_id, count in attendance_by_student.items()
         ),
-        key=lambda item: (-item["absences"], item["name"].casefold()),
+        key=lambda item: (-item["attendances"], item["name"].casefold()),
     )[:5]
 
     recent_classes = list(
@@ -440,16 +375,11 @@ def build_stats(user, period, course_id=None, professor_id=None):
     )
 
     for row in recent_classes:
-        group_id = row["group_id"]
-        expected = len(roster_by_group.get(group_id, set()))
         present = len(present_by_class.get(row["id"], ()))
         row["id"] = str(row["id"])
         row["start_time"] = row["start_time"].isoformat()
         row["course_name"] = row.pop("group__course__name")
         row["present"] = present
-        row["expected"] = expected
-        row["absent_estimated"] = max(expected - present, 0) if expected else None
-        row["rate"] = round(present * 100 / expected, 1) if expected else None
         row.pop("group_id")
 
     return {
@@ -463,15 +393,13 @@ def build_stats(user, period, course_id=None, professor_id=None):
         },
         "changes": changes,
         "attendance": {
-            "present": present_total,
-            "absent_estimated": total_absences,
-            "expected": expected_total,
-            "rate": attendance_rate,
-            "has_roster": any(roster_by_group.values()),
+            "total": present_total,
+            "with_location": with_location,
+            "without_location": without_location,
         },
         "courses": courses_stats,
         "trend": trend,
-        "top_absences": top_absences,
+        "top_attendance": top_attendance,
         "recent_classes": recent_classes,
         "filters": {
             "courses": [

@@ -10,7 +10,7 @@ import {
   PERIOD_OPTIONS,
   RecentClasses,
   StatsToolbar,
-  TopAbsences,
+  TopAttendances,
 } from "../components/StatsPanels";
 import { getStats } from "../services/stats";
 
@@ -130,7 +130,7 @@ export default function Resumen() {
               <Panel title="Asistencia por curso" icon="fa-chart-column">
                 <CourseAttendanceChart courses={stats.courses} />
               </Panel>
-              <Panel title="Estado de asistencia" icon="fa-chart-pie">
+              <Panel title="Asistencias con y sin localización" icon="fa-location-dot">
                 <AttendanceDonut attendance={stats.attendance} />
               </Panel>
               <Panel title="Evolución de la asistencia" icon="fa-chart-line" subtitle={trendLabel}>
@@ -142,8 +142,8 @@ export default function Resumen() {
               <Panel title="Cursos con mayor y menor asistencia" icon="fa-trophy">
                 <CourseExtremes courses={stats.courses} />
               </Panel>
-              <Panel title="Estudiantes con más inasistencias" icon="fa-user-xmark">
-                <TopAbsences students={stats.top_absences} />
+              <Panel title="Estudiantes con más asistencias" icon="fa-user-check">
+                <TopAttendances students={stats.top_attendance} />
               </Panel>
               <Panel title="Últimas clases registradas" icon="fa-clock">
                 <RecentClasses classes={stats.recent_classes} />
@@ -157,10 +157,9 @@ export default function Resumen() {
         <p className="mt-3 text-[10px] leading-relaxed text-slate-400">
           {selectedCourseLabel ? `Curso seleccionado: ${selectedCourseLabel}. ` : ""}
           El total de cursos corresponde {courseId ? "al curso filtrado" : "a tus cursos asignados"}. Las
-          variaciones comparan estudiantes y clases con el periodo anterior equivalente. Las ausencias y
-          porcentajes se estiman con el roster de la primera clase finalizada con registros de asistencia
-          de cada grupo; estudiantes fuera de ese roster no generan faltas estimadas. El sistema no
-          registra ausencias justificadas.
+          variaciones comparan estudiantes y clases con el periodo anterior equivalente. Las asistencias
+          cuentan una marcación por estudiante y clase finalizada; la localización se registra solo si el
+          estudiante la comparte.
         </p>
       )}
     </section>
