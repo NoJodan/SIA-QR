@@ -157,7 +157,7 @@ export default function AdminResumen() {
               <Panel title="Cursos con más y menos marcaciones" icon="fa-trophy">
                 <CourseExtremes courses={stats.courses} />
               </Panel>
-              <Panel title="Estudiantes con más asistencias" icon="fa-user-check">
+              <Panel title="Estudiantes con más marcaciones" icon="fa-user-check">
                 <TopAttendances students={stats.top_attendance} />
               </Panel>
               <Panel title="Últimas clases registradas" icon="fa-clock">

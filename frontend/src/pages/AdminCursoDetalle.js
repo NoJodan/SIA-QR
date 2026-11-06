@@ -165,7 +165,13 @@ export default function AdminCursoDetalle({ group, onBack }) {
       )}
 
       {detailClass && (
-        <Modal title={`Asistencias · ${detailClass.title}`} onClose={() => setDetailClass(null)}>
+        <Modal
+          title={`Asistencias · ${detailClass.title}`}
+          onClose={() => {
+            attSeqRef.current += 1;
+            setDetailClass(null);
+          }}
+        >
           {attLoading && <p className="text-sm text-slate-500">Cargando asistencias…</p>}
           {!attLoading && attError && (
             <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">

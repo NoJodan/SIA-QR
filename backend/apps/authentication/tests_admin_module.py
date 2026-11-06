@@ -307,6 +307,36 @@ class AdminModuleTests(TestCase):
         student.refresh_from_db()
         self.assertIsNone(student.phone_number)
 
+    def test_detalle_admin_patch_limpia_telefono_vacio(self):
+        student = self.students[1]
+        student.phone_number = "3001234567"
+        student.save(update_fields=["phone_number"])
+        self.client.force_login(self.admin)
+        resp = self.client.patch(
+            f"/api/auth/admin/students/{student.id}/",
+            {"phone_number": ""},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        student.refresh_from_db()
+        self.assertEqual(student.phone_number, "")
+
+    def test_detalle_admin_patch_limpia_telefono_nulo(self):
+        student = self.students[1]
+        student.phone_number = "3001234567"
+        student.save(update_fields=["phone_number"])
+        self.client.force_login(self.admin)
+        resp = self.client.patch(
+            f"/api/auth/admin/students/{student.id}/",
+            {"phone_number": None},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        student.refresh_from_db()
+        self.assertIsNone(student.phone_number)
+
     def test_detalle_admin_delete_borra_estudiante_usuario_y_audita(self):
         student = self.students[0]  # única con asistencia registrada
         user_id = student.user_id
