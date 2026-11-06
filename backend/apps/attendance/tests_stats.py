@@ -100,7 +100,7 @@ class SummaryStatsTests(TestCase):
         )
 
     @staticmethod
-    def _mark(scheduled_class, student, session_index=1):
+    def _mark(scheduled_class, student, session_index=1, latitude=None, longitude=None):
         session = AttendanceSession.objects.create(
             scheduled_class=scheduled_class,
             token_hash=hashlib.sha256(
@@ -112,6 +112,8 @@ class SummaryStatsTests(TestCase):
         return Attendance.objects.create(
             session=session,
             student=student,
+            latitude=latitude,
+            longitude=longitude,
             ip_address="127.0.0.1",
             user_agent="stats-test",
         )
@@ -145,19 +147,16 @@ class SummaryStatsTests(TestCase):
             {"students": -50.0, "classes_completed": -50.0},
         )
         self.assertEqual(response.data["attendance"], {
-            "present": 0,
-            "absent_estimated": 1,
-            "expected": 1,
-            "rate": 0.0,
-            "has_roster": True,
+            "total": 1,
+            "with_location": 0,
+            "without_location": 1,
         })
-        self.assertEqual(response.data["courses"][0]["rate"], 0.0)
-        self.assertEqual(response.data["top_absences"][0]["student_id"], str(self.student_two.id))
-        self.assertEqual(response.data["top_absences"][0]["absences"], 1)
+        self.assertEqual(response.data["courses"][0]["present"], 1)
+        self.assertEqual(response.data["courses"][0]["students"], 1)
+        self.assertEqual(response.data["top_attendance"][0]["student_id"], str(self.student_one.id))
+        self.assertEqual(response.data["top_attendance"][0]["attendances"], 1)
         self.assertEqual(len(response.data["recent_classes"]), 1)
-        self.assertEqual(response.data["recent_classes"][0]["expected"], 1)
-        self.assertEqual(response.data["recent_classes"][0]["present"], 0)
-        self.assertEqual(response.data["recent_classes"][0]["rate"], 0.0)
+        self.assertEqual(response.data["recent_classes"][0]["present"], 1)
         self.assertEqual(response.data["filters"]["professors"], [])
         self.assertIsNone(response.data["institution"])
 
@@ -183,7 +182,7 @@ class SummaryStatsTests(TestCase):
         response = self.client.get(STATS_URL, {"course_id": "not-a-uuid"})
         self.assertEqual(response.status_code, 400)
 
-    def test_assigned_course_without_completed_classes_has_no_estimated_rate(self):
+    def test_assigned_course_without_completed_classes_has_zero_counts(self):
         course = Course.objects.get(code="ST-102")
         response = self.client.get(
             STATS_URL,
@@ -193,10 +192,13 @@ class SummaryStatsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["totals"]["courses_count"], 1)
         self.assertEqual(response.data["totals"]["classes_completed"], 0)
-        self.assertFalse(response.data["attendance"]["has_roster"])
-        self.assertIsNone(response.data["attendance"]["rate"])
+        self.assertEqual(
+            response.data["attendance"],
+            {"total": 0, "with_location": 0, "without_location": 0},
+        )
         self.assertEqual(response.data["courses"][0]["classes_completed"], 0)
-        self.assertIsNone(response.data["courses"][0]["rate"])
+        self.assertEqual(response.data["courses"][0]["present"], 0)
+        self.assertEqual(response.data["courses"][0]["students"], 0)
         self.assertEqual(response.data["recent_classes"], [])
 
     def test_all_period_includes_all_historical_stats(self):
@@ -207,25 +209,17 @@ class SummaryStatsTests(TestCase):
         self.assertEqual(response.data["totals"]["courses_count"], 2)
         self.assertEqual(response.data["totals"]["classes_completed"], 3)
         self.assertIsNone(response.data["changes"]["students"])
-        self.assertEqual(response.data["attendance"]["expected"], 3)
-        self.assertEqual(response.data["attendance"]["present"], 2)
-        self.assertEqual(response.data["attendance"]["absent_estimated"], 1)
+        self.assertEqual(response.data["attendance"]["total"], 3)
+        self.assertEqual(response.data["attendance"]["with_location"], 0)
+        self.assertEqual(response.data["attendance"]["without_location"], 3)
         self.assertGreaterEqual(len(response.data["trend"]), 2)
         self.assertEqual(
-            sum(point["expected"] for point in response.data["trend"]),
-            response.data["attendance"]["expected"],
-        )
-        self.assertEqual(
             sum(point["present"] for point in response.data["trend"]),
-            response.data["attendance"]["present"],
-        )
-        self.assertEqual(
-            sum(course["expected"] for course in response.data["courses"]),
-            response.data["attendance"]["expected"],
+            response.data["attendance"]["total"],
         )
         self.assertEqual(
             sum(course["present"] for course in response.data["courses"]),
-            response.data["attendance"]["present"],
+            response.data["attendance"]["total"],
         )
 
     def test_all_period_trend_covers_oldest_completed_class(self):
@@ -243,12 +237,8 @@ class SummaryStatsTests(TestCase):
         months = [point["month"] for point in response.data["trend"]]
         self.assertIn(date(old_day.year, old_day.month, 1).isoformat(), months)
         self.assertEqual(
-            sum(point["expected"] for point in response.data["trend"]),
-            response.data["attendance"]["expected"],
-        )
-        self.assertEqual(
             sum(point["present"] for point in response.data["trend"]),
-            response.data["attendance"]["present"],
+            response.data["attendance"]["total"],
         )
 
     def test_admin_sees_global_stats_and_institution_counts(self):
@@ -324,8 +314,7 @@ class SummaryStatsTests(TestCase):
             response.data["totals"],
             {"students": 0, "courses_count": 0, "classes_completed": 0},
         )
-        self.assertEqual(response.data["attendance"]["expected"], 0)
-        self.assertIsNone(response.data["attendance"]["rate"])
+        self.assertEqual(response.data["attendance"]["total"], 0)
         self.assertEqual(
             response.data["institution"],
             {
@@ -337,7 +326,7 @@ class SummaryStatsTests(TestCase):
         )
         self.assertEqual(response.data["filters"]["courses"], [])
 
-    def test_top_absences_accumulates_present_classes_across_months(self):
+    def test_top_attendance_counts_classes_across_months(self):
         course = Course.objects.create(code="ST-MULTI", name="Curso multi-mes")
         group = self._group(self.professor, course, "01")
         current, _ = _period_windows("3m")
@@ -356,24 +345,24 @@ class SummaryStatsTests(TestCase):
         response = self.client.get(STATS_URL, {"period": "3m"})
 
         self.assertEqual(response.status_code, 200)
-        absences = {
-            row["student_id"]: row["absences"]
-            for row in response.data["top_absences"]
+        attendances = {
+            row["student_id"]: row["attendances"]
+            for row in response.data["top_attendance"]
         }
-        self.assertEqual(absences[str(student_a.id)], 1)
-        self.assertEqual(absences[str(student_b.id)], 2)
+        self.assertEqual(attendances[str(student_a.id)], 2)
+        self.assertEqual(attendances[str(student_b.id)], 1)
 
-    def test_roster_falls_back_to_first_completed_class_with_marks(self):
-        course = Course.objects.create(code="ST-ROSTER", name="Curso roster")
+    def test_course_counts_all_completed_classes_and_marks_without_reference(self):
+        course = Course.objects.create(code="ST-ROSTER", name="Curso conteo")
         group = self._group(self.professor, course, "01")
         current, _ = _period_windows("1m")
         empty_class = self._class(group, current[0])
-        roster_class = self._class(group, current[0] + timedelta(days=1))
+        marked_class = self._class(group, current[0] + timedelta(days=1))
         later_class = self._class(group, current[0] + timedelta(days=2))
-        student_a = self._student("roster-a@ut.edu.co", "STU-401")
-        student_b = self._student("roster-b@ut.edu.co", "STU-402")
-        self._mark(roster_class, student_a)
-        self._mark(roster_class, student_b)
+        student_a = self._student("count-a@ut.edu.co", "STU-401")
+        student_b = self._student("count-b@ut.edu.co", "STU-402")
+        self._mark(marked_class, student_a)
+        self._mark(marked_class, student_b)
         self._mark(later_class, student_a)
 
         response = self.client.get(
@@ -383,46 +372,48 @@ class SummaryStatsTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["totals"]["classes_completed"], 3)
-        self.assertEqual(response.data["attendance"]["expected"], 6)
-        self.assertEqual(response.data["attendance"]["present"], 3)
-        self.assertEqual(response.data["attendance"]["rate"], 50.0)
-        self.assertTrue(response.data["attendance"]["has_roster"])
-        absences = {
-            row["student_id"]: row["absences"]
-            for row in response.data["top_absences"]
+        self.assertEqual(response.data["attendance"]["total"], 3)
+        self.assertEqual(response.data["courses"][0]["present"], 3)
+        self.assertEqual(response.data["courses"][0]["students"], 2)
+        attendances = {
+            row["student_id"]: row["attendances"]
+            for row in response.data["top_attendance"]
         }
-        self.assertEqual(absences[str(student_a.id)], 1)
-        self.assertEqual(absences[str(student_b.id)], 2)
+        self.assertEqual(attendances[str(student_a.id)], 2)
+        self.assertEqual(attendances[str(student_b.id)], 1)
 
         recent = {row["id"]: row for row in response.data["recent_classes"]}
-        self.assertEqual(recent[str(roster_class.id)]["expected"], 2)
-        self.assertEqual(recent[str(roster_class.id)]["present"], 2)
-        self.assertEqual(recent[str(roster_class.id)]["rate"], 100.0)
-        self.assertEqual(recent[str(later_class.id)]["expected"], 2)
+        self.assertEqual(recent[str(marked_class.id)]["present"], 2)
         self.assertEqual(recent[str(later_class.id)]["present"], 1)
-        self.assertEqual(recent[str(later_class.id)]["rate"], 50.0)
-        self.assertEqual(recent[str(empty_class.id)]["expected"], 2)
         self.assertEqual(recent[str(empty_class.id)]["present"], 0)
-        self.assertEqual(recent[str(empty_class.id)]["rate"], 0.0)
 
-    def test_has_roster_when_roster_exists_but_period_has_no_classes(self):
-        course = Course.objects.create(code="ST-ROSTER-2", name="Curso roster sin clases")
+    def test_location_counts_split_attendances(self):
+        course = Course.objects.create(code="ST-LOC", name="Curso ubicación")
         group = self._group(self.professor, course, "01")
-        _, previous = _period_windows("1d")
-        roster_class = self._class(group, previous[0])
-        student = self._student("roster-day@ut.edu.co", "STU-601")
-        self._mark(roster_class, student)
+        current, _ = _period_windows("1m")
+        scheduled_class = self._class(group, current[0])
+        student_a = self._student("location-a@ut.edu.co", "STU-601")
+        student_b = self._student("location-b@ut.edu.co", "STU-602")
+        self._mark(scheduled_class, student_a)
+        self._mark(
+            scheduled_class,
+            student_a,
+            session_index=2,
+            latitude=4.628,
+            longitude=-74.065,
+        )
+        self._mark(scheduled_class, student_b)
 
         response = self.client.get(
             STATS_URL,
-            {"period": "1d", "course_id": str(course.id)},
+            {"period": "1m", "course_id": str(course.id)},
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["totals"]["classes_completed"], 0)
-        self.assertTrue(response.data["attendance"]["has_roster"])
-        self.assertEqual(response.data["attendance"]["expected"], 0)
-        self.assertIsNone(response.data["attendance"]["rate"])
+        self.assertEqual(
+            response.data["attendance"],
+            {"total": 2, "with_location": 1, "without_location": 1},
+        )
 
     def test_day_and_week_periods_use_daily_granularity(self):
         today = date(2026, 11, 2)
@@ -448,12 +439,8 @@ class SummaryStatsTests(TestCase):
             timezone.localdate(timezone=BOGOTA_TZ).isoformat(),
         )
         self.assertEqual(
-            sum(point["expected"] for point in response.data["trend"]),
-            response.data["attendance"]["expected"],
-        )
-        self.assertEqual(
             sum(point["present"] for point in response.data["trend"]),
-            response.data["attendance"]["present"],
+            response.data["attendance"]["total"],
         )
 
         response = self.client.get(STATS_URL, {"period": "1w"})
@@ -465,12 +452,8 @@ class SummaryStatsTests(TestCase):
             timezone.localdate(timezone=BOGOTA_TZ).isoformat(),
         )
         self.assertEqual(
-            sum(point["expected"] for point in response.data["trend"]),
-            response.data["attendance"]["expected"],
-        )
-        self.assertEqual(
             sum(point["present"] for point in response.data["trend"]),
-            response.data["attendance"]["present"],
+            response.data["attendance"]["total"],
         )
 
     def test_day_and_week_periods_with_completed_classes(self):
@@ -495,9 +478,7 @@ class SummaryStatsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["granularity"], "day")
         self.assertEqual(len(response.data["trend"]), 1)
-        self.assertEqual(response.data["attendance"]["expected"], 4)
-        self.assertEqual(response.data["attendance"]["present"], 3)
-        self.assertEqual(response.data["trend"][0]["expected"], 4)
+        self.assertEqual(response.data["attendance"]["total"], 3)
         self.assertEqual(response.data["trend"][0]["present"], 3)
 
         response = self.client.get(
@@ -509,12 +490,8 @@ class SummaryStatsTests(TestCase):
         self.assertEqual(response.data["granularity"], "day")
         self.assertEqual(len(response.data["trend"]), 7)
         self.assertEqual(
-            sum(point["expected"] for point in response.data["trend"]),
-            response.data["attendance"]["expected"],
-        )
-        self.assertEqual(
             sum(point["present"] for point in response.data["trend"]),
-            response.data["attendance"]["present"],
+            response.data["attendance"]["total"],
         )
 
     def test_invalid_period_returns_validation_error(self):

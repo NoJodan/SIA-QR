@@ -60,6 +60,8 @@ _GENERIC_ADMIN_LOGIN_ERROR = {"error": "Credenciales inválidas"}
 _STUDENT_CODE_RE = re.compile(r"^[0-9]{12}$")
 _DOCUMENT_NUMBER_RE = re.compile(r"^[0-9]{6,10}$")
 _PHONE_RE = re.compile(r"^[0-9]{7,10}$")
+# m2: tope coherente con maxLength=500 del frontend.
+_ADDRESS_MAX_LENGTH = 500
 
 
 def get_google_names(user):
@@ -414,9 +416,8 @@ def _patch_student(request, user):
         errors["phone_number"] = "El teléfono solo admite números (entre 7 y 10 dígitos, sin espacios)."
     if not address:
         errors["address"] = "La dirección es obligatoria."
-    elif len(address) > 500:
-        # m2: tope coherente con maxLength=500 del frontend.
-        errors["address"] = "La dirección no puede superar 500 caracteres."
+    elif len(address) > _ADDRESS_MAX_LENGTH:
+        errors["address"] = f"La dirección no puede superar {_ADDRESS_MAX_LENGTH} caracteres."
     if errors:
         return Response(errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -602,9 +603,27 @@ class AdminStudentSerializer(serializers.ModelSerializer):
             "address",
             "created_at",
         ]
+        # Un admin puede corregir datos de contacto, no los identificadores.
+        read_only_fields = ["user_id", "email", "student_code", "document_number", "created_at"]
 
     def get_full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}".strip()
+
+    def validate_phone_number(self, value):
+        if not value:
+            return value
+        if not _PHONE_RE.match(value):
+            raise serializers.ValidationError(
+                "El teléfono solo admite números (entre 7 y 10 dígitos, sin espacios)."
+            )
+        return value
+
+    def validate_address(self, value):
+        if len(value or "") > _ADDRESS_MAX_LENGTH:
+            raise serializers.ValidationError(
+                f"La dirección no puede superar {_ADDRESS_MAX_LENGTH} caracteres."
+            )
+        return value
 
 
 class AdminStudentListView(generics.ListAPIView):
@@ -623,6 +642,46 @@ class AdminStudentListView(generics.ListAPIView):
     queryset = Student.objects.select_related("user").order_by(
         "last_name", "first_name", "student_code"
     )
+
+
+class AdminStudentDetailView(generics.RetrieveUpdateDestroyAPIView):
+    authentication_classes = [SessionAuthentication401]
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    serializer_class = AdminStudentSerializer
+    lookup_url_kwarg = "pk"
+    queryset = Student.objects.select_related("user")
+
+    def perform_update(self, serializer):
+        super().perform_update(serializer)
+        try:
+            log_event(
+                self.request.user,
+                "admin_student_updated",
+                f"student:{serializer.instance.id}",
+                request=self.request,
+            )
+        except Exception:
+            pass
+
+    def perform_destroy(self, instance):
+        user = instance.user
+        # La auditoría y el borrado comparten transacción: si el CASCADE falla,
+        # el log también se revierte (no queda rastro de un borrado inexistente).
+        with transaction.atomic():
+            attendances = Attendance.objects.filter(student=instance).count()
+            log_event(
+                self.request.user,
+                "admin_student_deleted",
+                f"student:{instance.id}",
+                request=self.request,
+                payload={
+                    "student_code": instance.student_code,
+                    "attendances": attendances,
+                },
+            )
+            instance.delete()
+            if user is not None:
+                user.delete()
 
 
 @api_view(["POST"])

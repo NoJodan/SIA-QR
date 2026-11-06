@@ -676,6 +676,21 @@ class ClassAttendanceListViewTests(TestCase):
         resp = client.get(f"/api/attendance/classes/{clase.id}/attendances/")
         self.assertEqual(resp.status_code, 403)
 
+    def test_admin_lists_class_of_another_professor(self):
+        _, clase = self._setup()
+        admin = User.objects.create_user(
+            email="classadmin@ut.edu.co", google_sub="sub-classadmin", role="ROLE_ADMIN"
+        )
+        client = APIClient()
+        client.force_login(admin)
+        resp = client.get(f"/api/attendance/classes/{clase.id}/attendances/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 2)
+        self.assertEqual(
+            {r["student_code"] for r in resp.data["results"]},
+            {"EST-CLA", "EST-CLB"},
+        )
+
 
 class ClassWideAttendanceUniquenessTests(TestCase):
     """Una sola marcación por clase aunque el QR rotado cree otra sesión."""

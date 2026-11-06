@@ -26,9 +26,6 @@ export const PERIOD_OPTIONS = [
 ];
 
 export const numberFormat = new Intl.NumberFormat("es-CO");
-export const percentFormat = new Intl.NumberFormat("es-CO", {
-  maximumFractionDigits: 1,
-});
 const monthFormat = new Intl.DateTimeFormat("es-CO", {
   month: "short",
   year: "numeric",
@@ -57,15 +54,6 @@ const dateFormat = new Intl.DateTimeFormat("es-CO", {
 const CHART_COLORS = ["#c91c2a", "#f7b8c0"];
 const cardClass =
   "overflow-hidden rounded-xl border border-rose-100 bg-white shadow-[0_3px_12px_rgba(115,13,7,0.06)]";
-
-export function formatPercent(value) {
-  return value === null || value === undefined
-    ? "Sin datos"
-    : `${percentFormat.format(value)}%`;
-}
-
-const formatRateLabel = (value) =>
-  value === null || value === undefined ? "" : `${percentFormat.format(value)}%`;
 
 // El backend envía fechas sin hora; anclarlas a mediodía en Colombia evita correrse un día.
 const parseBogotaDate = (value) => new Date(`${value}T12:00:00-05:00`);
@@ -262,51 +250,40 @@ export function EmptyState({ children }) {
 }
 
 export function CourseAttendanceChart({ courses = [] }) {
-  const chartCourses = courses.filter((course) => course.rate !== null);
-  if (!chartCourses.length) {
-    return <EmptyState>No hay roster de referencia y clases finalizadas para este periodo.</EmptyState>;
+  if (!courses.length) {
+    return <EmptyState>No hay cursos con clases finalizadas en este periodo.</EmptyState>;
   }
 
   return (
     <div className="h-[220px] w-full min-w-0">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={chartCourses} margin={{ top: 18, right: 5, bottom: 0, left: -20 }}>
+        <BarChart data={courses} margin={{ top: 18, right: 5, bottom: 0, left: -20 }}>
           <CartesianGrid stroke="#f1e7e8" vertical={false} />
           <XAxis
             dataKey="name"
             tickFormatter={(name) => (name.length > 12 ? `${name.slice(0, 11)}…` : name)}
-            interval={chartCourses.length > 5 ? "preserveStartEnd" : 0}
+            interval={courses.length > 5 ? "preserveStartEnd" : 0}
             tick={{ fontSize: 8, fill: "#475569" }}
             axisLine={{ stroke: "#e2d5d7" }}
             tickLine={false}
             tickMargin={7}
           />
           <YAxis
-            domain={[0, 100]}
-            ticks={[0, 25, 50, 75, 100]}
-            tickFormatter={(value) => `${value}%`}
+            domain={[0, (dataMax) => Math.max(50, Math.ceil(dataMax))]}
+            allowDecimals={false}
             tick={{ fontSize: 8, fill: "#64748b" }}
             axisLine={false}
             tickLine={false}
           />
           <Tooltip
-            formatter={(value) => [
-              value == null ? "Sin datos" : `${percentFormat.format(value)}%`,
-              "Asistencia del roster",
-            ]}
+            formatter={(value) => [numberFormat.format(value), "Estudiantes distintos"]}
             contentStyle={{ borderRadius: 10, borderColor: "#f3d9dc", fontSize: 11 }}
           />
-          <Bar
-            dataKey="rate"
-            name="Asistencia del roster"
-            fill="#c91c2a"
-            radius={[5, 5, 0, 0]}
-            maxBarSize={34}
-          >
+          <Bar dataKey="students" name="Estudiantes distintos" fill="#c91c2a" radius={[5, 5, 0, 0]} maxBarSize={34}>
             <LabelList
-              dataKey="rate"
+              dataKey="students"
               position="top"
-              formatter={formatRateLabel}
+              formatter={(value) => numberFormat.format(value)}
               style={{ fill: "#334155", fontSize: 9, fontWeight: 600 }}
             />
           </Bar>
@@ -317,16 +294,13 @@ export function CourseAttendanceChart({ courses = [] }) {
 }
 
 export function AttendanceDonut({ attendance }) {
-  if (!attendance.has_roster) {
-    return <EmptyState>Aún no hay un roster que permita estimar asistencia y ausencias.</EmptyState>;
-  }
-  if (attendance.expected === 0) {
-    return <EmptyState>No hay clases finalizadas en el periodo seleccionado.</EmptyState>;
+  if (!attendance.total) {
+    return <EmptyState>No hay asistencias registradas en este periodo.</EmptyState>;
   }
 
   const data = [
-    { name: "Presentes del roster", value: attendance.present },
-    { name: "Ausencias estimadas", value: attendance.absent_estimated },
+    { name: "Con localización", value: attendance.with_location },
+    { name: "Sin localización", value: attendance.without_location },
   ];
 
   return (
@@ -340,7 +314,7 @@ export function AttendanceDonut({ attendance }) {
               nameKey="name"
               innerRadius="62%"
               outerRadius="82%"
-              paddingAngle={attendance.present && attendance.absent_estimated ? 2 : 0}
+              paddingAngle={attendance.with_location && attendance.without_location ? 2 : 0}
               stroke="none"
             >
               {data.map((entry, index) => (
@@ -354,8 +328,10 @@ export function AttendanceDonut({ attendance }) {
           </PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-xl font-bold text-slate-800">{formatPercent(attendance.rate)}</span>
-          <span className="text-[10px] text-slate-500">asistencia</span>
+          <span className="text-xl font-bold text-slate-800">
+            {numberFormat.format(attendance.total)}
+          </span>
+          <span className="text-[10px] text-slate-500">asistencias</span>
         </div>
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-3">
@@ -368,12 +344,7 @@ export function AttendanceDonut({ attendance }) {
             />
             <span className="min-w-0 text-slate-600">
               {item.name}
-              <strong className="block text-slate-800">
-                {numberFormat.format(item.value)}{" "}
-                <span className="font-normal text-slate-500">
-                  ({formatPercent(attendance.expected ? item.value * 100 / attendance.expected : null)})
-                </span>
-              </strong>
+              <strong className="block text-slate-800">{numberFormat.format(item.value)}</strong>
             </span>
           </div>
         ))}
@@ -383,8 +354,8 @@ export function AttendanceDonut({ attendance }) {
 }
 
 export function AttendanceTrend({ trend = [], granularity = "month", showYear = trend.length > 12 }) {
-  if (!trend.some((item) => item.rate !== null)) {
-    return <EmptyState>No hay clases finalizadas con roster de referencia en este periodo.</EmptyState>;
+  if (!trend.some((item) => item.present > 0)) {
+    return <EmptyState>No hay asistencias registradas en este periodo.</EmptyState>;
   }
 
   const labelFormat =
@@ -416,8 +387,7 @@ export function AttendanceTrend({ trend = [], granularity = "month", showYear = 
             tickLine={false}
           />
           <YAxis
-            domain={[0, 100]}
-            tickFormatter={(value) => `${value}%`}
+            allowDecimals={false}
             tick={{ fontSize: 9, fill: "#64748b" }}
             axisLine={false}
             tickLine={false}
@@ -431,14 +401,14 @@ export function AttendanceTrend({ trend = [], granularity = "month", showYear = 
                 : ""
             }
             formatter={(value) => [
-              value == null ? "Sin datos" : `${percentFormat.format(value)}%`,
-              "Asistencia del roster",
+              value == null ? "Sin datos" : numberFormat.format(value),
+              "Asistencias",
             ]}
             contentStyle={{ borderRadius: 10, borderColor: "#f3d9dc", fontSize: 11 }}
           />
           <Area
             type="monotone"
-            dataKey="rate"
+            dataKey="present"
             connectNulls={false}
             stroke="#c91c2a"
             strokeWidth={2}
@@ -447,9 +417,9 @@ export function AttendanceTrend({ trend = [], granularity = "month", showYear = 
             activeDot={{ r: 4, fill: "#c91c2a" }}
           >
             <LabelList
-              dataKey="rate"
+              dataKey="present"
               position="top"
-              formatter={formatRateLabel}
+              formatter={(value) => numberFormat.format(value)}
               style={{ fill: "#334155", fontSize: 9, fontWeight: 600 }}
             />
           </Area>
@@ -460,33 +430,37 @@ export function AttendanceTrend({ trend = [], granularity = "month", showYear = 
 }
 
 export function CourseExtremes({ courses = [] }) {
-  const ratedCourses = courses.filter((course) => course.rate !== null);
+  const ratedCourses = courses.filter((course) => course.classes_completed > 0);
   if (!ratedCourses.length) {
-    return <EmptyState>No hay cursos con datos de asistencia para comparar.</EmptyState>;
+    return <EmptyState>No hay cursos con marcaciones para comparar.</EmptyState>;
   }
 
-  const best = [...ratedCourses].sort((a, b) => b.rate - a.rate || a.name.localeCompare(b.name))[0];
-  const lowest = [...ratedCourses].sort((a, b) => a.rate - b.rate || a.name.localeCompare(b.name))[0];
-  if (ratedCourses.length === 1 || best.rate === lowest.rate) {
+  const best = [...ratedCourses].sort(
+    (a, b) => b.present - a.present || a.name.localeCompare(b.name),
+  )[0];
+  const lowest = [...ratedCourses].sort(
+    (a, b) => a.present - b.present || a.name.localeCompare(b.name),
+  )[0];
+  if (ratedCourses.length === 1 || best.present === lowest.present) {
     return (
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[9px] font-medium uppercase tracking-wide text-slate-400">
-            {ratedCourses.length === 1 ? "Asistencia del curso" : "Asistencia de los cursos"}
+            {ratedCourses.length === 1 ? "Marcaciones del curso" : "Marcaciones de los cursos"}
           </p>
           <p className="truncate text-[11px] font-semibold text-slate-700">
             {ratedCourses.length === 1 ? best.name : `${ratedCourses.length} cursos`}
           </p>
         </div>
-        <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-700">
-          {formatPercent(best.rate)}
+        <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-700">
+          {numberFormat.format(best.present)} marcaciones
         </span>
       </div>
     );
   }
   const extremes = [
-    { label: "Mayor asistencia", course: best, icon: "fa-arrow-up", color: "text-emerald-600", badge: "bg-emerald-50 text-emerald-700" },
-    { label: "Menor asistencia", course: lowest, icon: "fa-arrow-down", color: "text-rose-600", badge: "bg-rose-50 text-rose-700" },
+    { label: "Más marcaciones", course: best, icon: "fa-arrow-up", color: "text-emerald-600", badge: "bg-emerald-50 text-emerald-700" },
+    { label: "Menos marcaciones", course: lowest, icon: "fa-arrow-down", color: "text-rose-600", badge: "bg-rose-50 text-rose-700" },
   ];
 
   return (
@@ -499,7 +473,7 @@ export function CourseExtremes({ courses = [] }) {
             <p className="truncate text-[11px] font-semibold text-slate-700">{course.name}</p>
           </div>
           <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${badge}`}>
-            {formatPercent(course.rate)}
+            {numberFormat.format(course.present)} marcaciones
           </span>
         </div>
       ))}
@@ -507,9 +481,9 @@ export function CourseExtremes({ courses = [] }) {
   );
 }
 
-export function TopAbsences({ students = [] }) {
+export function TopAttendances({ students = [] }) {
   if (!students.length) {
-    return <EmptyState>No hay ausencias estimadas para los grupos con roster.</EmptyState>;
+    return <EmptyState>Aún no hay asistencias registradas en este periodo.</EmptyState>;
   }
 
   return (
@@ -520,8 +494,9 @@ export function TopAbsences({ students = [] }) {
           <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-700">
             {student.name}
           </span>
-          <span className="shrink-0 text-[10px] font-semibold text-rose-700">
-            {numberFormat.format(student.absences)} {student.absences === 1 ? "falta" : "faltas"}
+          <span className="shrink-0 text-[10px] font-semibold text-emerald-700">
+            {numberFormat.format(student.attendances)}{" "}
+            {student.attendances === 1 ? "asistencia" : "asistencias"}
           </span>
         </li>
       ))}
@@ -566,21 +541,19 @@ export function RecentClasses({ classes = [] }) {
                 </span>
               </td>
               <td className="whitespace-nowrap px-1.5 py-2 text-right sm:px-2">
-                {classItem.rate === null ? (
-                  <span className="text-slate-400">Sin roster</span>
-                ) : (
-                  <span
-                    className="inline-flex max-w-full items-center justify-end gap-1 font-semibold text-slate-700"
-                    title={`${numberFormat.format(classItem.present)} de ${numberFormat.format(classItem.expected)} estudiantes del roster`}
-                    aria-label={`${formatPercent(classItem.rate)}: ${numberFormat.format(classItem.present)} de ${numberFormat.format(classItem.expected)} estudiantes del roster`}
-                  >
-                    <i
-                      className="fa-solid fa-circle-check shrink-0 text-[11px] text-emerald-500"
-                      aria-hidden="true"
-                    />
-                    {formatPercent(classItem.rate)}
-                  </span>
-                )}
+                <span
+                  className="inline-flex max-w-full items-center justify-end gap-1 font-semibold text-slate-700"
+                  title={`${numberFormat.format(classItem.present)} asistencias registradas`}
+                  aria-label={`${numberFormat.format(classItem.present)} asistencias registradas`}
+                >
+                  <i
+                    className={`fa-solid fa-circle-check shrink-0 text-[11px] ${
+                      classItem.present ? "text-emerald-500" : "text-slate-300"
+                    }`}
+                    aria-hidden="true"
+                  />
+                  {numberFormat.format(classItem.present)}
+                </span>
               </td>
             </tr>
           ))}

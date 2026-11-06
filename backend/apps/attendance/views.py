@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 from apps.academic.models import ClassStatus, ScheduledClass
 from apps.academic.pagination import StandardResultsPagination
 from apps.attendance.models import Attendance, AttendanceSession, AuditLog
-from apps.attendance.permissions import IsOwnerProfessor
+from apps.attendance.permissions import IsOwnerProfessor, IsProfessorOrAdmin
 from apps.attendance.serializers import (
     AttendanceListSerializer,
     AuditLogSerializer,
@@ -157,19 +157,24 @@ class ClassAttendanceListView(generics.ListAPIView):
     """
 
     authentication_classes = _AUTH
-    permission_classes = [IsAuthenticated, IsOwnerProfessor]
+    permission_classes = [IsAuthenticated, IsProfessorOrAdmin]
     serializer_class = AttendanceListSerializer
     pagination_class = StandardResultsPagination
 
     def get_class(self):
         # Memoizado: queryset y contexto comparten la misma clase (1 query).
         if not hasattr(self, "_class_cache"):
-            profesor = getattr(self.request.user, "professor_profile", None)
-            self._class_cache = get_object_or_404(
-                ScheduledClass.objects.select_related("group__professor__user"),
-                pk=self.kwargs["class_id"],
-                group__professor=profesor,
-            )
+            user = self.request.user
+            qs = ScheduledClass.objects.select_related("group__professor__user")
+            if getattr(user, "role", None) == UserRole.ROLE_ADMIN:
+                self._class_cache = get_object_or_404(qs, pk=self.kwargs["class_id"])
+            else:
+                profesor = getattr(user, "professor_profile", None)
+                self._class_cache = get_object_or_404(
+                    qs,
+                    pk=self.kwargs["class_id"],
+                    group__professor=profesor,
+                )
         return self._class_cache
 
     def get_serializer_context(self):

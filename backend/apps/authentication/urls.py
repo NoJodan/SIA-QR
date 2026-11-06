@@ -1,5 +1,6 @@
 from django.urls import path
 from apps.authentication.views import (
+    AdminStudentDetailView,
     AdminStudentListView,
     admin_clear_users,
     admin_login_view,
@@ -18,5 +19,6 @@ urlpatterns = [
     path("logout/", logout_view, name="logout"),
     path("professors-whitelist/", professors_whitelist, name="professors-whitelist"),
     path("admin/students/", AdminStudentListView.as_view(), name="admin-students"),
+    path("admin/students/<uuid:pk>/", AdminStudentDetailView.as_view(), name="admin-student-detail"),
     path("admin/clear-users/", admin_clear_users, name="admin-clear-users"),
 ]

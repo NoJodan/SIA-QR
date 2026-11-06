@@ -252,3 +252,127 @@ class AdminModuleTests(TestCase):
                 "courses": 0,
             },
         )
+
+    def test_detalle_admin_patch_actualiza_campos(self):
+        student = self.students[1]
+        self.client.force_login(self.admin)
+        resp = self.client.patch(
+            f"/api/auth/admin/students/{student.id}/",
+            {
+                "first_name": "Carlos Andres",
+                "phone_number": "3001234567",
+                "address": "Calle 9 #1-2",
+            },
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        student.refresh_from_db()
+        self.assertEqual(student.first_name, "Carlos Andres")
+        self.assertEqual(student.phone_number, "3001234567")
+        self.assertEqual(student.address, "Calle 9 #1-2")
+        self.assertTrue(
+            AuditLog.objects.filter(
+                event_type="admin_student_updated",
+                resource=f"student:{student.id}",
+                actor=self.admin,
+            ).exists()
+        )
+
+    def test_detalle_admin_patch_ignora_identificadores(self):
+        student = self.students[1]
+        self.client.force_login(self.admin)
+        resp = self.client.patch(
+            f"/api/auth/admin/students/{student.id}/",
+            {"student_code": "202699999999", "document_number": "9999999"},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        student.refresh_from_db()
+        self.assertEqual(student.student_code, "202600000002")
+        self.assertEqual(student.document_number, "1000002")
+
+    def test_detalle_admin_patch_rechaza_telefono_invalido(self):
+        student = self.students[1]
+        self.client.force_login(self.admin)
+        resp = self.client.patch(
+            f"/api/auth/admin/students/{student.id}/",
+            {"phone_number": "+57 300 000 0000"},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("phone_number", resp.data)
+        student.refresh_from_db()
+        self.assertIsNone(student.phone_number)
+
+    def test_detalle_admin_patch_limpia_telefono_vacio(self):
+        student = self.students[1]
+        student.phone_number = "3001234567"
+        student.save(update_fields=["phone_number"])
+        self.client.force_login(self.admin)
+        resp = self.client.patch(
+            f"/api/auth/admin/students/{student.id}/",
+            {"phone_number": ""},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        student.refresh_from_db()
+        self.assertEqual(student.phone_number, "")
+
+    def test_detalle_admin_patch_limpia_telefono_nulo(self):
+        student = self.students[1]
+        student.phone_number = "3001234567"
+        student.save(update_fields=["phone_number"])
+        self.client.force_login(self.admin)
+        resp = self.client.patch(
+            f"/api/auth/admin/students/{student.id}/",
+            {"phone_number": None},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        student.refresh_from_db()
+        self.assertIsNone(student.phone_number)
+
+    def test_detalle_admin_delete_borra_estudiante_usuario_y_audita(self):
+        student = self.students[0]  # única con asistencia registrada
+        user_id = student.user_id
+        self.client.force_login(self.admin)
+        resp = self.client.delete(f"/api/auth/admin/students/{student.id}/")
+
+        self.assertEqual(resp.status_code, 204)
+        self.assertFalse(Student.objects.filter(pk=student.pk).exists())
+        self.assertFalse(User.objects.filter(pk=user_id).exists())
+        # Attendance.student es ON DELETE CASCADE (SIA-QR.md).
+        self.assertFalse(Attendance.objects.filter(student_id=student.pk).exists())
+        log = AuditLog.objects.get(event_type="admin_student_deleted")
+        self.assertEqual(log.actor, self.admin)
+        self.assertEqual(log.resource, f"student:{student.id}")
+        self.assertEqual(
+            log.payload, {"student_code": "202600000001", "attendances": 1}
+        )
+
+    def test_detalle_rechaza_profesor_y_estudiante(self):
+        student = self.students[1]
+        for user in (self.prof_user, student.user):
+            client = APIClient()
+            client.force_login(user)
+            patch = client.patch(
+                f"/api/auth/admin/students/{student.id}/",
+                {"first_name": "Intruso"},
+                format="json",
+            )
+            delete = client.delete(f"/api/auth/admin/students/{student.id}/")
+
+            self.assertEqual(patch.status_code, 403)
+            self.assertEqual(delete.status_code, 403)
+
+        self.assertTrue(Student.objects.filter(pk=student.pk).exists())
+        student.refresh_from_db()
+        self.assertEqual(student.first_name, "Carlos")
+        self.assertFalse(
+            AuditLog.objects.filter(event_type="admin_student_deleted").exists()
+        )
