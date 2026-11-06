@@ -44,6 +44,7 @@ export default function AdminCursoDetalle({ group, onBack }) {
   const debounced = useDebounce(search, 300);
   const now = useNow();
   const seqRef = useRef(0);
+  const attSeqRef = useRef(0);
 
   const load = (s = debounced, p = page, st = statusView) => {
     const seq = seqRef.current + 1;
@@ -75,6 +76,8 @@ export default function AdminCursoDetalle({ group, onBack }) {
   const totalPages = Math.max(1, Math.ceil(count / 10));
 
   const openDetails = async (c) => {
+    const seq = attSeqRef.current + 1;
+    attSeqRef.current = seq;
     setDetailClass(c);
     setAttendances([]);
     setAttError("");
@@ -84,16 +87,17 @@ export default function AdminCursoDetalle({ group, onBack }) {
       // El endpoint pagina (page_size máx. 50): recorrer hasta la última página.
       for (let p = 1; ; p += 1) {
         const data = await getClassAttendances(c.id, p, 50);
+        if (seq !== attSeqRef.current) return;
         const pageRows = data.results || [];
         rows.push(...pageRows);
         // Sin `next` es la última página; sin filas, cortar evita un bucle infinito.
         if (!data.next || pageRows.length === 0) break;
       }
-      setAttendances(rows);
+      if (seq === attSeqRef.current) setAttendances(rows);
     } catch {
-      setAttError("No se pudieron cargar las asistencias.");
+      if (seq === attSeqRef.current) setAttError("No se pudieron cargar las asistencias.");
     } finally {
-      setAttLoading(false);
+      if (seq === attSeqRef.current) setAttLoading(false);
     }
   };
 

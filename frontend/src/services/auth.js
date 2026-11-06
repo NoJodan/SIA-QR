@@ -23,11 +23,6 @@ export async function adminGetStudents(search = "", page = 1) {
   return res.data;
 }
 
-export async function adminGetStudent(id) {
-  const res = await api.get(`/api/auth/admin/students/${id}/`);
-  return res.data;
-}
-
 export async function adminUpdateStudent(id, payload) {
   const res = await api.patch(`/api/auth/admin/students/${id}/`, payload);
   return res.data;
