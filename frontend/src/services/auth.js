@@ -23,6 +23,21 @@ export async function adminGetStudents(search = "", page = 1) {
   return res.data;
 }
 
+export async function adminGetStudent(id) {
+  const res = await api.get(`/api/auth/admin/students/${id}/`);
+  return res.data;
+}
+
+export async function adminUpdateStudent(id, payload) {
+  const res = await api.patch(`/api/auth/admin/students/${id}/`, payload);
+  return res.data;
+}
+
+export async function adminDeleteStudent(id) {
+  const res = await api.delete(`/api/auth/admin/students/${id}/`);
+  return res.data;
+}
+
 export async function adminClearUsers() {
   const res = await api.post("/api/auth/admin/clear-users/");
   return res.data;

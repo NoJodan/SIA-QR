@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import Modal from "../components/Modal";
 import Pagination from "../components/Pagination";
 import SearchBar from "../components/SearchBar";
-import { adminClearUsers, adminGetStudents } from "../services/auth";
+import { adminClearUsers, adminDeleteStudent, adminGetStudents, adminUpdateStudent } from "../services/auth";
 import useDebounce from "../utils/useDebounce";
 
 // Solo el backend valida el email; aquí únicamente se oculta el botón.
@@ -21,6 +21,11 @@ export default function Estudiantes({ user }) {
   const [purging, setPurging] = useState(false);
   const [purgeError, setPurgeError] = useState("");
   const [notice, setNotice] = useState("");
+  const [editingStudent, setEditingStudent] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [deletingStudent, setDeletingStudent] = useState(null);
   const debounced = useDebounce(search, 300);
   const seqRef = useRef(0);
 
@@ -153,6 +158,7 @@ export default function Estudiantes({ user }) {
                 <th scope="col" className="px-4 py-3 font-semibold">Documento</th>
                 <th scope="col" className="px-4 py-3 font-semibold">Correo</th>
                 <th scope="col" className="px-4 py-3 font-semibold">Teléfono</th>
+                <th scope="col" className="px-4 py-3 font-semibold">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -163,6 +169,33 @@ export default function Estudiantes({ user }) {
                   <td className="px-4 py-3 whitespace-nowrap">{s.document_number}</td>
                   <td className="px-4 py-3 break-all">{s.email}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{s.phone_number || "—"}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingStudent(s);
+                          setEditForm({
+                            first_name: s.first_name || "",
+                            last_name: s.last_name || "",
+                            phone_number: s.phone_number || "",
+                            address: s.address || "",
+                          });
+                          setEditError("");
+                        }}
+                        className="px-3 py-1 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeletingStudent(s)}
+                        className="px-3 py-1 text-xs font-medium bg-red-50 hover:bg-red-100 text-[#B3200E] rounded-lg"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -171,6 +204,104 @@ export default function Estudiantes({ user }) {
       )}
 
       <Pagination page={page} totalPages={totalPages} onChange={setPage} countLabel={`${count} estudiante(s)`} />
+
+      {editingStudent && (
+        <Modal title="Editar estudiante" onClose={() => setEditingStudent(null)}>
+          <form
+            className="space-y-3"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setEditSaving(true);
+              setEditError("");
+              try {
+                await adminUpdateStudent(editingStudent.id, editForm);
+                setEditingStudent(null);
+                setReloadKey((k) => k + 1);
+              } catch (err) {
+                setEditError(err?.response?.data?.detail || "No se pudo actualizar.");
+              } finally {
+                setEditSaving(false);
+              }
+            }}
+          >
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Nombre</label>
+              <input
+                value={editForm.first_name}
+                onChange={(e) => setEditForm((f) => ({ ...f, first_name: e.target.value }))}
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Apellido</label>
+              <input
+                value={editForm.last_name}
+                onChange={(e) => setEditForm((f) => ({ ...f, last_name: e.target.value }))}
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Teléfono</label>
+              <input
+                value={editForm.phone_number}
+                onChange={(e) => setEditForm((f) => ({ ...f, phone_number: e.target.value }))}
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Dirección</label>
+              <input
+                value={editForm.address}
+                onChange={(e) => setEditForm((f) => ({ ...f, address: e.target.value }))}
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+            {editError && (
+              <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {editError}
+              </p>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setEditingStudent(null)} className="px-4 py-2 text-sm border border-slate-200 rounded-xl">
+                Cancelar
+              </button>
+              <button type="submit" disabled={editSaving} className="px-4 py-2 text-sm bg-[#B3200E] text-white rounded-xl disabled:opacity-50">
+                {editSaving ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {deletingStudent && (
+        <Modal title="Eliminar estudiante" onClose={() => setDeletingStudent(null)}>
+          <div className="space-y-4 text-sm text-slate-700">
+            <p>
+              ¿Eliminar a <strong>{deletingStudent.full_name}</strong> y su cuenta de usuario?
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setDeletingStudent(null)} className="px-4 py-2 text-sm border border-slate-200 rounded-xl">
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await adminDeleteStudent(deletingStudent.id);
+                    setDeletingStudent(null);
+                    setReloadKey((k) => k + 1);
+                  } catch (err) {
+                    alert(err?.response?.data?.detail || "No se pudo eliminar.");
+                  }
+                }}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-xl"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {purgeOpen && (
         <Modal title="Limpiar profesores y estudiantes" onClose={closePurge}>
