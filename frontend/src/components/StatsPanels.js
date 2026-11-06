@@ -268,20 +268,18 @@ export function CourseAttendanceChart({ courses = [] }) {
             tickLine={false}
             tickMargin={7}
           />
-          {/* shortcut: eje fijo 0-50 por requisito; un curso con más de 50 asistentes se recorta. */}
           <YAxis
-            domain={[0, 50]}
-            ticks={[0, 10, 20, 30, 40, 50]}
+            domain={[0, (dataMax) => Math.max(50, Math.ceil(dataMax))]}
             allowDecimals={false}
             tick={{ fontSize: 8, fill: "#64748b" }}
             axisLine={false}
             tickLine={false}
           />
           <Tooltip
-            formatter={(value) => [numberFormat.format(value), "Asistentes"]}
+            formatter={(value) => [numberFormat.format(value), "Estudiantes distintos"]}
             contentStyle={{ borderRadius: 10, borderColor: "#f3d9dc", fontSize: 11 }}
           />
-          <Bar dataKey="students" name="Asistentes" fill="#c91c2a" radius={[5, 5, 0, 0]} maxBarSize={34}>
+          <Bar dataKey="students" name="Estudiantes distintos" fill="#c91c2a" radius={[5, 5, 0, 0]} maxBarSize={34}>
             <LabelList
               dataKey="students"
               position="top"
@@ -434,7 +432,7 @@ export function AttendanceTrend({ trend = [], granularity = "month", showYear = 
 export function CourseExtremes({ courses = [] }) {
   const ratedCourses = courses.filter((course) => course.classes_completed > 0);
   if (!ratedCourses.length) {
-    return <EmptyState>No hay cursos con datos de asistencia para comparar.</EmptyState>;
+    return <EmptyState>No hay cursos con marcaciones para comparar.</EmptyState>;
   }
 
   const best = [...ratedCourses].sort(
@@ -448,21 +446,21 @@ export function CourseExtremes({ courses = [] }) {
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[9px] font-medium uppercase tracking-wide text-slate-400">
-            {ratedCourses.length === 1 ? "Asistencias del curso" : "Asistencias de los cursos"}
+            {ratedCourses.length === 1 ? "Marcaciones del curso" : "Marcaciones de los cursos"}
           </p>
           <p className="truncate text-[11px] font-semibold text-slate-700">
             {ratedCourses.length === 1 ? best.name : `${ratedCourses.length} cursos`}
           </p>
         </div>
         <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-700">
-          {numberFormat.format(best.present)} asistencias
+          {numberFormat.format(best.present)} marcaciones
         </span>
       </div>
     );
   }
   const extremes = [
-    { label: "Mayor asistencia", course: best, icon: "fa-arrow-up", color: "text-emerald-600", badge: "bg-emerald-50 text-emerald-700" },
-    { label: "Menor asistencia", course: lowest, icon: "fa-arrow-down", color: "text-rose-600", badge: "bg-rose-50 text-rose-700" },
+    { label: "Más marcaciones", course: best, icon: "fa-arrow-up", color: "text-emerald-600", badge: "bg-emerald-50 text-emerald-700" },
+    { label: "Menos marcaciones", course: lowest, icon: "fa-arrow-down", color: "text-rose-600", badge: "bg-rose-50 text-rose-700" },
   ];
 
   return (
@@ -475,7 +473,7 @@ export function CourseExtremes({ courses = [] }) {
             <p className="truncate text-[11px] font-semibold text-slate-700">{course.name}</p>
           </div>
           <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${badge}`}>
-            {numberFormat.format(course.present)} asistencias
+            {numberFormat.format(course.present)} marcaciones
           </span>
         </div>
       ))}

@@ -127,7 +127,7 @@ export default function Resumen() {
             </div>
 
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.85fr)_minmax(0,1.2fr)]">
-              <Panel title="Asistencia por curso" icon="fa-chart-column">
+              <Panel title="Estudiantes distintos por curso" icon="fa-chart-column">
                 <CourseAttendanceChart courses={stats.courses} />
               </Panel>
               <Panel title="Asistencias con y sin localización" icon="fa-location-dot">
@@ -139,7 +139,7 @@ export default function Resumen() {
             </div>
 
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)_minmax(0,1.25fr)]">
-              <Panel title="Cursos con mayor y menor asistencia" icon="fa-trophy">
+              <Panel title="Cursos con más y menos marcaciones" icon="fa-trophy">
                 <CourseExtremes courses={stats.courses} />
               </Panel>
               <Panel title="Estudiantes con más asistencias" icon="fa-user-check">
