@@ -635,8 +635,6 @@ class AdminStudentDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_update(self, serializer):
         super().perform_update(serializer)
         try:
-            from apps.attendance.services import log_event
-
             log_event(
                 self.request.user,
                 "admin_student_updated",
@@ -648,9 +646,23 @@ class AdminStudentDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def perform_destroy(self, instance):
         user = instance.user
-        instance.delete()
-        if user is not None:
-            user.delete()
+        # La auditoría y el borrado comparten transacción: si el CASCADE falla,
+        # el log también se revierte (no queda rastro de un borrado inexistente).
+        with transaction.atomic():
+            attendances = Attendance.objects.filter(student=instance).count()
+            log_event(
+                self.request.user,
+                "admin_student_deleted",
+                f"student:{instance.id}",
+                request=self.request,
+                payload={
+                    "student_code": instance.student_code,
+                    "attendances": attendances,
+                },
+            )
+            instance.delete()
+            if user is not None:
+                user.delete()
 
 
 @api_view(["POST"])

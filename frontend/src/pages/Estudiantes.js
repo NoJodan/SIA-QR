@@ -279,6 +279,9 @@ export default function Estudiantes({ user }) {
             <p>
               ¿Eliminar a <strong>{deletingStudent.full_name}</strong> y su cuenta de usuario?
             </p>
+            <p className="text-[#B3200E]">
+              También se borrarán definitivamente sus registros de asistencia.
+            </p>
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setDeletingStudent(null)} className="px-4 py-2 text-sm border border-slate-200 rounded-xl">
                 Cancelar

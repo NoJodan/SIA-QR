@@ -40,6 +40,7 @@ export default function AdminCursoDetalle({ group, onBack }) {
   const [detailClass, setDetailClass] = useState(null);
   const [attendances, setAttendances] = useState([]);
   const [attLoading, setAttLoading] = useState(false);
+  const [attError, setAttError] = useState("");
   const debounced = useDebounce(search, 300);
   const now = useNow();
   const seqRef = useRef(0);
@@ -73,14 +74,27 @@ export default function AdminCursoDetalle({ group, onBack }) {
 
   const totalPages = Math.max(1, Math.ceil(count / 10));
 
-  const openDetails = (c) => {
+  const openDetails = async (c) => {
     setDetailClass(c);
     setAttendances([]);
+    setAttError("");
     setAttLoading(true);
-    getClassAttendances(c.id, 1)
-      .then((data) => setAttendances(data.results || []))
-      .catch(() => setAttendances([]))
-      .finally(() => setAttLoading(false));
+    const rows = [];
+    try {
+      // El endpoint pagina (page_size máx. 50): recorrer hasta la última página.
+      for (let p = 1; ; p += 1) {
+        const data = await getClassAttendances(c.id, p, 50);
+        const pageRows = data.results || [];
+        rows.push(...pageRows);
+        // Sin `next` es la última página; sin filas, cortar evita un bucle infinito.
+        if (!data.next || pageRows.length === 0) break;
+      }
+      setAttendances(rows);
+    } catch {
+      setAttError("No se pudieron cargar las asistencias.");
+    } finally {
+      setAttLoading(false);
+    }
   };
 
   return (
@@ -149,7 +163,12 @@ export default function AdminCursoDetalle({ group, onBack }) {
       {detailClass && (
         <Modal title={`Asistencias · ${detailClass.title}`} onClose={() => setDetailClass(null)}>
           {attLoading && <p className="text-sm text-slate-500">Cargando asistencias…</p>}
-          {!attLoading && attendances.length === 0 && (
+          {!attLoading && attError && (
+            <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {attError}
+            </p>
+          )}
+          {!attLoading && !attError && attendances.length === 0 && (
             <p className="text-sm text-slate-500">Sin marcaciones registradas.</p>
           )}
           {!attLoading && attendances.length > 0 && (
@@ -158,7 +177,7 @@ export default function AdminCursoDetalle({ group, onBack }) {
                 <li key={a.id} className="rounded-xl border border-slate-200 bg-white p-3 text-sm">
                   <p className="font-semibold text-slate-800">{a.student_name || a.student?.first_name}</p>
                   <p className="text-xs text-slate-500">
-                    {a.registered_at} · {a.inside_range === false ? "Fuera de rango" : a.inside_range === true ? "Dentro de rango" : "Sin rango"}
+                    {formatBogotaDate(a.registered_at)} · {formatBogotaTime(a.registered_at)} · {a.inside_range === false ? "Fuera de rango" : a.inside_range === true ? "Dentro de rango" : "Sin rango"}
                   </p>
                 </li>
               ))}

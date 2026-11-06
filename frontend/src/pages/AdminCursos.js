@@ -92,7 +92,7 @@ export default function AdminCursos({ onSelectGroup }) {
           ))}
         </div>
       )}
-      {!loading && groups.length === 0 && (
+      {!loading && !error && groups.length === 0 && (
         <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#B3200E]/10 text-[#B3200E]">
             <i className="fa-solid fa-graduation-cap text-xl" aria-hidden="true"></i>
