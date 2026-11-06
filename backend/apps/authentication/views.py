@@ -610,7 +610,9 @@ class AdminStudentSerializer(serializers.ModelSerializer):
         return f"{obj.first_name} {obj.last_name}".strip()
 
     def validate_phone_number(self, value):
-        if not _PHONE_RE.match(value or ""):
+        if not value:
+            return value
+        if not _PHONE_RE.match(value):
             raise serializers.ValidationError(
                 "El teléfono solo admite números (entre 7 y 10 dígitos, sin espacios)."
             )

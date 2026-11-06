@@ -12,9 +12,9 @@ const PURGE_ADMIN_EMAIL = "admin_sia@ut.edu.co";
 const apiError = (err, fallback) => {
   const data = err?.response?.data;
   if (typeof data === "string") return data;
-  if (data?.detail) return data.detail;
-  const first = Object.values(data || {})[0];
-  return (Array.isArray(first) ? first[0] : first) || fallback;
+  const first = data?.detail ?? Object.values(data || {})[0];
+  const message = Array.isArray(first) ? first[0] : first;
+  return typeof message === "string" && message ? message : fallback;
 };
 
 export default function Estudiantes({ user }) {
