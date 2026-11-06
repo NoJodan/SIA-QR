@@ -20,8 +20,11 @@ export const getCurrentSession = (groupId, classId) =>
       throw err;
     });
 
-// A2: marcaciones de la clase, todas sus sesiones (profesor dueño).
-export const getClassAttendances = (classId, page = 1) =>
+// A2: marcaciones de la clase, todas sus sesiones (profesor dueño o admin).
+// page_size opcional (máx. 50 en el backend); sin él, el default del servidor.
+export const getClassAttendances = (classId, page = 1, pageSize) =>
   api
-    .get(`/api/attendance/classes/${classId}/attendances/`, { params: { page } })
+    .get(`/api/attendance/classes/${classId}/attendances/`, {
+      params: pageSize ? { page, page_size: pageSize } : { page },
+    })
     .then((r) => r.data);

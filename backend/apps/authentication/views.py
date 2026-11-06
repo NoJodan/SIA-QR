@@ -625,6 +625,46 @@ class AdminStudentListView(generics.ListAPIView):
     )
 
 
+class AdminStudentDetailView(generics.RetrieveUpdateDestroyAPIView):
+    authentication_classes = [SessionAuthentication401]
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    serializer_class = AdminStudentSerializer
+    lookup_url_kwarg = "pk"
+    queryset = Student.objects.select_related("user")
+
+    def perform_update(self, serializer):
+        super().perform_update(serializer)
+        try:
+            log_event(
+                self.request.user,
+                "admin_student_updated",
+                f"student:{serializer.instance.id}",
+                request=self.request,
+            )
+        except Exception:
+            pass
+
+    def perform_destroy(self, instance):
+        user = instance.user
+        # La auditoría y el borrado comparten transacción: si el CASCADE falla,
+        # el log también se revierte (no queda rastro de un borrado inexistente).
+        with transaction.atomic():
+            attendances = Attendance.objects.filter(student=instance).count()
+            log_event(
+                self.request.user,
+                "admin_student_deleted",
+                f"student:{instance.id}",
+                request=self.request,
+                payload={
+                    "student_code": instance.student_code,
+                    "attendances": attendances,
+                },
+            )
+            instance.delete()
+            if user is not None:
+                user.delete()
+
+
 @api_view(["POST"])
 @authentication_classes([SessionAuthentication401])
 @permission_classes([IsAdminUserRole])
