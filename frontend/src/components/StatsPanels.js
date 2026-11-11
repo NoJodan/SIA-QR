@@ -1,4 +1,5 @@
 import React from "react";
+import Skeleton from "./Skeleton";
 import {
   Area,
   AreaChart,
@@ -566,20 +567,22 @@ export function RecentClasses({ classes = [] }) {
 export function LoadingGrid({ count = 3 }) {
   const metricColumns = count >= 5 ? "sm:grid-cols-2 xl:grid-cols-5" : "sm:grid-cols-3";
   return (
-    <div className="space-y-3" aria-label="Cargando estadísticas">
+    <div className="space-y-3">
+      {/* role="status" en vez de aria-label: en un div genérico no se expone (ARIA 1.2) */}
+      <p role="status" className="sr-only">Cargando estadísticas...</p>
       <div className={`grid gap-3 ${metricColumns}`}>
         {Array.from({ length: count }, (_, index) => (
-          <div
+          <Skeleton
             key={index}
-            className="h-[78px] animate-pulse rounded-xl border border-rose-100 bg-rose-50/60"
+            className="h-[78px] !rounded-xl border border-rose-100 !bg-rose-50/60"
           />
         ))}
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         {[1, 2, 3, 4, 5, 6].map((item) => (
-          <div
+          <Skeleton
             key={`panel-${item}`}
-            className="h-56 animate-pulse rounded-xl border border-rose-100 bg-rose-50/40"
+            className="h-56 !rounded-xl border border-rose-100 !bg-rose-50/40"
           />
         ))}
       </div>

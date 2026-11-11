@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+import Skeleton from "../components/Skeleton";
 import api from "../services/api";
 
 export default function Profesores() {
@@ -88,7 +89,20 @@ export default function Profesores() {
 
       <div className="bg-white rounded-lg shadow border border-gray-100 overflow-hidden">
         {loading ? (
-          <div className="p-6 text-center text-gray-500">Cargando profesores autorizados...</div>
+          <>
+            <p role="status" className="sr-only">Cargando lista de profesores...</p>
+            <div className="divide-y divide-gray-100" aria-hidden="true">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex items-center justify-between gap-3 p-4">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Skeleton className="h-4 w-1/2" />
+                    <Skeleton className="h-3 w-1/3 !bg-slate-100" />
+                  </div>
+                  <Skeleton className="h-8 w-8" />
+                </div>
+              ))}
+            </div>
+          </>
         ) : emails.length === 0 ? (
           <div className="p-6 text-center text-gray-500">No hay correos en la lista blanca todavía.</div>
         ) : (
