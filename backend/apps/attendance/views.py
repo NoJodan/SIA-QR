@@ -1,6 +1,8 @@
 import hashlib
+import uuid
 
 from django.db import IntegrityError, transaction
+from django.db.models import Count, Max, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, status
@@ -377,8 +379,12 @@ class MarkAttendanceView(Auth401Mixin, APIView):
 class AuditLogListView(generics.ListAPIView):
     """RF-ADM-07: consulta paginada de auditoría (solo administradores).
 
-    Filtros opcionales: event_type, resource y rango de fechas from/to
-    (AAAA-MM-DD, inclusivo por día en America/Bogota).
+    Filtros opcionales: actor (UUID de usuario), q (texto libre sobre nombre/
+    email del actor, event_type, resource y payload), event_type, resource y
+    rango de fechas from/to (AAAA-MM-DD, inclusivo por día en America/Bogota).
+
+    La respuesta añade `stats` (total, professors, administrators,
+    last_activity) calculados sobre el queryset ya filtrado, sin paginar.
     """
 
     authentication_classes = _AUTH
@@ -387,16 +393,59 @@ class AuditLogListView(generics.ListAPIView):
     pagination_class = StandardResultsPagination
 
     def get_queryset(self):
+        from django.db.models import F, Value
+        from django.db.models.functions import Coalesce, Concat, NullIf
         from django.utils.dateparse import parse_date
 
         from apps.attendance.reports import _day_bounds
 
-        qs = AuditLog.objects.select_related("actor").order_by("-created_at")
+        # Nombre completo o email del actor, en una sola expresión, para que
+        # `q` pueda buscar frases como "Ana Perez" (sin N+1 en el serializer).
+        # Concat coalescea cada parte a '' en PostgreSQL: sin perfil el
+        # resultado es " ", por eso NULLIF lo descarta y llega el email.
+        def _full_name(profile_path):
+            return NullIf(
+                Concat(
+                    f"{profile_path}__first_name",
+                    Value(" "),
+                    f"{profile_path}__last_name",
+                ),
+                Value(" "),
+            )
+
+        qs = (
+            AuditLog.objects.select_related(
+                "actor", "actor__professor_profile", "actor__student_profile"
+            )
+            .annotate(
+                actor_full_name=Coalesce(
+                    _full_name("actor__professor_profile"),
+                    _full_name("actor__student_profile"),
+                    F("actor__email"),
+                )
+            )
+            .order_by("-created_at")
+        )
         params = self.request.query_params
         if params.get("event_type"):
             qs = qs.filter(event_type=params["event_type"])
         if params.get("resource"):
             qs = qs.filter(resource=params["resource"])
+        if params.get("actor"):
+            try:
+                actor_id = uuid.UUID(str(params["actor"]))
+            except (ValueError, TypeError, AttributeError):
+                raise ValidationError({"actor": "UUID inválido."})
+            qs = qs.filter(actor_id=actor_id)
+        q = (params.get("q") or "").strip()
+        if q:
+            # payload__icontains en PostgreSQL castea el JSON a texto (LIKE).
+            qs = qs.filter(
+                Q(actor_full_name__icontains=q)
+                | Q(event_type__icontains=q)
+                | Q(resource__icontains=q)
+                | Q(payload__icontains=q)
+            )
         for key, lookup, end in (("from", "gte", False), ("to", "lte", True)):
             raw = params.get(key)
             if not raw:
@@ -411,3 +460,22 @@ class AuditLogListView(generics.ListAPIView):
                 )
             qs = qs.filter(**{f"created_at__{lookup}": _day_bounds(day, end=end)})
         return qs
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if isinstance(response.data, dict):
+            response.data["stats"] = (
+                self.filter_queryset(self.get_queryset())
+                .order_by()
+                .aggregate(
+                    total=Count("id"),
+                    professors=Count(
+                        "id", filter=Q(actor__role=UserRole.ROLE_PROFESSOR)
+                    ),
+                    administrators=Count(
+                        "id", filter=Q(actor__role=UserRole.ROLE_ADMIN)
+                    ),
+                    last_activity=Max("created_at"),
+                )
+            )
+        return response

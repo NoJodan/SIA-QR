@@ -6,13 +6,45 @@ from apps.attendance.models import Attendance, AuditLog
 
 
 class AuditLogSerializer(serializers.ModelSerializer):
+    actor_name = serializers.SerializerMethodField()
+    actor_email = serializers.SerializerMethodField()
+    actor_role = serializers.SerializerMethodField()
+
     class Meta:
         model = AuditLog
         fields = [
-            "id", "actor", "event_type", "resource", "ip_address", "payload",
+            "id", "actor", "actor_name", "actor_email", "actor_role",
+            "event_type", "resource", "ip_address", "payload",
             "created_at",
         ]
         read_only_fields = fields
+
+    @staticmethod
+    def _actor(obj):
+        # actor es nullable (SET_NULL): eventos como login_denied van sin usuario.
+        return getattr(obj, "actor", None)
+
+    def get_actor_name(self, obj):
+        user = self._actor(obj)
+        if user is None:
+            return None
+        # El User no tiene nombre propio: se toma el del perfil (profesor o
+        # estudiante) y, si no existe, el email.
+        for related in ("professor_profile", "student_profile"):
+            profile = getattr(user, related, None)
+            if profile is not None:
+                name = f"{profile.first_name} {profile.last_name}".strip()
+                if name:
+                    return name
+        return user.email
+
+    def get_actor_email(self, obj):
+        user = self._actor(obj)
+        return user.email if user else None
+
+    def get_actor_role(self, obj):
+        user = self._actor(obj)
+        return user.role if user else None
 
 
 class SessionCreateSerializer(serializers.Serializer):
