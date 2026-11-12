@@ -128,6 +128,8 @@ def _professor_filter_values():
     rows = [
         {
             "id": str(professor.id),
+            # user_id: id de User, el valor que espera ?actor= de auditoría.
+            "user_id": str(professor.user_id),
             "name": f"{professor.first_name} {professor.last_name}".strip(),
             "email": professor.user.email,
         }
