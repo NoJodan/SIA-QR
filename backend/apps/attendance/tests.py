@@ -927,7 +927,9 @@ class AuditLogEndpointTests(TestCase):
         )
 
     def test_filters_by_actor(self):
-        self._log(self.admin, "login_success", "user:1")
+        # Evento visible en auditoría: login_success/logout siempre se excluyen
+        # y el test pasaría aunque el filtro actor se rompiera.
+        self._log(self.admin, "admin_clear_users", "users:all")
         self._log(self.professor, "group_created", "group:1")
         client = APIClient()
         client.force_login(self.admin)
