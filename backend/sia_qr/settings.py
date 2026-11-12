@@ -97,13 +97,19 @@ DATABASES = {
         "PORT": os.getenv("POSTGRES_PORT", "5432"),
     }
 }
-# Render free: si hay DATABASE_URL (Postgres interno), tiene prioridad.
+# DATABASE_URL (Render/Neon) tiene prioridad sobre POSTGRES_*.
 _DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 if _DATABASE_URL:
     try:
         import dj_database_url
 
-        DATABASES["default"] = dj_database_url.parse(_DATABASE_URL, conn_max_age=600)
+        DATABASES["default"] = dj_database_url.parse(
+            _DATABASE_URL, conn_max_age=600, conn_health_checks=True
+        )
+        # Neon free suspende el compute: el health check recicla conexiones
+        # muertas. Con pooler (transaction mode) no hay cursores de servidor.
+        if "neon.tech" in DATABASES["default"].get("HOST", ""):
+            DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
     except Exception:
         pass
 
