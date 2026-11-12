@@ -836,23 +836,40 @@ class AuditLogEndpointTests(TestCase):
     def test_student_is_403(self):
         self.assertEqual(self._get(self.student).status_code, 403)
 
+    def test_session_events_are_excluded(self):
+        # Inicio/cierre de sesión: se registran por seguridad, pero la vista
+        # no los muestra (saturan la tabla y las estadísticas).
+        self._log(self.admin, "login_success", "user:1")
+        self._log(self.admin, "logout", "user:1")
+        self._log(self.professor, "group_created", "group:1")
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get("/api/attendance/audit-logs/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 1)
+        self.assertEqual(
+            [row["event_type"] for row in resp.data["results"]], ["group_created"]
+        )
+        # Stats se calculan sobre el mismo queryset, sin eventos de sesión.
+        self.assertEqual(resp.data["stats"]["total"], 1)
+
     def test_filters_by_event_type_and_date(self):
         from django.utils import timezone
 
-        AuditLog.objects.create(event_type="login_success", resource="user:1")
-        AuditLog.objects.create(event_type="logout", resource="user:1")
+        AuditLog.objects.create(event_type="group_created", resource="group:1")
+        AuditLog.objects.create(event_type="qr_rotated", resource="session:1")
         client = APIClient()
         client.force_login(self.admin)
         resp = client.get(
             "/api/attendance/audit-logs/",
             {
-                "event_type": "logout",
+                "event_type": "qr_rotated",
                 "from": timezone.localdate().isoformat(),
             },
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(
-            [row["event_type"] for row in resp.data["results"]], ["logout"]
+            [row["event_type"] for row in resp.data["results"]], ["qr_rotated"]
         )
 
     def test_invalid_date_is_400(self):
@@ -937,7 +954,7 @@ class AuditLogEndpointTests(TestCase):
     def test_stats_shape_and_values(self):
         self._log(self.professor, "group_created", "group:1")
         self._log(self.professor, "class_updated", "class:1")
-        self._log(self.admin, "login_success", "user:1")
+        self._log(self.admin, "admin_clear_users", "users:all")
         self._log(self.student, "attendance_marked", "session:1")
         client = APIClient()
         client.force_login(self.admin)

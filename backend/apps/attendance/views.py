@@ -383,6 +383,9 @@ class AuditLogListView(generics.ListAPIView):
     email del actor, event_type, resource y payload), event_type, resource y
     rango de fechas from/to (AAAA-MM-DD, inclusivo por día en America/Bogota).
 
+    Los eventos de inicio/cierre de sesión (login_success, logout) se siguen
+    registrando por seguridad, pero NO se muestran aquí: saturan la vista.
+
     La respuesta añade `stats` (total, professors, administrators,
     last_activity) calculados sobre el queryset ya filtrado, sin paginar.
     """
@@ -424,6 +427,9 @@ class AuditLogListView(generics.ListAPIView):
                     F("actor__email"),
                 )
             )
+            # Exclusión antes de filtros/stats/paginación para que todo el
+            # queryset (y por tanto stats y count) sea coherente.
+            .exclude(event_type__in=("login_success", "logout"))
             .order_by("-created_at")
         )
         params = self.request.query_params

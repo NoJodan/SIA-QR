@@ -37,7 +37,7 @@ function actionMeta(eventType) {
   if (et.endsWith("_created")) return { label: "Crear", cls: CHIP_GREEN };
   if (et.endsWith("_updated")) return { label: "Editar", cls: CHIP_BLUE };
   if (et.endsWith("_deleted")) return { label: "Eliminar", cls: CHIP_RED };
-  if (et.startsWith("login") || et === "logout") return { label: "Acceso", cls: CHIP_SLATE };
+  if (et.startsWith("login")) return { label: "Acceso", cls: CHIP_SLATE };
   if (et === "whitelist_added") return { label: "Agregar", cls: CHIP_AMBER };
   if (et === "whitelist_removed") return { label: "Quitar", cls: CHIP_AMBER };
   if (et === "attendance_marked") return { label: "Registrar", cls: CHIP_AMBER };
@@ -58,7 +58,7 @@ function moduleMeta(eventType, resource) {
   if (et.startsWith("admin_student_")) return { label: "Estudiantes", icon: "fa-user-graduate" };
   if (et.startsWith("student_profile_")) return { label: "Perfil", icon: "fa-id-card" };
   if (et === "admin_clear_users") return { label: "Usuarios", icon: "fa-users" };
-  if (et.startsWith("login") || et === "logout") return { label: "Acceso", icon: "fa-right-to-bracket" };
+  if (et.startsWith("login")) return { label: "Acceso", icon: "fa-right-to-bracket" };
   const prefix = String(resource || "").split(":")[0];
   return { label: prefix ? prefix.charAt(0).toUpperCase() + prefix.slice(1) : "General", icon: "fa-circle-info" };
 }
@@ -88,12 +88,6 @@ function detailText(row) {
       return "Marcó asistencia";
     case "attendance_duplicate":
       return "Marcó asistencia (ya estaba registrada)";
-    case "login_success":
-      if (p.method === "admin_password") return "Inició sesión con contraseña";
-      if (p.provider === "google") return "Inició sesión con Google";
-      return "Inició sesión";
-    case "logout":
-      return "Cerró sesión";
     case "login_denied":
       return p.domain
         ? `Inicio de sesión denegado (dominio ${p.domain})`
@@ -566,7 +560,6 @@ export default function Auditoria() {
               <Skeleton className="h-4 w-16 !rounded-full" />
               <Skeleton className="h-4 w-20 !rounded-full" />
               <Skeleton className="h-4 flex-1" />
-              <Skeleton className="h-4 w-20" />
             </div>
           ))}
         </div>
@@ -594,7 +587,6 @@ export default function Auditoria() {
                   <th className="px-4 py-3">Acción</th>
                   <th className="px-4 py-3">Módulo</th>
                   <th className="px-4 py-3">Detalle</th>
-                  <th className="px-4 py-3">IP</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -633,9 +625,6 @@ export default function Auditoria() {
                       </td>
                       <td className="break-words px-4 py-3 text-slate-600">
                         {detailText(row)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-500">
-                        {row.ip_address || "—"}
                       </td>
                     </tr>
                   );
