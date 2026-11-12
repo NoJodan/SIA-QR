@@ -5,7 +5,7 @@ import Skeleton from "../components/Skeleton";
 import { MetricCard } from "../components/StatsPanels";
 import { fetchAuditLogs } from "../services/attendance";
 import { getStats } from "../services/stats";
-import { formatBogotaDate, formatBogotaTime } from "../utils/dates";
+import { formatBogotaDate, formatBogotaTime, todayISODate } from "../utils/dates";
 
 const PAGE_SIZE = 10;
 
@@ -157,7 +157,8 @@ function DateRangePicker({ from, to, onChange }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState(() => startOfMonth(new Date()));
 
-  const today = toISODate(new Date());
+  // Hoy en días America/Bogota, igual que los filtros del backend.
+  const today = todayISODate();
   const label = from || to
     ? [from, to].filter(Boolean).map(shortDate).join(" – ")
     : "Seleccionar rango";
@@ -168,21 +169,24 @@ function DateRangePicker({ from, to, onChange }) {
       setView(startOfMonth(new Date(`${iso}T12:00:00`)));
     } else if (iso < from) {
       onChange({ from: iso, to: from });
+      // Rango completo: se cierra para no tapar el botón "Filtrar".
+      setOpen(false);
     } else {
       onChange({ from, to: iso });
+      setOpen(false);
     }
   };
 
   const applyPreset = (days, thisMonth) => {
-    const now = new Date();
-    const end = toISODate(now);
-    const start = toISODate(
-      thisMonth
-        ? startOfMonth(now)
-        : new Date(now.getFullYear(), now.getMonth(), now.getDate() - days),
-    );
-    onChange({ from: start, to: end });
-    setView(startOfMonth(now));
+    // Derivado del "hoy" de Bogotá: los presets son días inclusivos
+    // (hoy - days + 1), para que "Últimos 7 días" sean 7 días calendario.
+    const base = new Date(`${today}T12:00:00`);
+    const start = thisMonth
+      ? startOfMonth(base)
+      : new Date(base.getFullYear(), base.getMonth(), base.getDate() - days + 1);
+    onChange({ from: toISODate(start), to: today });
+    setView(startOfMonth(base));
+    setOpen(false);
   };
 
   const year = view.getFullYear();
@@ -201,7 +205,7 @@ function DateRangePicker({ from, to, onChange }) {
     .replace(" de ", " ");
 
   const presets = [
-    { label: "Hoy", run: () => applyPreset(0, false) },
+    { label: "Hoy", run: () => applyPreset(1, false) },
     { label: "Últimos 7 días", run: () => applyPreset(7, false) },
     { label: "Últimos 30 días", run: () => applyPreset(30, false) },
     { label: "Este mes", run: () => applyPreset(0, true) },
