@@ -611,12 +611,19 @@ export default function Auditoria() {
                         <p className="break-words font-medium text-slate-800">
                           {row.actor_name || "Sistema"}
                         </p>
-                        {/* Sin perfil actor_name == email: no se repite. */}
-                        {row.actor_email !== row.actor_name && (
+                        {/* Sin perfil actor_name == email: no se repite el
+                            email, pero el rol se conserva. */}
+                        {row.actor_email !== row.actor_name ? (
                           <p className="break-all text-xs text-slate-500">
                             {row.actor_email || "Sin usuario"}
                             {row.actor_role ? ` · ${ROLE_LABELS[row.actor_role] || row.actor_role}` : ""}
                           </p>
+                        ) : (
+                          row.actor_role && (
+                            <p className="break-all text-xs text-slate-500">
+                              {ROLE_LABELS[row.actor_role] || row.actor_role}
+                            </p>
+                          )
                         )}
                       </td>
                       <td className="px-4 py-3">
