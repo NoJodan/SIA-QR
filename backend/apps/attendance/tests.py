@@ -880,6 +880,47 @@ class AuditLogEndpointTests(TestCase):
         )
         self.assertEqual(resp.status_code, 400)
 
+    def test_filters_combined_q_actor_and_dates(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        self._log(self.professor, "group_created", "group:9", {"name": "Calculo"})
+        # Mismo q, otro actor: lo descarta el filtro de usuario.
+        self._log(self.admin, "group_created", "group:1", {"name": "Calculo"})
+        # Mismo q y actor, fecha fuera del rango: lo descarta el filtro de fechas.
+        viejo = self._log(self.professor, "group_created", "group:8", {"name": "Calculo"})
+        AuditLog.objects.filter(pk=viejo.pk).update(
+            created_at=timezone.now() - timedelta(days=10)
+        )
+        client = APIClient()
+        client.force_login(self.admin)
+        hoy = timezone.localdate().isoformat()
+        resp = client.get(
+            "/api/attendance/audit-logs/",
+            {"q": "Calculo", "actor": str(self.professor.id), "from": hoy, "to": hoy},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 1)
+        self.assertEqual(resp.data["stats"]["total"], 1)
+        row = resp.data["results"][0]
+        self.assertEqual(str(row["actor"]), str(self.professor.id))
+        self.assertEqual(row["resource"], "group:9")
+
+    def test_to_today_includes_event_of_today(self):
+        from django.utils import timezone
+
+        hoy = self._log(self.professor, "group_created", "group:1")
+        client = APIClient()
+        client.force_login(self.admin)
+        # `to` es inclusivo por día en America/Bogota: un evento de hoy entra.
+        resp = client.get(
+            "/api/attendance/audit-logs/", {"to": timezone.localdate().isoformat()}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 1)
+        self.assertEqual(resp.data["results"][0]["id"], str(hoy.id))
+
     def _log(self, actor, event_type, resource, payload=None):
         return AuditLog.objects.create(
             actor=actor, event_type=event_type, resource=resource, payload=payload
