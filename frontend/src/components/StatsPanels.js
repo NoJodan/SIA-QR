@@ -94,11 +94,14 @@ export function MetricCard({
   hint,
   suffix = "",
   hasComparison = true,
+  displayValue,
 }) {
+  // displayValue: texto libre (p. ej. "Hoy, 20:35") que no pasa por numberFormat.
   const formattedValue =
-    value === null || value === undefined
+    displayValue ??
+    (value === null || value === undefined
       ? "—"
-      : `${numberFormat.format(value)}${suffix}`;
+      : `${numberFormat.format(value)}${suffix}`);
 
   return (
     <article className="relative flex min-h-[78px] items-center gap-3 overflow-hidden rounded-xl border border-rose-100 bg-white px-3 py-2.5 shadow-[0_3px_12px_rgba(115,13,7,0.06)] sm:gap-3.5 sm:px-2.5">
