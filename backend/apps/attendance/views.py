@@ -442,6 +442,9 @@ class AuditLogListView(generics.ListAPIView):
             # payload__icontains en PostgreSQL castea el JSON a texto (LIKE).
             qs = qs.filter(
                 Q(actor_full_name__icontains=q)
+                # actor_full_name solo usa el email como fallback: con perfil
+                # el email debe buscarse aparte.
+                | Q(actor__email__icontains=q)
                 | Q(event_type__icontains=q)
                 | Q(resource__icontains=q)
                 | Q(payload__icontains=q)

@@ -892,7 +892,7 @@ class AuditLogEndpointTests(TestCase):
 
     def test_q_matches_actor_name_and_email(self):
         self._log(self.professor, "group_created", "group:9", {"name": "Calculo"})
-        self._log(self.admin, "login_success", "user:1")
+        self._log(self.admin, "admin_clear_users", "users:all")
         client = APIClient()
         client.force_login(self.admin)
         # Nombre completo del actor (perfil del profesor: Ana Perez).
@@ -903,7 +903,19 @@ class AuditLogEndpointTests(TestCase):
         # Email del actor (admin sin perfil: manda el email).
         resp = client.get("/api/attendance/audit-logs/", {"q": "auditadmin"})
         self.assertEqual(
-            [row["event_type"] for row in resp.data["results"]], ["login_success"]
+            [row["event_type"] for row in resp.data["results"]], ["admin_clear_users"]
+        )
+
+    def test_q_matches_email_of_actor_with_profile(self):
+        # El profesor tiene perfil, así que actor_full_name es el nombre y el
+        # email no aparece en la anotación: debe buscarse aparte.
+        self._log(self.professor, "group_created", "group:9")
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get("/api/attendance/audit-logs/", {"q": "auditprof"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            [row["event_type"] for row in resp.data["results"]], ["group_created"]
         )
 
     def test_q_matches_event_resource_payload_and_null_actor(self):
