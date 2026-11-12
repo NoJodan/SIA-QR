@@ -3,6 +3,7 @@ import CourseForm from "../components/CourseForm";
 import Modal from "../components/Modal";
 import Pagination from "../components/Pagination";
 import SearchBar from "../components/SearchBar";
+import Skeleton from "../components/Skeleton";
 import { createMyGroup, deleteMyGroup, getMyGroups, updateMyGroup } from "../services/academic";
 import { courseIcon } from "../utils/courseIcon";
 import useDebounce from "../utils/useDebounce";
@@ -77,9 +78,16 @@ export default function MisCursos({ onSelectGroup }) {
           </div>
           <div className="min-w-0">
             <h2 className="text-lg font-bold leading-tight">Mis Cursos</h2>
-            <p className="mt-0.5 text-xs text-red-100/90">
-              {loading ? "Cargando cursos…" : `${count} ${count === 1 ? "curso" : "cursos"}`}
-            </p>
+            {loading ? (
+              <>
+                <p role="status" className="sr-only">Cargando cursos...</p>
+                <Skeleton className="mt-1 h-4 w-24 !bg-white/40" />
+              </>
+            ) : (
+              <p className="mt-0.5 text-xs text-red-100/90">
+                {`${count} ${count === 1 ? "curso" : "cursos"}`}
+              </p>
+            )}
             <button
               type="button"
               onClick={() => setShowForm(true)}

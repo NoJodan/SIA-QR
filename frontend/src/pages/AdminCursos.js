@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Pagination from "../components/Pagination";
 import SearchBar from "../components/SearchBar";
+import Skeleton from "../components/Skeleton";
 import { adminGetGroups } from "../services/academic";
 import { courseIcon } from "../utils/courseIcon";
 import useDebounce from "../utils/useDebounce";
@@ -51,9 +52,16 @@ export default function AdminCursos({ onSelectGroup }) {
           </div>
           <div className="min-w-0">
             <h2 className="text-lg font-bold leading-tight">Cursos (Admin)</h2>
-            <p className="mt-0.5 text-xs text-red-100/90">
-              {loading ? "Cargando cursos…" : `${count} ${count === 1 ? "curso" : "cursos"}`}
-            </p>
+            {loading ? (
+              <>
+                <p role="status" className="sr-only">Cargando cursos...</p>
+                <Skeleton className="mt-1 h-4 w-24 !bg-white/40" />
+              </>
+            ) : (
+              <p className="mt-0.5 text-xs text-red-100/90">
+                {`${count} ${count === 1 ? "curso" : "cursos"}`}
+              </p>
+            )}
           </div>
         </div>
         <div className="relative z-10 hidden w-52 shrink-0 lg:block xl:w-56" aria-hidden="true">

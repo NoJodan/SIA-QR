@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import QrDisplay from "../components/QrDisplay";
+import Skeleton from "../components/Skeleton";
 import { getClassAttendances, getCurrentSession } from "../services/attendance";
 import { getGroupClass, rotateCurrentSession, setClassGeofence } from "../services/academic";
 import {
@@ -539,9 +540,7 @@ export default function ClaseDetalle({ group, classItem, initialSession, onBack 
               <p className="text-sm text-slate-400 px-4">Sin conexión</p>
             </div>
           ) : (
-            <div className="w-48 h-48 border-2 border-dashed border-slate-300 rounded-3xl flex items-center justify-center">
-              <p className="text-sm text-slate-400 px-4">Conectando…</p>
-            </div>
+            <Skeleton className="h-48 w-48 !rounded-3xl" />
           )}
 
           {/* QR perdido (otro dispositivo) o vencido: se puede emitir uno nuevo. */}

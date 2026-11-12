@@ -836,23 +836,40 @@ class AuditLogEndpointTests(TestCase):
     def test_student_is_403(self):
         self.assertEqual(self._get(self.student).status_code, 403)
 
+    def test_session_events_are_excluded(self):
+        # Inicio/cierre de sesión: se registran por seguridad, pero la vista
+        # no los muestra (saturan la tabla y las estadísticas).
+        self._log(self.admin, "login_success", "user:1")
+        self._log(self.admin, "logout", "user:1")
+        self._log(self.professor, "group_created", "group:1")
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get("/api/attendance/audit-logs/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 1)
+        self.assertEqual(
+            [row["event_type"] for row in resp.data["results"]], ["group_created"]
+        )
+        # Stats se calculan sobre el mismo queryset, sin eventos de sesión.
+        self.assertEqual(resp.data["stats"]["total"], 1)
+
     def test_filters_by_event_type_and_date(self):
         from django.utils import timezone
 
-        AuditLog.objects.create(event_type="login_success", resource="user:1")
-        AuditLog.objects.create(event_type="logout", resource="user:1")
+        AuditLog.objects.create(event_type="group_created", resource="group:1")
+        AuditLog.objects.create(event_type="qr_rotated", resource="session:1")
         client = APIClient()
         client.force_login(self.admin)
         resp = client.get(
             "/api/attendance/audit-logs/",
             {
-                "event_type": "logout",
+                "event_type": "qr_rotated",
                 "from": timezone.localdate().isoformat(),
             },
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(
-            [row["event_type"] for row in resp.data["results"]], ["logout"]
+            [row["event_type"] for row in resp.data["results"]], ["qr_rotated"]
         )
 
     def test_invalid_date_is_400(self):
@@ -862,6 +879,169 @@ class AuditLogEndpointTests(TestCase):
             "/api/attendance/audit-logs/", {"from": "2026-13-01"}
         )
         self.assertEqual(resp.status_code, 400)
+
+    def test_filters_combined_q_actor_and_dates(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        self._log(self.professor, "group_created", "group:9", {"name": "Calculo"})
+        # Mismo q, otro actor: lo descarta el filtro de usuario.
+        self._log(self.admin, "group_created", "group:1", {"name": "Calculo"})
+        # Mismo q y actor, fecha fuera del rango: lo descarta el filtro de fechas.
+        viejo = self._log(self.professor, "group_created", "group:8", {"name": "Calculo"})
+        AuditLog.objects.filter(pk=viejo.pk).update(
+            created_at=timezone.now() - timedelta(days=10)
+        )
+        client = APIClient()
+        client.force_login(self.admin)
+        hoy = timezone.localdate().isoformat()
+        resp = client.get(
+            "/api/attendance/audit-logs/",
+            {"q": "Calculo", "actor": str(self.professor.id), "from": hoy, "to": hoy},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 1)
+        self.assertEqual(resp.data["stats"]["total"], 1)
+        row = resp.data["results"][0]
+        self.assertEqual(str(row["actor"]), str(self.professor.id))
+        self.assertEqual(row["resource"], "group:9")
+
+    def test_to_today_includes_event_of_today(self):
+        from django.utils import timezone
+
+        hoy = self._log(self.professor, "group_created", "group:1")
+        client = APIClient()
+        client.force_login(self.admin)
+        # `to` es inclusivo por día en America/Bogota: un evento de hoy entra.
+        resp = client.get(
+            "/api/attendance/audit-logs/", {"to": timezone.localdate().isoformat()}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 1)
+        self.assertEqual(resp.data["results"][0]["id"], str(hoy.id))
+
+    def _log(self, actor, event_type, resource, payload=None):
+        return AuditLog.objects.create(
+            actor=actor, event_type=event_type, resource=resource, payload=payload
+        )
+
+    def test_filters_by_actor(self):
+        # Evento visible en auditoría: login_success/logout siempre se excluyen
+        # y el test pasaría aunque el filtro actor se rompiera.
+        self._log(self.admin, "admin_clear_users", "users:all")
+        self._log(self.professor, "group_created", "group:1")
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get(
+            "/api/attendance/audit-logs/", {"actor": str(self.professor.id)}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 1)
+        self.assertEqual(
+            [row["event_type"] for row in resp.data["results"]], ["group_created"]
+        )
+        # Las estadísticas se calculan sobre el queryset ya filtrado.
+        self.assertEqual(resp.data["stats"]["total"], 1)
+
+    def test_invalid_actor_is_400(self):
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get("/api/attendance/audit-logs/", {"actor": "no-uuid"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_q_matches_actor_name_and_email(self):
+        self._log(self.professor, "group_created", "group:9", {"name": "Calculo"})
+        self._log(self.admin, "admin_clear_users", "users:all")
+        client = APIClient()
+        client.force_login(self.admin)
+        # Nombre completo del actor (perfil del profesor: Ana Perez).
+        resp = client.get("/api/attendance/audit-logs/", {"q": "ana perez"})
+        self.assertEqual(
+            [row["event_type"] for row in resp.data["results"]], ["group_created"]
+        )
+        # Email del actor (admin sin perfil: manda el email).
+        resp = client.get("/api/attendance/audit-logs/", {"q": "auditadmin"})
+        self.assertEqual(
+            [row["event_type"] for row in resp.data["results"]], ["admin_clear_users"]
+        )
+
+    def test_q_matches_email_of_actor_with_profile(self):
+        # El profesor tiene perfil, así que actor_full_name es el nombre y el
+        # email no aparece en la anotación: debe buscarse aparte.
+        self._log(self.professor, "group_created", "group:9")
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get("/api/attendance/audit-logs/", {"q": "auditprof"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            [row["event_type"] for row in resp.data["results"]], ["group_created"]
+        )
+
+    def test_q_matches_event_resource_payload_and_null_actor(self):
+        self._log(self.professor, "group_created", "group:9", {"name": "Calculo"})
+        self._log(None, "login_denied", "auth:oidc", {"domain": "correo.com"})
+        client = APIClient()
+        client.force_login(self.admin)
+        # Texto del payload (JSON casteado a texto en PostgreSQL).
+        resp = client.get("/api/attendance/audit-logs/", {"q": '"Calculo"'})
+        self.assertEqual(
+            [row["event_type"] for row in resp.data["results"]], ["group_created"]
+        )
+        # event_type y resource del evento sin actor (actor NULL no se pierde).
+        resp = client.get("/api/attendance/audit-logs/", {"q": "oidc"})
+        self.assertEqual(
+            [row["event_type"] for row in resp.data["results"]], ["login_denied"]
+        )
+
+    def test_stats_shape_and_values(self):
+        self._log(self.professor, "group_created", "group:1")
+        self._log(self.professor, "class_updated", "class:1")
+        self._log(self.admin, "admin_clear_users", "users:all")
+        self._log(self.student, "attendance_marked", "session:1")
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get("/api/attendance/audit-logs/")
+        self.assertEqual(resp.status_code, 200)
+        # La paginación DRF se conserva tal cual.
+        for key in ("count", "next", "previous", "results"):
+            self.assertIn(key, resp.data)
+        stats = resp.data["stats"]
+        self.assertEqual(
+            set(stats), {"total", "professors", "administrators", "last_activity"}
+        )
+        self.assertEqual(stats["total"], 4)
+        self.assertEqual(stats["professors"], 2)
+        self.assertEqual(stats["administrators"], 1)
+        self.assertEqual(
+            stats["last_activity"], AuditLog.objects.latest("created_at").created_at
+        )
+
+    def test_stats_empty_returns_zero_and_null(self):
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get("/api/attendance/audit-logs/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["stats"]["total"], 0)
+        self.assertIsNone(resp.data["stats"]["last_activity"])
+
+    def test_rows_expose_actor_details(self):
+        self._log(self.professor, "group_created", "group:1")
+        self._log(None, "login_denied", "auth:oidc")
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get("/api/attendance/audit-logs/")
+        rows = {row["event_type"]: row for row in resp.data["results"]}
+        professor_row = rows["group_created"]
+        # `actor` (id) sigue ahí por compatibilidad.
+        self.assertEqual(str(professor_row["actor"]), str(self.professor.id))
+        self.assertEqual(professor_row["actor_name"], "Ana Perez")
+        self.assertEqual(professor_row["actor_email"], "auditprof@ut.edu.co")
+        self.assertEqual(professor_row["actor_role"], "ROLE_PROFESSOR")
+        denied = rows["login_denied"]
+        self.assertIsNone(denied["actor"])
+        self.assertIsNone(denied["actor_name"])
+        self.assertIsNone(denied["actor_email"])
 
 
 class ReportClassIdLimitTests(TestCase):
