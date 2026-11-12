@@ -245,14 +245,14 @@ function DateRangePicker({ from, to, onChange }) {
           <div
             role="dialog"
             aria-label="Seleccionar rango de fechas"
-            className="absolute right-0 z-30 mt-2 w-[290px] rounded-2xl border border-slate-200 bg-white p-3 shadow-xl"
+            className="absolute right-0 z-30 mt-2 w-[240px] rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl"
           >
             <div className="mb-2 flex items-center justify-between">
               <button
                 type="button"
                 aria-label="Mes anterior"
                 onClick={() => setView(new Date(year, month - 1, 1))}
-                className="grid h-7 w-7 place-items-center rounded-lg text-slate-500 transition hover:bg-red-50 hover:text-[#B3200E]"
+                className="grid h-5 w-5 place-items-center rounded-lg text-slate-500 transition hover:bg-red-50 hover:text-[#B3200E]"
               >
                 <i className="fa-solid fa-chevron-left text-[10px]" aria-hidden="true" />
               </button>
@@ -261,7 +261,7 @@ function DateRangePicker({ from, to, onChange }) {
                 type="button"
                 aria-label="Mes siguiente"
                 onClick={() => setView(new Date(year, month + 1, 1))}
-                className="grid h-7 w-7 place-items-center rounded-lg text-slate-500 transition hover:bg-red-50 hover:text-[#B3200E]"
+                className="grid h-5 w-5 place-items-center rounded-lg text-slate-500 transition hover:bg-red-50 hover:text-[#B3200E]"
               >
                 <i className="fa-solid fa-chevron-right text-[10px]" aria-hidden="true" />
               </button>
@@ -273,7 +273,7 @@ function DateRangePicker({ from, to, onChange }) {
                   key={preset.label}
                   type="button"
                   onClick={preset.run}
-                  className="rounded-lg border border-slate-200 px-1 py-1.5 text-[10px] font-semibold text-slate-600 transition hover:border-[#B3200E]/40 hover:bg-red-50 hover:text-[#B3200E]"
+                  className="rounded-lg border border-slate-200 px-1 py-1 text-[9px] font-semibold text-slate-600 transition hover:border-[#B3200E]/40 hover:bg-red-50 hover:text-[#B3200E]"
                 >
                   {preset.label}
                 </button>
@@ -286,7 +286,7 @@ function DateRangePicker({ from, to, onChange }) {
               ))}
             </div>
 
-            <div className="mt-1 grid grid-cols-7 gap-1">
+            <div className="mt-1 grid grid-cols-7 gap-0.5">
               {cells.map((iso, index) =>
                 iso ? (
                   <button
@@ -295,7 +295,7 @@ function DateRangePicker({ from, to, onChange }) {
                     onClick={() => pickDay(iso)}
                     aria-label={shortDate(iso)}
                     aria-pressed={iso === from || iso === to}
-                    className={`h-8 rounded-lg text-xs transition ${
+                    className={`h-6 rounded-lg text-[11px] transition ${
                       iso === from || iso === to
                         ? "bg-[#B3200E] font-semibold text-white shadow-sm"
                         : from && to && iso > from && iso < to
@@ -306,7 +306,7 @@ function DateRangePicker({ from, to, onChange }) {
                     {Number(iso.slice(8, 10))}
                   </button>
                 ) : (
-                  <span key={`blank-${index}`} className="h-8" aria-hidden="true" />
+                  <span key={`blank-${index}`} className="h-6" aria-hidden="true" />
                 ),
               )}
             </div>
