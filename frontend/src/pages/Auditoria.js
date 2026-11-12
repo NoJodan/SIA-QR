@@ -607,10 +607,13 @@ export default function Auditoria() {
                         <p className="break-words font-medium text-slate-800">
                           {row.actor_name || "Sistema"}
                         </p>
-                        <p className="break-all text-xs text-slate-500">
-                          {row.actor_email || "Sin usuario"}
-                          {row.actor_role ? ` · ${ROLE_LABELS[row.actor_role] || row.actor_role}` : ""}
-                        </p>
+                        {/* Sin perfil actor_name == email: no se repite. */}
+                        {row.actor_email !== row.actor_name && (
+                          <p className="break-all text-xs text-slate-500">
+                            {row.actor_email || "Sin usuario"}
+                            {row.actor_role ? ` · ${ROLE_LABELS[row.actor_role] || row.actor_role}` : ""}
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${action.cls}`}>
