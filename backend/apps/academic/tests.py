@@ -22,7 +22,7 @@ from apps.academic.services import (
     get_valid_session,
     should_auto_start,
 )
-from apps.attendance.models import Attendance, AttendanceSession, SystemConfig
+from apps.attendance.models import Attendance, AttendanceSession, AuditLog, SystemConfig
 from apps.authentication.models import Professor, Student, User
 
 
@@ -694,6 +694,18 @@ class GeofenceTests(TestCase):
         self.assertIsNotNone(clase.geofence_lng)
         self.assertIsNotNone(clase.geofence_activated_at)
         self.assertTrue(clase.geofence_active)
+
+    def test_post_logs_class_updated_event(self):
+        user, _, clase, client, url = self._setup("gaudit@ut.edu.co")
+        resp = client.post(url, self.COORDS, format="json")
+        self.assertEqual(resp.status_code, 200)
+        event = AuditLog.objects.get(event_type="class_updated")
+        self.assertEqual(event.actor_id, user.id)
+        self.assertEqual(event.resource, f"class:{clase.id}")
+        # La ubicación del salón NUNCA se registra en auditoría.
+        self.assertNotIn("latitude", event.payload)
+        self.assertNotIn("longitude", event.payload)
+        self.assertTrue(event.payload["geofence_active"])
 
     def test_geofence_is_idempotent_and_replaces(self):
         _, _, clase, client, url = self._setup("g2@ut.edu.co")

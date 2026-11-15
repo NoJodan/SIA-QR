@@ -28,3 +28,13 @@ export const getClassAttendances = (classId, page = 1, pageSize) =>
       params: pageSize ? { page, page_size: pageSize } : { page },
     })
     .then((r) => r.data);
+
+// RF-ADM-07: historial de auditoría (solo admin). La respuesta trae
+// `stats` (total, professors, administrators, last_activity) del
+// queryset ya filtrado, así que KPIs y tabla salen de un solo request.
+export const fetchAuditLogs = (params = {}, page = 1, pageSize = 10) =>
+  api
+    .get("/api/attendance/audit-logs/", {
+      params: { ...params, page, page_size: pageSize },
+    })
+    .then((r) => r.data);

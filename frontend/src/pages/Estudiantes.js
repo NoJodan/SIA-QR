@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import Modal from "../components/Modal";
 import Pagination from "../components/Pagination";
 import SearchBar from "../components/SearchBar";
+import Skeleton from "../components/Skeleton";
 import { adminClearUsers, adminDeleteStudent, adminGetStudents, adminUpdateStudent } from "../services/auth";
 import useDebounce from "../utils/useDebounce";
 
@@ -167,14 +168,24 @@ export default function Estudiantes({ user }) {
       )}
 
       {loading && (
-        <div className="space-y-2" aria-hidden="true">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="animate-pulse bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-              <div className="h-4 w-2/3 rounded bg-slate-200" />
-              <div className="mt-2 h-3 w-1/2 rounded bg-slate-100" />
+        <>
+          <p role="status" className="sr-only">Cargando estudiantes...</p>
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm" aria-hidden="true">
+            <div className="min-w-[720px]">
+              <div className="h-8 bg-slate-50" />
+              {[0, 1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex h-11 items-center gap-4 border-t border-slate-100 px-4">
+                  <Skeleton className="h-4 flex-1" />
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 flex-1" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-8 w-20" />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        </>
       )}
 
       {!loading && !error && students.length === 0 && (

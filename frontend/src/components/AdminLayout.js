@@ -5,6 +5,7 @@ import AdminCursos from "../pages/AdminCursos";
 import Estudiantes from "../pages/Estudiantes";
 import Profesores from "../pages/Profesores";
 import Reportes from "../pages/Reportes";
+import Auditoria from "../pages/Auditoria";
 import AdminResumen from "../pages/AdminResumen";
 
 export default function AdminLayout({ user, onLogout }) {
@@ -22,6 +23,7 @@ export default function AdminLayout({ user, onLogout }) {
     cursos: "clase-detalle",
     "curso-detalle-admin": "clase-detalle",
     reportes: "reportes",
+    auditoria: "reportes",
   }[activeTab];
 
   return (
@@ -42,6 +44,7 @@ export default function AdminLayout({ user, onLogout }) {
         {activeTab === "profesores" && <Profesores />}
         {activeTab === "estudiantes" && <Estudiantes user={user} />}
         {activeTab === "reportes" && <Reportes isAdmin />}
+        {activeTab === "auditoria" && <Auditoria />}
         {activeTab === "cursos" && !selectedGroup && (
           <AdminCursos
             onSelectGroup={(g) => {

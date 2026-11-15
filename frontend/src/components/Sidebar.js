@@ -11,6 +11,7 @@ export default function Sidebar({ activeTab, onSelectTab, onLogout, onGoHome, us
     { id: "cursos", label: "Cursos", icon: "fa-regular fa-bookmark" },
     { id: "resumen", label: "Resumen", icon: "fa-solid fa-chart-simple" },
     { id: "reportes", label: "Reportes", icon: "fa-solid fa-file-export" },
+    { id: "auditoria", label: "Auditoría", icon: "fa-solid fa-clipboard-user" },
   ];
 
   useEffect(() => {

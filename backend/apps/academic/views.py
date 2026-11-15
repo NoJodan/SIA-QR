@@ -325,6 +325,18 @@ class ClassGeofenceView(generics.GenericAPIView):
         clase.geofence_lng = lng
         clase.geofence_activated_at = timezone.now()
         clase.save(update_fields=["geofence_lat", "geofence_lng", "geofence_activated_at", "updated_at"])
+        # Mismo patrón que ScheduledClassDetailView.perform_update. Sin
+        # coordenadas en el payload: la ubicación no se expone en auditoría.
+        log_event(
+            request.user,
+            "class_updated",
+            f"class:{clase.id}",
+            request=request,
+            payload={
+                "geofence_active": clase.geofence_active,
+                "geofence_radius_m": clase.geofence_radius_m,
+            },
+        )
         return Response(ScheduledClassSerializer(clase).data)
 
 

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import MultiSelect from "../components/MultiSelect";
 import Pagination from "../components/Pagination";
 import SearchBar from "../components/SearchBar";
+import Skeleton from "../components/Skeleton";
 import { getGroupsCache, setGroupsCache } from "../services/academic";
 import api from "../services/api";
 import {
@@ -27,10 +28,11 @@ const primaryBtnCls =
 const secondaryBtnCls =
   "inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B3200E]/40";
 
-function Field({ id, icon, label, help, helpId, children }) {
+function Field({ id, icon, label, help, helpId, loading, children }) {
   return (
     <div className="min-w-0">
-      <label htmlFor={id} className={labelCls}>
+      {/* Sin htmlFor mientras carga: el control aún no existe en el DOM */}
+      <label htmlFor={loading ? undefined : id} className={labelCls}>
         <i className={`fa-solid ${icon} text-[#B3200E]/80`} aria-hidden="true" />
         {label}
       </label>
@@ -401,58 +403,79 @@ export default function Reportes({ isAdmin = false }) {
       </section>
 
       <section className={`${cardCls} relative z-20`}>
+        {/* Sin aria-busy: retrasaba el anuncio de los role="status" sr-only de cada Field */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Field id="rep-curso" icon="fa-graduation-cap" label="Curso">
-            <ChevronSelect
-              id="rep-curso"
-              value={draft.courseId}
-              onChange={set("courseId")}
-              disabled={groupsLoading}
-            >
-              <option value="">Todos</option>
-              {courses.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </ChevronSelect>
+          <Field id="rep-curso" icon="fa-graduation-cap" label="Curso" loading={groupsLoading}>
+            {groupsLoading ? (
+              <>
+                <p role="status" className="sr-only">Cargando cursos...</p>
+                <Skeleton className="h-[38px] w-full !rounded-xl" />
+              </>
+            ) : (
+              <ChevronSelect
+                id="rep-curso"
+                value={draft.courseId}
+                onChange={set("courseId")}
+                disabled={groupsLoading}
+              >
+                <option value="">Todos</option>
+                {courses.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </ChevronSelect>
+            )}
           </Field>
 
-          <Field id="rep-grupo" icon="fa-users" label="Grupo">
-            <ChevronSelect
-              id="rep-grupo"
-              value={draft.groupId}
-              onChange={set("groupId")}
-              disabled={groupsLoading}
-            >
-              <option value="">Todos</option>
-              {visibleGroups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.course?.name} · G{g.group_code} ({g.term_period})
-                </option>
-              ))}
-            </ChevronSelect>
+          <Field id="rep-grupo" icon="fa-users" label="Grupo" loading={groupsLoading}>
+            {groupsLoading ? (
+              <>
+                <p role="status" className="sr-only">Cargando grupos...</p>
+                <Skeleton className="h-[38px] w-full !rounded-xl" />
+              </>
+            ) : (
+              <ChevronSelect
+                id="rep-grupo"
+                value={draft.groupId}
+                onChange={set("groupId")}
+                disabled={groupsLoading}
+              >
+                <option value="">Todos</option>
+                {visibleGroups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.course?.name} · G{g.group_code} ({g.term_period})
+                  </option>
+                ))}
+              </ChevronSelect>
+            )}
           </Field>
 
           <Field
             id="rep-clase"
             icon="fa-book"
             label="Clase(s)"
+            loading={classesLoading}
             help={draft.groupId && !classesLoading ? "Sin selección = todas las clases." : undefined}
           >
-            <MultiSelect
-              id="rep-clase"
-              options={classes.map((c) => ({ value: c.id, label: c.title }))}
-              value={draft.classId ? draft.classId.split(",").filter(Boolean) : []}
-              onChange={setMultiClass}
-              disabled={!draft.groupId || classesLoading}
-              placeholder={
-                !draft.groupId
-                  ? "Elige un grupo primero"
-                  : classesLoading
-                    ? "Cargando clases..."
+            {classesLoading ? (
+              <>
+                <p role="status" className="sr-only">Cargando clases...</p>
+                <Skeleton className="h-[38px] w-full !rounded-xl" />
+              </>
+            ) : (
+              <MultiSelect
+                id="rep-clase"
+                options={classes.map((c) => ({ value: c.id, label: c.title }))}
+                value={draft.classId ? draft.classId.split(",").filter(Boolean) : []}
+                onChange={setMultiClass}
+                disabled={!draft.groupId || classesLoading}
+                placeholder={
+                  !draft.groupId
+                    ? "Elige un grupo primero"
                     : "Selecciona una o varias clases"
-              }
-              ariaLabel="Clases del grupo"
-            />
+                }
+                ariaLabel="Clases del grupo"
+              />
+            )}
           </Field>
         </div>
 
@@ -651,9 +674,18 @@ export default function Reportes({ isAdmin = false }) {
       )}
 
       {loading && (
-        <div className={`${cardCls} animate-pulse`} aria-hidden="true">
-          <div className="h-4 w-1/3 rounded bg-slate-200" />
-          <div className="mt-2 h-3 w-1/2 rounded bg-slate-100" />
+        <div className={cardCls} aria-hidden="true">
+          <div className="h-8 bg-slate-50" />
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex h-11 items-center gap-4 border-t border-slate-100">
+              <Skeleton className="h-4 w-1/4" />
+              <Skeleton className="h-4 w-1/5" />
+              <Skeleton className="h-4 w-1/5" />
+              <Skeleton className="h-4 w-1/6" />
+              <Skeleton className="h-4 w-1/6" />
+              <Skeleton className="h-4 flex-1" />
+            </div>
+          ))}
         </div>
       )}
 

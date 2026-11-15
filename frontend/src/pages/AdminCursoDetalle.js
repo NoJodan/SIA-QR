@@ -3,6 +3,7 @@ import CreateClassForm from "../components/CreateClassForm";
 import Modal from "../components/Modal";
 import Pagination from "../components/Pagination";
 import SearchBar from "../components/SearchBar";
+import Skeleton from "../components/Skeleton";
 import { adminGetGroupClasses } from "../services/academic";
 import { getClassAttendances } from "../services/attendance";
 import {
@@ -172,7 +173,19 @@ export default function AdminCursoDetalle({ group, onBack }) {
             setDetailClass(null);
           }}
         >
-          {attLoading && <p className="text-sm text-slate-500">Cargando asistencias…</p>}
+          {attLoading && (
+            <>
+              <p role="status" className="sr-only">Cargando asistencias...</p>
+              <ul className="space-y-2" aria-hidden="true">
+                {[0, 1, 2].map((i) => (
+                  <li key={i} className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
+                    <Skeleton className="h-4 w-1/2" />
+                    <Skeleton className="h-3 w-2/3 !bg-slate-100" />
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
           {!attLoading && attError && (
             <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
               {attError}

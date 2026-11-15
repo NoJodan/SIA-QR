@@ -1,4 +1,5 @@
 import React from "react";
+import Skeleton from "./Skeleton";
 import {
   Area,
   AreaChart,
@@ -93,11 +94,14 @@ export function MetricCard({
   hint,
   suffix = "",
   hasComparison = true,
+  displayValue,
 }) {
+  // displayValue: texto libre (p. ej. "Hoy, 20:35") que no pasa por numberFormat.
   const formattedValue =
-    value === null || value === undefined
+    displayValue ??
+    (value === null || value === undefined
       ? "—"
-      : `${numberFormat.format(value)}${suffix}`;
+      : `${numberFormat.format(value)}${suffix}`);
 
   return (
     <article className="relative flex min-h-[78px] items-center gap-3 overflow-hidden rounded-xl border border-rose-100 bg-white px-3 py-2.5 shadow-[0_3px_12px_rgba(115,13,7,0.06)] sm:gap-3.5 sm:px-2.5">
@@ -566,20 +570,22 @@ export function RecentClasses({ classes = [] }) {
 export function LoadingGrid({ count = 3 }) {
   const metricColumns = count >= 5 ? "sm:grid-cols-2 xl:grid-cols-5" : "sm:grid-cols-3";
   return (
-    <div className="space-y-3" aria-label="Cargando estadísticas">
+    <div className="space-y-3">
+      {/* role="status" en vez de aria-label: en un div genérico no se expone (ARIA 1.2) */}
+      <p role="status" className="sr-only">Cargando estadísticas...</p>
       <div className={`grid gap-3 ${metricColumns}`}>
         {Array.from({ length: count }, (_, index) => (
-          <div
+          <Skeleton
             key={index}
-            className="h-[78px] animate-pulse rounded-xl border border-rose-100 bg-rose-50/60"
+            className="h-[78px] !rounded-xl border border-rose-100 !bg-rose-50/60"
           />
         ))}
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         {[1, 2, 3, 4, 5, 6].map((item) => (
-          <div
+          <Skeleton
             key={`panel-${item}`}
-            className="h-56 animate-pulse rounded-xl border border-rose-100 bg-rose-50/40"
+            className="h-56 !rounded-xl border border-rose-100 !bg-rose-50/40"
           />
         ))}
       </div>
