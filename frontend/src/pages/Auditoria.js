@@ -359,6 +359,7 @@ const buildParams = (filters) => {
 export default function Auditoria() {
   const [draft, setDraft] = useState(emptyFilters);
   const [applied, setApplied] = useState(emptyFilters);
+  const [showMore, setShowMore] = useState(false);
   const [page, setPage] = useState(1);
   const [rows, setRows] = useState([]);
   const [count, setCount] = useState(0);
@@ -541,7 +542,7 @@ export default function Auditoria() {
       )}
 
       <section className={cardCls}>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-3">
           <div className="min-w-0">
             <label htmlFor="aud-q" className={labelCls}>
               <i className="fa-solid fa-magnifying-glass text-[#B3200E]/80" aria-hidden="true" />
@@ -586,106 +587,6 @@ export default function Auditoria() {
           </div>
 
           <div className="min-w-0">
-            <label htmlFor="aud-materia" className={labelCls}>
-              <i className="fa-solid fa-book-open text-[#B3200E]/80" aria-hidden="true" />
-              Materia
-            </label>
-            <div className="relative">
-              <select
-                id="aud-materia"
-                value={draft.subject}
-                onChange={set("subject")}
-                className={`${inputCls} appearance-none pr-9`}
-              >
-                <option value="">Todas las materias</option>
-                {options.subjects.map((subject) => (
-                  <option key={subject} value={subject}>
-                    {subject}
-                  </option>
-                ))}
-              </select>
-              <i
-                className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
-                aria-hidden="true"
-              />
-            </div>
-          </div>
-
-          <div className="min-w-0">
-            <label htmlFor="aud-accion" className={labelCls}>
-              <i className="fa-solid fa-bolt text-[#B3200E]/80" aria-hidden="true" />
-              Acción
-            </label>
-            <div className="relative">
-              <select
-                id="aud-accion"
-                value={draft.action}
-                onChange={setAction}
-                className={`${inputCls} appearance-none pr-9`}
-              >
-                <option value="">Todas las acciones</option>
-                {actionOptions.map((option) => (
-                  <option key={option.label} value={option.label}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <i
-                className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
-                aria-hidden="true"
-              />
-            </div>
-          </div>
-
-          <div className="min-w-0">
-            <label htmlFor="aud-modulo" className={labelCls}>
-              <i className="fa-solid fa-layer-group text-[#B3200E]/80" aria-hidden="true" />
-              Módulo
-            </label>
-            <div className="relative">
-              <select
-                id="aud-modulo"
-                value={draft.module}
-                onChange={setModule}
-                className={`${inputCls} appearance-none pr-9`}
-              >
-                <option value="">Todos los módulos</option>
-                {moduleOptions.map((option) => (
-                  <option key={option.label} value={option.label}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <i
-                className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
-                aria-hidden="true"
-              />
-            </div>
-          </div>
-
-          <div className="min-w-0">
-            <label htmlFor="aud-orden" className={labelCls}>
-              <i className="fa-solid fa-arrow-down-a-z text-[#B3200E]/80" aria-hidden="true" />
-              Orden
-            </label>
-            <div className="relative">
-              <select
-                id="aud-orden"
-                value={draft.ordering}
-                onChange={set("ordering")}
-                className={`${inputCls} appearance-none pr-9`}
-              >
-                <option value="">Más recientes</option>
-                <option value="actor">Nombre (A–Z)</option>
-              </select>
-              <i
-                className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
-                aria-hidden="true"
-              />
-            </div>
-          </div>
-
-          <div className="min-w-0">
             <span className={labelCls}>
               <i className="fa-solid fa-calendar-day text-[#B3200E]/80" aria-hidden="true" />
               Rango de fechas
@@ -698,6 +599,110 @@ export default function Auditoria() {
           </div>
         </div>
 
+        {showMore && (
+          <div id="aud-more-filters" className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="min-w-0">
+              <label htmlFor="aud-materia" className={labelCls}>
+                <i className="fa-solid fa-book-open text-[#B3200E]/80" aria-hidden="true" />
+                Materia
+              </label>
+              <div className="relative">
+                <select
+                  id="aud-materia"
+                  value={draft.subject}
+                  onChange={set("subject")}
+                  className={`${inputCls} appearance-none pr-9`}
+                >
+                  <option value="">Todas las materias</option>
+                  {options.subjects.map((subject) => (
+                    <option key={subject} value={subject}>
+                      {subject}
+                    </option>
+                  ))}
+                </select>
+                <i
+                  className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <label htmlFor="aud-accion" className={labelCls}>
+                <i className="fa-solid fa-bolt text-[#B3200E]/80" aria-hidden="true" />
+                Acción
+              </label>
+              <div className="relative">
+                <select
+                  id="aud-accion"
+                  value={draft.action}
+                  onChange={setAction}
+                  className={`${inputCls} appearance-none pr-9`}
+                >
+                  <option value="">Todas las acciones</option>
+                  {actionOptions.map((option) => (
+                    <option key={option.label} value={option.label}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <i
+                  className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <label htmlFor="aud-modulo" className={labelCls}>
+                <i className="fa-solid fa-layer-group text-[#B3200E]/80" aria-hidden="true" />
+                Módulo
+              </label>
+              <div className="relative">
+                <select
+                  id="aud-modulo"
+                  value={draft.module}
+                  onChange={setModule}
+                  className={`${inputCls} appearance-none pr-9`}
+                >
+                  <option value="">Todos los módulos</option>
+                  {moduleOptions.map((option) => (
+                    <option key={option.label} value={option.label}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <i
+                  className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <label htmlFor="aud-orden" className={labelCls}>
+                <i className="fa-solid fa-arrow-down-a-z text-[#B3200E]/80" aria-hidden="true" />
+                Orden
+              </label>
+              <div className="relative">
+                <select
+                  id="aud-orden"
+                  value={draft.ordering}
+                  onChange={set("ordering")}
+                  className={`${inputCls} appearance-none pr-9`}
+                >
+                  <option value="">Más recientes</option>
+                  <option value="actor">Nombre (A–Z)</option>
+                </select>
+                <i
+                  className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" onClick={handleFiltrar} disabled={loading} className={primaryBtnCls}>
             <i
@@ -709,6 +714,16 @@ export default function Auditoria() {
           <button type="button" onClick={handleLimpiar} disabled={loading} className={secondaryBtnCls}>
             <i className="fa-solid fa-eraser" aria-hidden="true" />
             Limpiar
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowMore((v) => !v)}
+            aria-expanded={showMore}
+            aria-controls="aud-more-filters"
+            className={secondaryBtnCls}
+          >
+            <i className="fa-solid fa-sliders" aria-hidden="true" />
+            {showMore ? "Menos filtros" : "Más filtros"}
           </button>
         </div>
       </section>
