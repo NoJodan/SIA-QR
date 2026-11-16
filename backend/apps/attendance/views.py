@@ -1,4 +1,5 @@
 import hashlib
+import unicodedata
 import uuid
 
 from django.db import IntegrityError, transaction
@@ -376,18 +377,44 @@ class MarkAttendanceView(Auth401Mixin, APIView):
         )
 
 
+def _normalize_subject(name):
+    """Clave de materia sin mayúsculas, tildes ni espacios de más."""
+    text = unicodedata.normalize("NFKD", str(name or "")).encode("ascii", "ignore").decode()
+    return " ".join(text.casefold().split())
+
+
+def _subject_options():
+    """Materias distintas de los cursos, deduplicadas sin importar tildes/mayúsculas.
+
+    De cada grafía se conserva la más usada (empate: la primera vista) y el
+    listado va ordenado por la forma normalizada.
+    """
+    from collections import Counter
+
+    from apps.academic.models import AcademicGroup
+
+    spellings = {}
+    for name in AcademicGroup.objects.values_list("course__name", flat=True):
+        spellings.setdefault(_normalize_subject(name), Counter())[name] += 1
+    return [spellings[key].most_common(1)[0][0] for key in sorted(spellings)]
+
+
 class AuditLogListView(generics.ListAPIView):
     """RF-ADM-07: consulta paginada de auditoría (solo administradores).
 
     Filtros opcionales: actor (UUID de usuario), q (texto libre sobre nombre/
-    email del actor, event_type, resource y payload), event_type, resource y
-    rango de fechas from/to (AAAA-MM-DD, inclusivo por día en America/Bogota).
+    email del actor, event_type, resource y payload), event_type, resource,
+    subject (materia = nombre del curso de los grupos del profesor) y rango
+    de fechas from/to (AAAA-MM-DD, inclusivo por día en America/Bogota).
 
     Los eventos de inicio/cierre de sesión (login_success, logout) se siguen
     registrando por seguridad, pero NO se muestran aquí: saturan la vista.
 
     La respuesta añade `stats` (total, professors, administrators,
-    last_activity) calculados sobre el queryset ya filtrado, sin paginar.
+    last_activity) calculados sobre el queryset ya filtrado, sin paginar, y
+    `options` (event_types y subjects) para poblar los selects, calculado
+    siempre sobre el histórico completo para que las opciones no
+    desaparezcan al filtrar.
     """
 
     authentication_classes = _AUTH
@@ -443,6 +470,20 @@ class AuditLogListView(generics.ListAPIView):
             except (ValueError, TypeError, AttributeError):
                 raise ValidationError({"actor": "UUID inválido."})
             qs = qs.filter(actor_id=actor_id)
+        subject = (params.get("subject") or "").strip()
+        if subject:
+            from apps.academic.models import AcademicGroup
+
+            key = _normalize_subject(subject)
+            actor_ids = {
+                user_id
+                for name, user_id in AcademicGroup.objects.values_list(
+                    "course__name", "professor__user_id"
+                )
+                if _normalize_subject(name) == key
+            }
+            # Materia inexistente -> set() vacío -> 0 resultados.
+            qs = qs.filter(actor_id__in=actor_ids)
         q = (params.get("q") or "").strip()
         if q:
             # payload__icontains en PostgreSQL castea el JSON a texto (LIKE).
@@ -487,4 +528,14 @@ class AuditLogListView(generics.ListAPIView):
                     last_activity=Max("created_at"),
                 )
             )
+            response.data["options"] = {
+                "event_types": sorted(
+                    AuditLog.objects.exclude(
+                        event_type__in=("login_success", "logout")
+                    )
+                    .values_list("event_type", flat=True)
+                    .distinct()
+                ),
+                "subjects": _subject_options(),
+            }
         return response

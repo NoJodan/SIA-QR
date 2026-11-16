@@ -322,12 +322,13 @@ function DateRangePicker({ from, to, onChange }) {
   );
 }
 
-const emptyFilters = { q: "", actor: "", from: "", to: "" };
+const emptyFilters = { q: "", actor: "", subject: "", from: "", to: "" };
 
 const buildParams = (filters) => {
   const params = {};
   if (filters.q.trim()) params.q = filters.q.trim();
   if (filters.actor) params.actor = filters.actor;
+  if (filters.subject) params.subject = filters.subject;
   if (filters.from) params.from = filters.from;
   if (filters.to) params.to = filters.to;
   return params;
@@ -344,6 +345,7 @@ export default function Auditoria() {
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
   const [professors, setProfessors] = useState([]);
+  const [options, setOptions] = useState({ event_types: [], subjects: [] });
   const seq = useRef(0);
 
   const run = useCallback(async (filters, pageNum) => {
@@ -357,6 +359,7 @@ export default function Auditoria() {
       setRows(data.results || []);
       setCount(data.count || 0);
       setStats(data.stats || null);
+      setOptions(data.options || { event_types: [], subjects: [] });
       setSearched(true);
     } catch (err) {
       if (current !== seq.current) return;
@@ -476,7 +479,7 @@ export default function Auditoria() {
       )}
 
       <section className={cardCls}>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="min-w-0">
             <label htmlFor="aud-q" className={labelCls}>
               <i className="fa-solid fa-magnifying-glass text-[#B3200E]/80" aria-hidden="true" />
@@ -512,6 +515,32 @@ export default function Auditoria() {
                     ))}
                   </optgroup>
                 )}
+              </select>
+              <i
+                className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
+                aria-hidden="true"
+              />
+            </div>
+          </div>
+
+          <div className="min-w-0">
+            <label htmlFor="aud-materia" className={labelCls}>
+              <i className="fa-solid fa-book-open text-[#B3200E]/80" aria-hidden="true" />
+              Materia
+            </label>
+            <div className="relative">
+              <select
+                id="aud-materia"
+                value={draft.subject}
+                onChange={set("subject")}
+                className={`${inputCls} appearance-none pr-9`}
+              >
+                <option value="">Todas las materias</option>
+                {options.subjects.map((subject) => (
+                  <option key={subject} value={subject}>
+                    {subject}
+                  </option>
+                ))}
               </select>
               <i
                 className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"

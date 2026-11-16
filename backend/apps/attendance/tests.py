@@ -1043,6 +1043,62 @@ class AuditLogEndpointTests(TestCase):
         self.assertIsNone(denied["actor_name"])
         self.assertIsNone(denied["actor_email"])
 
+    def test_options_expose_event_types_and_subjects(self):
+        _, _, mat1 = _make_prof_group(email="alu1@ut.edu.co")
+        _, _, mat2 = _make_prof_group(email="blu2@ut.edu.co")
+        _, _, calc = _make_prof_group(email="clc3@ut.edu.co")
+        for group, name in (
+            (mat1, "Matematicas"),
+            (mat2, "Matematicas"),
+            (calc, "Calculo 1"),
+        ):
+            group.course.name = name
+            group.course.save()
+        for event_type in ("group_created", "class_updated", "attendance_marked"):
+            self._log(self.professor, event_type, "x:1")
+        self._log(self.professor, "login_success", "user:1")
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get("/api/attendance/audit-logs/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp.data["options"]["event_types"],
+            ["attendance_marked", "class_updated", "group_created"],
+        )
+        # "Curso QA" es el del profesor creado en setUp.
+        self.assertEqual(
+            resp.data["options"]["subjects"],
+            ["Calculo 1", "Curso QA", "Matematicas"],
+        )
+
+    def test_filters_by_subject_ignoring_case_and_accents(self):
+        prof_a, _, group_a = _make_prof_group(email="alu1@ut.edu.co")
+        prof_b, _, group_b = _make_prof_group(email="blu2@ut.edu.co")
+        prof_c, _, group_c = _make_prof_group(email="clc3@ut.edu.co")
+        for group, name in (
+            (group_a, "Matematicas"),
+            (group_b, "matematicas"),
+            (group_c, "Cálculo 1"),
+        ):
+            group.course.name = name
+            group.course.save()
+        self._log(prof_a, "group_created", "group:a")
+        self._log(prof_b, "group_created", "group:b")
+        self._log(prof_c, "group_created", "group:c")
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get("/api/attendance/audit-logs/", {"subject": "MATEMATICAS"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            sorted(row["resource"] for row in resp.data["results"]),
+            ["group:a", "group:b"],
+        )
+        # "Cálculo 1" se encuentra sin tilde ni mayúscula.
+        resp = client.get("/api/attendance/audit-logs/", {"subject": "calculo 1"})
+        self.assertEqual(
+            [row["resource"] for row in resp.data["results"]], ["group:c"]
+        )
+
 
 class ReportClassIdLimitTests(TestCase):
     def _client(self, email):
