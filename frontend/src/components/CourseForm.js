@@ -18,7 +18,7 @@ export default function CourseForm({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Carga los programas del admin; si falla queda solo "Sin programa".
+  // Carga los programas del admin; si falla solo queda el placeholder.
   useEffect(() => {
     let alive = true;
     getPrograms()
@@ -52,19 +52,15 @@ export default function CourseForm({
       setError("El semestre debe estar entre 1 y 12.");
       return;
     }
-    // "" (Sin programa) -> null; si no vacío, debe ser un id de programa.
-    let programId = null;
-    if (program !== "") {
-      if (typeof program !== "string" || !program.trim()) {
-        setError("Programa inválido.");
-        return;
-      }
-      programId = program;
+    // El backend exige programa: sin elegir, no se crea ni se guarda.
+    if (!program) {
+      setError("Debes asignar un programa, un grupo y un semestre para crear el curso.");
+      return;
     }
     setError("");
     setSaving(true);
     try {
-      await onSubmit(clean, groupNumber, semesterNumber, programId);
+      await onSubmit(clean, groupNumber, semesterNumber, program);
     } catch (err) {
       const data = err?.response?.data;
       setError(
@@ -131,7 +127,9 @@ export default function CourseForm({
           onChange={(e) => setProgram(e.target.value)}
           className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
         >
-          <option value="">Sin programa</option>
+          <option value="" disabled>
+            Selecciona un programa…
+          </option>
           {programs.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}

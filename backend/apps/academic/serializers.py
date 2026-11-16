@@ -130,12 +130,15 @@ class AcademicGroupWriteSerializer(serializers.Serializer):
             "null": "El semestre es obligatorio.",
         },
     )
-    # Opcional: id del programa (UUID pk, como el resto de modelos). Se
-    # resuelve contra Program en las vistas; null vacía el programa.
+    # Requerido: el profesor debe asignar programa al crear el curso (también
+    # en PATCH, el único consumidor siempre lo envía). Se resuelve contra
+    # Program en las vistas.
     program = serializers.UUIDField(
-        required=False,
-        allow_null=True,
-        error_messages={"invalid": "Programa no encontrado."},
+        error_messages={
+            "required": "Debes asignar un programa, un grupo y un semestre para crear el curso.",
+            "null": "Debes asignar un programa, un grupo y un semestre para crear el curso.",
+            "invalid": "Programa no encontrado.",
+        },
     )
 
     def validate_name(self, value):
@@ -145,7 +148,7 @@ class AcademicGroupWriteSerializer(serializers.Serializer):
         return value
 
     def validate_program(self, value):
-        if value is not None and not Program.objects.filter(pk=value).exists():
+        if not Program.objects.filter(pk=value).exists():
             raise serializers.ValidationError("Programa no encontrado.")
         return value
 
