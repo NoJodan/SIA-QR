@@ -377,7 +377,7 @@ export default function Auditoria() {
 
   // Profesores del select: reutiliza filters.professors del endpoint de
   // estadísticas (trae user_id, el valor que espera ?actor=). Si falla, el
-  // select queda solo con "Todos los usuarios".
+  // select queda solo con "Todos los profesores".
   useEffect(() => {
     let alive = true;
     getStats({ period: "1d" })
@@ -486,14 +486,14 @@ export default function Auditoria() {
               id="aud-q"
               value={draft.q}
               onChange={(value) => setDraft((prev) => ({ ...prev, q: value }))}
-              placeholder="Buscar por usuario, acción o detalle…"
+              placeholder="Buscar por profesor, acción o detalle…"
             />
           </div>
 
           <div className="min-w-0">
             <label htmlFor="aud-usuario" className={labelCls}>
               <i className="fa-solid fa-user text-[#B3200E]/80" aria-hidden="true" />
-              Usuario
+              Profesor
             </label>
             <div className="relative">
               <select
@@ -502,7 +502,7 @@ export default function Auditoria() {
                 onChange={set("actor")}
                 className={`${inputCls} appearance-none pr-9`}
               >
-                <option value="">Todos los usuarios</option>
+                <option value="">Todos los profesores</option>
                 {professors.length > 0 && (
                   <optgroup label="Profesores">
                     {professors.map((professor) => (
