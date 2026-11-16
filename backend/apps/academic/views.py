@@ -72,12 +72,18 @@ class MyGroupsListView(generics.ListCreateAPIView):
         prof = getattr(self.request.user, "professor_profile", None)
         if prof is None:
             return AcademicGroup.objects.none()
-        return (
+        qs = (
             AcademicGroup.objects.filter(professor=prof)
             .select_related("course", "professor", "professor__user")
             .annotate(classes_count=Count("classes"))
-            .order_by("course__code", "group_code")
         )
+        # ?ordering=name (A-Z) / -name (Z-A); otro o ausente -> orden actual.
+        ordering = self.request.query_params.get("ordering")
+        if ordering == "name":
+            return qs.order_by("course__name")
+        if ordering == "-name":
+            return qs.order_by("-course__name")
+        return qs.order_by("course__code", "group_code")
 
     def create(self, request, *args, **kwargs):
         ser = AcademicGroupWriteSerializer(data=request.data)
@@ -353,12 +359,16 @@ class AdminGroupsListView(generics.ListAPIView):
     pagination_class = StandardResultsPagination
 
     def get_queryset(self):
-        return (
+        qs = (
             AcademicGroup.objects.all()
             .select_related("course", "professor", "professor__user")
             .annotate(classes_count=Count("classes"))
-            .order_by("course__name")
         )
+        # ?ordering=-name invierte a Z-A; "name", ausente u otro -> orden
+        # actual (A-Z por course__name).
+        if self.request.query_params.get("ordering") == "-name":
+            return qs.order_by("-course__name")
+        return qs.order_by("course__name")
 
 
 class AdminGroupDetailView(generics.RetrieveAPIView):

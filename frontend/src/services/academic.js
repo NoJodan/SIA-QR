@@ -12,17 +12,20 @@ export const invalidateGroupsCache = () => {
 };
 
 const unwrap = (data) => (Array.isArray(data) ? { results: data, count: data.length } : data);
-const params = (search, page, pageSize, status) => {
+const params = (search, page, pageSize, status, ordering) => {
   const p = {};
   if (search) p.search = search;
   if (page) p.page = page;
   if (pageSize) p.page_size = pageSize;
   if (status) p.status = status;
+  if (ordering) p.ordering = ordering;
   return p;
 };
 
-export const getMyGroups = (search = "", page = 1) =>
-  api.get("/api/academic/my-groups/", { params: params(search, page) }).then((r) => unwrap(r.data));
+export const getMyGroups = (search = "", page = 1, ordering = "") =>
+  api
+    .get("/api/academic/my-groups/", { params: params(search, page, null, null, ordering) })
+    .then((r) => unwrap(r.data));
 export const createMyGroup = (name, groupNumber, semester) =>
   api.post("/api/academic/my-groups/", { name, group_number: groupNumber, semester }).then((r) => {
     invalidateGroupsCache();
@@ -52,8 +55,10 @@ export const deleteGroupClass = (groupId, classId) =>
   api.delete(`/api/academic/groups/${groupId}/classes/${classId}/`).then((r) => r.data);
 
 // Admin: solo lectura de cursos + edición de clases
-export const adminGetGroups = (search = "", page = 1) =>
-  api.get("/api/academic/admin/groups/", { params: params(search, page) }).then((r) => unwrap(r.data));
+export const adminGetGroups = (search = "", page = 1, ordering = "") =>
+  api
+    .get("/api/academic/admin/groups/", { params: params(search, page, null, null, ordering) })
+    .then((r) => unwrap(r.data));
 export const adminGetGroup = (groupId) =>
   api.get(`/api/academic/admin/groups/${groupId}/`).then((r) => r.data);
 export const adminGetGroupClasses = (groupId, search = "", page = 1, status = "") =>

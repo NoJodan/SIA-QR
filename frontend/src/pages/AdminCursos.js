@@ -12,6 +12,7 @@ export default function AdminCursos({ onSelectGroup }) {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [order, setOrder] = useState("name");
   const [count, setCount] = useState(0);
   const debounced = useDebounce(search, 300);
   const seqRef = useRef(0);
@@ -22,7 +23,7 @@ export default function AdminCursos({ onSelectGroup }) {
     seqRef.current = seq;
     setLoading(true);
     setError("");
-    adminGetGroups(s, p)
+    adminGetGroups(s, p, order)
       .then((data) => {
         if (seq !== seqRef.current) return;
         setGroups(data.results || []);
@@ -39,7 +40,7 @@ export default function AdminCursos({ onSelectGroup }) {
   useEffect(() => {
     load(debounced, page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debounced, page]);
+  }, [debounced, page, order]);
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
@@ -76,8 +77,19 @@ export default function AdminCursos({ onSelectGroup }) {
         </div>
       </section>
 
-      <div className="mb-4">
-        <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Buscar curso..." />
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex-1">
+          <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Buscar curso..." />
+        </div>
+        <select
+          aria-label="Orden alfabético"
+          value={order}
+          onChange={(e) => { setOrder(e.target.value); setPage(1); }}
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
+        >
+          <option value="name">A–Z</option>
+          <option value="-name">Z–A</option>
+        </select>
       </div>
 
       {error && (
