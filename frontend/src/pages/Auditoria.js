@@ -328,6 +328,8 @@ const emptyFilters = {
   subject: "",
   action: "",
   actionTypes: [],
+  module: "",
+  moduleTypes: [],
   ordering: "",
   from: "",
   to: "",
@@ -449,6 +451,16 @@ export default function Auditoria() {
     }));
   };
 
+  const setModule = (event) => {
+    const label = event.target.value;
+    const entry = moduleOptions.find((o) => o.label === label);
+    setDraft((prev) => ({
+      ...prev,
+      module: label,
+      moduleTypes: entry ? entry.types : [],
+    }));
+  };
+
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
   // Opciones de acción agrupadas a partir de los event_type del backend.
@@ -460,6 +472,16 @@ export default function Auditoria() {
     entry.types.push(et);
   });
   actionOptions.sort((a, b) => a.label.localeCompare(b.label, "es"));
+
+  // Opciones de módulo agrupadas igual que las de acción.
+  const moduleOptions = [];
+  options.event_types.forEach((et) => {
+    const { label, icon } = moduleMeta(et);
+    let entry = moduleOptions.find((o) => o.label === label);
+    if (!entry) moduleOptions.push((entry = { label, icon, types: [] }));
+    entry.types.push(et);
+  });
+  moduleOptions.sort((a, b) => a.label.localeCompare(b.label, "es"));
 
   const kpis = (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -603,6 +625,32 @@ export default function Auditoria() {
               >
                 <option value="">Todas las acciones</option>
                 {actionOptions.map((option) => (
+                  <option key={option.label} value={option.label}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <i
+                className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
+                aria-hidden="true"
+              />
+            </div>
+          </div>
+
+          <div className="min-w-0">
+            <label htmlFor="aud-modulo" className={labelCls}>
+              <i className="fa-solid fa-layer-group text-[#B3200E]/80" aria-hidden="true" />
+              Módulo
+            </label>
+            <div className="relative">
+              <select
+                id="aud-modulo"
+                value={draft.module}
+                onChange={setModule}
+                className={`${inputCls} appearance-none pr-9`}
+              >
+                <option value="">Todos los módulos</option>
+                {moduleOptions.map((option) => (
                   <option key={option.label} value={option.label}>
                     {option.label}
                   </option>
