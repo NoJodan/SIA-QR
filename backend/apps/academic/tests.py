@@ -1255,3 +1255,44 @@ class GroupNumberTests(TestCase):
         self.group.course.refresh_from_db()
         self.assertEqual(self.group.course.name, "Curso Auto")
         self.assertEqual(self.group.group_code, "01")
+
+
+class GroupSemesterTests(TestCase):
+    """Semestre del grupo (1..12): persiste, se serializa y se valida en 400."""
+
+    def setUp(self):
+        self.user, _, self.group = _make_prof_group(email="sem@ut.edu.co")
+        self.client = APIClient()
+        self.client.force_login(self.user)
+        self.url = "/api/academic/my-groups/"
+
+    def test_create_with_semester_12_persists_and_returns(self):
+        resp = self.client.post(
+            self.url,
+            {"name": "Cálculo Diferencial", "group_number": 7, "semester": 12},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.data["semester"], 12)
+        created = AcademicGroup.objects.get(pk=resp.data["id"])
+        self.assertEqual(created.semester, 12)
+
+    def test_create_with_semester_13_is_400(self):
+        before = AcademicGroup.objects.count()
+        resp = self.client.post(
+            self.url, {"name": "X", "group_number": 1, "semester": 13}, format="json"
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("semester", resp.data)
+        self.assertEqual(AcademicGroup.objects.count(), before)
+
+    def test_patch_updates_semester(self):
+        resp = self.client.patch(
+            f"/api/academic/my-groups/{self.group.id}/",
+            {"name": "Curso Auto", "group_number": 1, "semester": 9},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data["semester"], 9)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.semester, 9)

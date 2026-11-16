@@ -41,6 +41,7 @@ class AcademicGroup(models.Model):
     )
     group_code = models.CharField(max_length=10)
     term_period = models.CharField(max_length=20)
+    semester = models.PositiveSmallIntegerField(default=1, validators=[MinValueValidator(1), MaxValueValidator(12)])
 
     class Meta:
         db_table = "academic_groups"

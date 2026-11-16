@@ -23,13 +23,13 @@ const params = (search, page, pageSize, status) => {
 
 export const getMyGroups = (search = "", page = 1) =>
   api.get("/api/academic/my-groups/", { params: params(search, page) }).then((r) => unwrap(r.data));
-export const createMyGroup = (name, groupNumber) =>
-  api.post("/api/academic/my-groups/", { name, group_number: groupNumber }).then((r) => {
+export const createMyGroup = (name, groupNumber, semester) =>
+  api.post("/api/academic/my-groups/", { name, group_number: groupNumber, semester }).then((r) => {
     invalidateGroupsCache();
     return r.data;
   });
-export const updateMyGroup = (groupId, name, groupNumber) =>
-  api.patch(`/api/academic/my-groups/${groupId}/`, { name, group_number: groupNumber }).then((r) => {
+export const updateMyGroup = (groupId, name, groupNumber, semester) =>
+  api.patch(`/api/academic/my-groups/${groupId}/`, { name, group_number: groupNumber, semester }).then((r) => {
     invalidateGroupsCache();
     return r.data;
   });

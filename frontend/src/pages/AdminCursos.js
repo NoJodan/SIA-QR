@@ -125,6 +125,9 @@ export default function AdminCursos({ onSelectGroup }) {
                 <div className="min-w-0 flex-1">
                   <h3 className="text-lg font-bold text-slate-900 break-words group-hover:text-[#B3200E]">
                     {g.course?.name} <span className="text-sm font-semibold text-slate-500">· Grupo {g.group_code}</span>
+                    <span className="ml-2 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
+                      Semestre {g.semester || 1}
+                    </span>
                   </h3>
                   <p className="mt-0.5 text-sm text-slate-500">
                     {g.professor?.full_name} · {g.professor?.employee_code}

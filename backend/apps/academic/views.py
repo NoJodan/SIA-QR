@@ -84,6 +84,7 @@ class MyGroupsListView(generics.ListCreateAPIView):
         ser.is_valid(raise_exception=True)
         name = ser.validated_data["name"]
         group_number = ser.validated_data["group_number"]
+        semester = ser.validated_data.get("semester", 1)
         group_code = f"{group_number:02d}"
         with transaction.atomic():
             base = slugify(name)[:12].upper() or "CURSO"
@@ -96,6 +97,7 @@ class MyGroupsListView(generics.ListCreateAPIView):
                 professor=get_professor(request.user),
                 group_code=group_code,
                 term_period=current_term(),
+                semester=semester,
             )
         out = AcademicGroupSerializer(group).data
         out["classes_count"] = 0
@@ -104,7 +106,7 @@ class MyGroupsListView(generics.ListCreateAPIView):
             "group_created",
             f"group:{group.id}",
             request=request,
-            payload={"name": name, "group_code": group_code},
+            payload={"name": name, "group_code": group_code, "semester": semester},
         )
         return Response(out, status=status.HTTP_201_CREATED)
 
@@ -135,8 +137,9 @@ class MyGroupDetailView(generics.RetrieveUpdateDestroyAPIView):
             group.course.name = ser.validated_data["name"]
             group.course.save(update_fields=["name"])
             group.group_code = f"{ser.validated_data['group_number']:02d}"
+            group.semester = ser.validated_data.get("semester", 1)
             try:
-                group.save(update_fields=["group_code"])
+                group.save(update_fields=["group_code", "semester"])
             except IntegrityError:
                 raise ValidationError(
                     {"group_number": ["Ya existe un grupo con ese número en este periodo."]}
@@ -150,7 +153,7 @@ class MyGroupDetailView(generics.RetrieveUpdateDestroyAPIView):
             "group_updated",
             f"group:{group.id}",
             request=request,
-            payload={"name": group.course.name, "group_code": group.group_code},
+            payload={"name": group.course.name, "group_code": group.group_code, "semester": group.semester},
         )
         return Response(out)
 

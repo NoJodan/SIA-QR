@@ -18,7 +18,7 @@ class AcademicGroupSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AcademicGroup
-        fields = ["id", "course", "professor", "group_code", "term_period", "classes_count"]
+        fields = ["id", "course", "professor", "group_code", "term_period", "semester", "classes_count"]
 
     def get_professor(self, obj):
         prof = getattr(obj, "professor", None)
@@ -42,6 +42,19 @@ class AcademicGroupWriteSerializer(serializers.Serializer):
             "min_value": "El número de grupo debe estar entre 1 y 10.",
             "max_value": "El número de grupo debe estar entre 1 y 10.",
             "null": "El número de grupo es obligatorio.",
+        },
+    )
+    semester = serializers.IntegerField(
+        required=False,
+        default=1,
+        min_value=1,
+        max_value=12,
+        error_messages={
+            "required": "El semestre es obligatorio.",
+            "invalid": "El semestre debe ser un entero entre 1 y 12.",
+            "min_value": "El semestre debe estar entre 1 y 12.",
+            "max_value": "El semestre debe estar entre 1 y 12.",
+            "null": "El semestre es obligatorio.",
         },
     )
 

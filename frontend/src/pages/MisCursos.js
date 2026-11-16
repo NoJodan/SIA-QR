@@ -47,14 +47,14 @@ export default function MisCursos({ onSelectGroup }) {
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
-  const handleCreate = async (name, groupNumber) => {
-    const created = await createMyGroup(name, groupNumber);
+  const handleCreate = async (name, groupNumber, semester) => {
+    const created = await createMyGroup(name, groupNumber, semester);
     setGroups((prev) => [...prev, created]);
     setShowForm(false);
   };
 
-  const handleUpdate = async (id, name, groupNumber) => {
-    const updated = await updateMyGroup(id, name, groupNumber);
+  const handleUpdate = async (id, name, groupNumber, semester) => {
+    const updated = await updateMyGroup(id, name, groupNumber, semester);
     setGroups((prev) => prev.map((g) => (g.id === id ? updated : g)));
     setEditingId(null);
   };
@@ -190,8 +190,9 @@ export default function MisCursos({ onSelectGroup }) {
                   <CourseForm
                     initialName={g.course?.name || ""}
                     initialGroup={Number(g.group_code) || 1}
+                    initialSemester={g.semester || 1}
                     submitLabel="Guardar"
-                    onSubmit={(name, groupNumber) => handleUpdate(g.id, name, groupNumber)}
+                    onSubmit={(name, groupNumber, semester) => handleUpdate(g.id, name, groupNumber, semester)}
                     onCancel={() => setEditingId(null)}
                   />
                 </div>
@@ -209,6 +210,9 @@ export default function MisCursos({ onSelectGroup }) {
                       >
                         <h3 className="text-lg font-bold text-slate-900 break-words group-hover:text-[#B3200E]">
                           {g.course?.name} <span className="text-sm font-semibold text-slate-500">· Grupo {g.group_code}</span>
+                          <span className="ml-2 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
+                            Semestre {g.semester || 1}
+                          </span>
                         </h3>
                       </button>
                       <p className="mt-0.5 text-sm text-slate-500">

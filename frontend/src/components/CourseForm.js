@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 
-export default function CourseForm({ initialName = "", initialGroup = 1, submitLabel = "Guardar", onSubmit, onCancel }) {
+export default function CourseForm({ initialName = "", initialGroup = 1, initialSemester = 1, submitLabel = "Guardar", onSubmit, onCancel }) {
   const [name, setName] = useState(initialName);
   const [group, setGroup] = useState(initialGroup);
+  const [semester, setSemester] = useState(initialSemester);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -22,13 +23,18 @@ export default function CourseForm({ initialName = "", initialGroup = 1, submitL
       setError("El número de grupo debe estar entre 1 y 10.");
       return;
     }
+    const semesterNumber = Number(semester);
+    if (!Number.isInteger(semesterNumber) || semesterNumber < 1 || semesterNumber > 12) {
+      setError("El semestre debe estar entre 1 y 12.");
+      return;
+    }
     setError("");
     setSaving(true);
     try {
-      await onSubmit(clean, groupNumber);
+      await onSubmit(clean, groupNumber, semesterNumber);
     } catch (err) {
       const data = err?.response?.data;
-      setError((data && (data.name?.[0] || data.group_number?.[0] || data.detail)) || "No se pudo guardar el curso.");
+      setError((data && (data.name?.[0] || data.group_number?.[0] || data.semester?.[0] || data.detail)) || "No se pudo guardar el curso.");
     } finally {
       setSaving(false);
     }
@@ -58,6 +64,23 @@ export default function CourseForm({ initialName = "", initialGroup = 1, submitL
           {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
             <option key={n} value={n}>
               Grupo {String(n).padStart(2, "0")}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label htmlFor="course-semester" className="mb-1 block text-sm font-medium text-slate-700">
+          Semestre
+        </label>
+        <select
+          id="course-semester"
+          value={semester}
+          onChange={(e) => setSemester(e.target.value)}
+          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
+        >
+          {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+            <option key={n} value={n}>
+              Semestre {n}
             </option>
           ))}
         </select>
