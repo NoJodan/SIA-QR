@@ -16,13 +16,22 @@ from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.academic.models import AcademicGroup, ClassModality, ClassStatus, Course, ScheduledClass
+from apps.academic.models import (
+    AcademicGroup,
+    ClassModality,
+    ClassStatus,
+    Course,
+    Program,
+    ScheduledClass,
+)
 from apps.academic.pagination import StandardResultsPagination
 from apps.academic.permissions import IsProfessor
 from apps.academic.serializers import (
     AcademicGroupSerializer,
     AcademicGroupWriteSerializer,
     ClassGeofenceSerializer,
+    ProgramSerializer,
+    ProgramWriteSerializer,
     ScheduledClassSerializer,
 )
 from apps.academic.services import reopen_completed_if_future, sync_class_statuses
@@ -44,6 +53,13 @@ def get_professor(user):
     from apps.authentication.models import Professor
 
     return get_object_or_404(Professor, user=user)
+
+
+def _resolve_program(program_id):
+    """Id de programa -> Program o None (validate_program ya lo validó)."""
+    if program_id is None:
+        return None
+    return Program.objects.filter(pk=program_id).first()
 
 
 def _filter_by_status(queryset, request):
@@ -74,7 +90,7 @@ class MyGroupsListView(generics.ListCreateAPIView):
             return AcademicGroup.objects.none()
         qs = (
             AcademicGroup.objects.filter(professor=prof)
-            .select_related("course", "professor", "professor__user")
+            .select_related("course", "course__program", "professor", "professor__user")
             .annotate(classes_count=Count("classes"))
         )
         # ?ordering=name (A-Z) / -name (Z-A); otro o ausente -> orden actual.
@@ -91,12 +107,14 @@ class MyGroupsListView(generics.ListCreateAPIView):
         name = ser.validated_data["name"]
         group_number = ser.validated_data["group_number"]
         semester = ser.validated_data.get("semester", 1)
+        program = _resolve_program(ser.validated_data.get("program"))
         group_code = f"{group_number:02d}"
         with transaction.atomic():
             base = slugify(name)[:12].upper() or "CURSO"
             course = Course.objects.create(
                 code=f"{base}{uuid.uuid4().hex[:6].upper()}",
                 name=name,
+                program=program,
             )
             group = AcademicGroup.objects.create(
                 course=course,
@@ -112,7 +130,12 @@ class MyGroupsListView(generics.ListCreateAPIView):
             "group_created",
             f"group:{group.id}",
             request=request,
-            payload={"name": name, "group_code": group_code, "semester": semester},
+            payload={
+                "name": name,
+                "group_code": group_code,
+                "semester": semester,
+                "program": program.name if program else None,
+            },
         )
         return Response(out, status=status.HTTP_201_CREATED)
 
@@ -130,7 +153,7 @@ class MyGroupDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_object(self):
         prof = getattr(self.request.user, "professor_profile", None)
         return get_object_or_404(
-            AcademicGroup.objects.select_related("course", "professor", "professor__user"),
+            AcademicGroup.objects.select_related("course", "course__program", "professor", "professor__user"),
             pk=self.kwargs["group_id"],
             professor=prof,
         )
@@ -141,7 +164,12 @@ class MyGroupDetailView(generics.RetrieveUpdateDestroyAPIView):
         ser.is_valid(raise_exception=True)
         with transaction.atomic():
             group.course.name = ser.validated_data["name"]
-            group.course.save(update_fields=["name"])
+            course_fields = ["name"]
+            # "program" solo llega si el campo vino en el payload (null lo vacía).
+            if "program" in ser.validated_data:
+                group.course.program = _resolve_program(ser.validated_data["program"])
+                course_fields.append("program")
+            group.course.save(update_fields=course_fields)
             group.group_code = f"{ser.validated_data['group_number']:02d}"
             group.semester = ser.validated_data.get("semester", 1)
             try:
@@ -159,7 +187,12 @@ class MyGroupDetailView(generics.RetrieveUpdateDestroyAPIView):
             "group_updated",
             f"group:{group.id}",
             request=request,
-            payload={"name": group.course.name, "group_code": group.group_code, "semester": group.semester},
+            payload={
+                "name": group.course.name,
+                "group_code": group.group_code,
+                "semester": group.semester,
+                "program": group.course.program.name if group.course.program_id else None,
+            },
         )
         return Response(out)
 
@@ -361,7 +394,7 @@ class AdminGroupsListView(generics.ListAPIView):
     def get_queryset(self):
         qs = (
             AcademicGroup.objects.all()
-            .select_related("course", "professor", "professor__user")
+            .select_related("course", "course__program", "professor", "professor__user")
             .annotate(classes_count=Count("classes"))
         )
         # ?ordering=-name invierte a Z-A; "name", ausente u otro -> orden
@@ -425,6 +458,91 @@ class AdminClassUpdateView(generics.RetrieveUpdateAPIView):
             f"class:{clase.id}",
             request=self.request,
         )
+
+
+# --- Programas (admin CRUD; GET abierto a cualquier autenticado para el select) ---
+class ProgramListCreateView(generics.ListCreateAPIView):
+    authentication_classes = _AUTH
+    pagination_class = StandardResultsPagination
+    filter_backends = [SearchFilter]
+    search_fields = ["name", "code"]
+
+    def get_permissions(self):
+        # GET: cualquier autenticado (el profesor lo necesita para el select
+        # de CourseForm). POST: solo admin.
+        if self.request.method == "GET":
+            return [IsAuthenticated()]
+        return [IsAuthenticated(), IsAdminUserRole()]
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return ProgramWriteSerializer
+        return ProgramSerializer
+
+    def get_queryset(self):
+        return Program.objects.prefetch_related("courses__groups").order_by("name")
+
+    def create(self, request, *args, **kwargs):
+        ser = ProgramWriteSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        program = ser.save()
+        log_event(
+            request.user,
+            "program_created",
+            f"program:{program.id}",
+            request=request,
+            payload={"name": program.name, "code": program.code, "area": program.area},
+        )
+        return Response(ProgramSerializer(program).data, status=status.HTTP_201_CREATED)
+
+
+class ProgramDetailUpdateView(generics.RetrieveUpdateDestroyAPIView):
+    authentication_classes = _AUTH
+    permission_classes = _ADMIN_PERMS
+    lookup_url_kwarg = "program_id"
+
+    def get_serializer_class(self):
+        if self.request.method in ("PATCH", "PUT"):
+            return ProgramWriteSerializer
+        return ProgramSerializer
+
+    def get_queryset(self):
+        return Program.objects.prefetch_related("courses__groups")
+
+    def update(self, request, *args, **kwargs):
+        program = self.get_object()
+        ser = ProgramWriteSerializer(program, data=request.data, partial=kwargs.get("partial", False))
+        ser.is_valid(raise_exception=True)
+        program = ser.save()
+        log_event(
+            request.user,
+            "program_updated",
+            f"program:{program.id}",
+            request=request,
+            payload={"name": program.name, "code": program.code, "area": program.area},
+        )
+        return Response(ProgramSerializer(program).data)
+
+    def destroy(self, request, *args, **kwargs):
+        program = self.get_object()
+        # El modelo ya es RESTRICT; chequeo explícito para mensaje limpio (409)
+        # en vez de ProtectedError (500).
+        if program.courses.exists():
+            return Response(
+                {"error": "Tiene cursos asociados; no se puede eliminar."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        payload = {"name": program.name, "code": program.code, "area": program.area}
+        program_id = program.id
+        program.delete()
+        log_event(
+            request.user,
+            "program_deleted",
+            f"program:{program_id}",
+            request=request,
+            payload=payload,
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # --- Núcleo QR (QR único; rotación manual explícita) ---

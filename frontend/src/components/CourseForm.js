@@ -1,11 +1,35 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { getPrograms } from "../services/academic";
 
-export default function CourseForm({ initialName = "", initialGroup = 1, initialSemester = 1, submitLabel = "Guardar", onSubmit, onCancel }) {
+export default function CourseForm({
+  initialName = "",
+  initialGroup = 1,
+  initialSemester = 1,
+  initialProgramId = null,
+  submitLabel = "Guardar",
+  onSubmit,
+  onCancel,
+}) {
   const [name, setName] = useState(initialName);
   const [group, setGroup] = useState(initialGroup);
   const [semester, setSemester] = useState(initialSemester);
+  const [program, setProgram] = useState(initialProgramId == null ? "" : String(initialProgramId));
+  const [programs, setPrograms] = useState([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Carga los programas del admin; si falla queda solo "Sin programa".
+  useEffect(() => {
+    let alive = true;
+    getPrograms()
+      .then((data) => {
+        if (alive) setPrograms(data.results || []);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -28,13 +52,25 @@ export default function CourseForm({ initialName = "", initialGroup = 1, initial
       setError("El semestre debe estar entre 1 y 12.");
       return;
     }
+    // "" (Sin programa) -> null; si no vacío, debe ser un id de programa.
+    let programId = null;
+    if (program !== "") {
+      if (typeof program !== "string" || !program.trim()) {
+        setError("Programa inválido.");
+        return;
+      }
+      programId = program;
+    }
     setError("");
     setSaving(true);
     try {
-      await onSubmit(clean, groupNumber, semesterNumber);
+      await onSubmit(clean, groupNumber, semesterNumber, programId);
     } catch (err) {
       const data = err?.response?.data;
-      setError((data && (data.name?.[0] || data.group_number?.[0] || data.semester?.[0] || data.detail)) || "No se pudo guardar el curso.");
+      setError(
+        (data && (data.name?.[0] || data.group_number?.[0] || data.semester?.[0] || data.program?.[0] || data.detail)) ||
+          "No se pudo guardar el curso."
+      );
     } finally {
       setSaving(false);
     }
@@ -81,6 +117,24 @@ export default function CourseForm({ initialName = "", initialGroup = 1, initial
           {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
             <option key={n} value={n}>
               Semestre {n}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label htmlFor="course-program" className="mb-1 block text-sm font-medium text-slate-700">
+          Programa
+        </label>
+        <select
+          id="course-program"
+          value={program}
+          onChange={(e) => setProgram(e.target.value)}
+          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
+        >
+          <option value="">Sin programa</option>
+          {programs.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
             </option>
           ))}
         </select>

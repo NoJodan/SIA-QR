@@ -48,14 +48,14 @@ export default function MisCursos({ onSelectGroup }) {
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
-  const handleCreate = async (name, groupNumber, semester) => {
-    const created = await createMyGroup(name, groupNumber, semester);
+  const handleCreate = async (name, groupNumber, semester, programId) => {
+    const created = await createMyGroup(name, groupNumber, semester, programId);
     setGroups((prev) => [...prev, created]);
     setShowForm(false);
   };
 
-  const handleUpdate = async (id, name, groupNumber, semester) => {
-    const updated = await updateMyGroup(id, name, groupNumber, semester);
+  const handleUpdate = async (id, name, groupNumber, semester, programId) => {
+    const updated = await updateMyGroup(id, name, groupNumber, semester, programId);
     setGroups((prev) => prev.map((g) => (g.id === id ? updated : g)));
     setEditingId(null);
   };
@@ -203,8 +203,11 @@ export default function MisCursos({ onSelectGroup }) {
                     initialName={g.course?.name || ""}
                     initialGroup={Number(g.group_code) || 1}
                     initialSemester={g.semester || 1}
+                    initialProgramId={g.course?.program ?? null}
                     submitLabel="Guardar"
-                    onSubmit={(name, groupNumber, semester) => handleUpdate(g.id, name, groupNumber, semester)}
+                    onSubmit={(name, groupNumber, semester, programId) =>
+                      handleUpdate(g.id, name, groupNumber, semester, programId)
+                    }
                     onCancel={() => setEditingId(null)}
                   />
                 </div>
@@ -225,6 +228,11 @@ export default function MisCursos({ onSelectGroup }) {
                           <span className="ml-2 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
                             Semestre {g.semester || 1}
                           </span>
+                          {g.course?.program_name && (
+                            <span className="ml-2 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
+                              {g.course.program_name}
+                            </span>
+                          )}
                         </h3>
                       </button>
                       <p className="mt-0.5 text-sm text-slate-500">

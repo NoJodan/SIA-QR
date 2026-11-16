@@ -9,6 +9,7 @@ export default function Sidebar({ activeTab, onSelectTab, onLogout, onGoHome, us
     { id: "profesores", label: "Profesores", icon: "fa-solid fa-chalkboard-user" },
     { id: "estudiantes", label: "Estudiantes", icon: "fa-solid fa-user-graduate" },
     { id: "cursos", label: "Cursos", icon: "fa-regular fa-bookmark" },
+    { id: "programas", label: "Programas", icon: "fa-solid fa-university" },
     { id: "resumen", label: "Resumen", icon: "fa-solid fa-chart-simple" },
     { id: "reportes", label: "Reportes", icon: "fa-solid fa-file-export" },
     { id: "auditoria", label: "Auditoría", icon: "fa-solid fa-clipboard-user" },

@@ -13,6 +13,7 @@ from apps.academic.models import (
     AcademicGroup,
     ClassStatus,
     Course,
+    Program,
     ScheduledClass,
 )
 from apps.academic.services import (
@@ -1296,3 +1297,236 @@ class GroupSemesterTests(TestCase):
         self.assertEqual(resp.data["semester"], 9)
         self.group.refresh_from_db()
         self.assertEqual(self.group.semester, 9)
+
+
+class ProgramTests(TestCase):
+    """CRUD de programas: validación de código/área, permisos y borrado protegido."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            email="progadmin@ut.edu.co", google_sub="sub-progadmin", role="ROLE_ADMIN"
+        )
+        self.prof_user, _, self.group = _make_prof_group(email="prog@ut.edu.co")
+        self.admin_client = APIClient()
+        self.admin_client.force_login(self.admin)
+        self.prof_client = APIClient()
+        self.prof_client.force_login(self.prof_user)
+        self.url = "/api/academic/programs/"
+
+    def _create(self, **extra):
+        data = {"name": "Ingeniería de Sistemas", "code": "0123", "area": "Presencial"}
+        data.update(extra)
+        return self.admin_client.post(self.url, data, format="json")
+
+    def test_create_valid_program_persists(self):
+        resp = self._create()
+        self.assertEqual(resp.status_code, 201, resp.data)
+        program = Program.objects.get(pk=resp.data["id"])
+        self.assertEqual(program.name, "Ingeniería de Sistemas")
+        self.assertEqual(program.code, "0123")
+        self.assertEqual(program.area, "Presencial")
+        self.assertEqual(resp.data["courses"], [])
+
+    def test_create_with_short_code_is_400(self):
+        before = Program.objects.count()
+        resp = self._create(code="12")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("code", resp.data)
+        self.assertEqual(Program.objects.count(), before)
+
+    def test_create_with_alpha_code_is_400(self):
+        resp = self._create(code="abcd")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("code", resp.data)
+
+    def test_create_with_invalid_area_is_400(self):
+        resp = self._create(area="Virtual")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("area", resp.data)
+
+    def test_duplicate_code_is_400(self):
+        self.assertEqual(self._create().status_code, 201)
+        before = Program.objects.count()
+        resp = self._create(name="Otra Ingeniería")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("code", resp.data)
+        self.assertEqual(Program.objects.count(), before)
+
+    def test_professor_cannot_create(self):
+        before = Program.objects.count()
+        resp = self.prof_client.post(
+            self.url, {"name": "X", "code": "9999", "area": "IDEAD"}, format="json"
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(Program.objects.count(), before)
+
+    def test_professor_can_list_for_select(self):
+        self.assertEqual(self._create().status_code, 201)
+        resp = self.prof_client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["results"][0]["name"], "Ingeniería de Sistemas")
+
+    def test_patch_updates_name_and_area(self):
+        created = self._create()
+        resp = self.admin_client.patch(
+            f"{self.url}{created.data['id']}/",
+            {"name": "Ing. de Sistemas", "code": "0123", "area": "IDEAD"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        program = Program.objects.get(pk=created.data["id"])
+        self.assertEqual(program.name, "Ing. de Sistemas")
+        self.assertEqual(program.area, "IDEAD")
+
+    def test_delete_with_courses_is_409_and_keeps_program(self):
+        created = self._create()
+        program = Program.objects.get(pk=created.data["id"])
+        self.group.course.program = program
+        self.group.course.save(update_fields=["program"])
+        resp = self.admin_client.delete(f"{self.url}{program.id}/")
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(resp.data["error"], "Tiene cursos asociados; no se puede eliminar.")
+        self.assertTrue(Program.objects.filter(pk=program.id).exists())
+
+    def test_delete_empty_program_is_204(self):
+        created = self._create()
+        resp = self.admin_client.delete(f"{self.url}{created.data['id']}/")
+        self.assertEqual(resp.status_code, 204)
+        self.assertFalse(Program.objects.exists())
+
+    def test_create_logs_program_created(self):
+        resp = self._create()
+        self.assertEqual(resp.status_code, 201)
+        event = AuditLog.objects.get(event_type="program_created")
+        self.assertEqual(event.actor_id, self.admin.id)
+        self.assertEqual(event.resource, f"program:{resp.data['id']}")
+        self.assertEqual(
+            event.payload,
+            {"name": "Ingeniería de Sistemas", "code": "0123", "area": "Presencial"},
+        )
+
+    def test_patch_logs_program_updated(self):
+        created = self._create()
+        resp = self.admin_client.patch(
+            f"{self.url}{created.data['id']}/",
+            {"name": "Ing. de Sistemas", "code": "0123", "area": "IDEAD"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        event = AuditLog.objects.get(event_type="program_updated")
+        self.assertEqual(event.actor_id, self.admin.id)
+        self.assertEqual(event.resource, f"program:{created.data['id']}")
+        self.assertEqual(
+            event.payload, {"name": "Ing. de Sistemas", "code": "0123", "area": "IDEAD"}
+        )
+
+    def test_delete_logs_program_deleted(self):
+        created = self._create()
+        resp = self.admin_client.delete(f"{self.url}{created.data['id']}/")
+        self.assertEqual(resp.status_code, 204)
+        event = AuditLog.objects.get(event_type="program_deleted")
+        self.assertEqual(event.actor_id, self.admin.id)
+        self.assertEqual(event.resource, f"program:{created.data['id']}")
+        self.assertEqual(
+            event.payload,
+            {"name": "Ingeniería de Sistemas", "code": "0123", "area": "Presencial"},
+        )
+
+    def test_delete_with_courses_logs_nothing(self):
+        created = self._create()
+        program = Program.objects.get(pk=created.data["id"])
+        self.group.course.program = program
+        self.group.course.save(update_fields=["program"])
+        resp = self.admin_client.delete(f"{self.url}{program.id}/")
+        self.assertEqual(resp.status_code, 409)
+        self.assertFalse(AuditLog.objects.filter(event_type="program_deleted").exists())
+
+    def test_list_returns_program_courses_via_groups(self):
+        created = self._create()
+        program = Program.objects.get(pk=created.data["id"])
+        self.group.course.program = program
+        self.group.course.save(update_fields=["program"])
+        resp = self.admin_client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        item = resp.data["results"][0]
+        self.assertEqual(len(item["courses"]), 1)
+        self.assertEqual(item["courses"][0]["group_id"], str(self.group.id))
+        self.assertEqual(item["courses"][0]["name"], "Curso Auto")
+        self.assertEqual(item["courses"][0]["group_code"], "01")
+
+
+class GroupProgramTests(TestCase):
+    """Asignación de programa al crear/actualizar un curso (my-groups)."""
+
+    def setUp(self):
+        self.user, _, self.group = _make_prof_group(email="gprog@ut.edu.co")
+        self.client = APIClient()
+        self.client.force_login(self.user)
+        self.url = "/api/academic/my-groups/"
+        self.program = Program.objects.create(
+            name="Ingeniería de Sistemas", code="0123", area="Presencial"
+        )
+
+    def test_create_with_program_assigns_course_program(self):
+        resp = self.client.post(
+            self.url,
+            {"name": "Cálculo", "group_number": 3, "program": str(self.program.id)},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.data)
+        created = AcademicGroup.objects.get(pk=resp.data["id"])
+        self.assertEqual(created.course.program_id, self.program.id)
+        self.assertEqual(str(resp.data["course"]["program"]), str(self.program.id))
+        self.assertEqual(resp.data["course"]["program_name"], "Ingeniería de Sistemas")
+
+    def test_create_without_program_is_null(self):
+        resp = self.client.post(
+            self.url, {"name": "Cálculo", "group_number": 3}, format="json"
+        )
+        self.assertEqual(resp.status_code, 201, resp.data)
+        created = AcademicGroup.objects.get(pk=resp.data["id"])
+        self.assertIsNone(created.course.program_id)
+        self.assertIsNone(resp.data["course"]["program"])
+
+    def test_create_with_unknown_program_is_400(self):
+        before = AcademicGroup.objects.count()
+        resp = self.client.post(
+            self.url,
+            {
+                "name": "X",
+                "group_number": 1,
+                "program": "00000000-0000-0000-0000-000000000000",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("program", resp.data)
+        self.assertEqual(AcademicGroup.objects.count(), before)
+
+    def test_patch_sets_keeps_and_clears_program(self):
+        url = f"/api/academic/my-groups/{self.group.id}/"
+        # Asigna.
+        resp = self.client.patch(
+            url,
+            {"name": "Curso Auto", "group_number": 1, "program": str(self.program.id)},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.group.course.refresh_from_db()
+        self.assertEqual(self.group.course.program_id, self.program.id)
+        # Sin el campo no cambia.
+        resp = self.client.patch(
+            url, {"name": "Curso Auto", "group_number": 1}, format="json"
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.group.course.refresh_from_db()
+        self.assertEqual(self.group.course.program_id, self.program.id)
+        # null lo vacía.
+        resp = self.client.patch(
+            url,
+            {"name": "Curso Auto", "group_number": 1, "program": None},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.group.course.refresh_from_db()
+        self.assertIsNone(self.group.course.program_id)
