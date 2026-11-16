@@ -322,13 +322,33 @@ function DateRangePicker({ from, to, onChange }) {
   );
 }
 
-const emptyFilters = { q: "", actor: "", subject: "", from: "", to: "" };
+const emptyFilters = {
+  q: "",
+  actor: "",
+  subject: "",
+  action: "",
+  actionTypes: [],
+  ordering: "",
+  from: "",
+  to: "",
+};
 
 const buildParams = (filters) => {
   const params = {};
   if (filters.q.trim()) params.q = filters.q.trim();
   if (filters.actor) params.actor = filters.actor;
   if (filters.subject) params.subject = filters.subject;
+  // Acción y módulo se combinan por intersección de event_types; el centinela
+  // __ninguno__ devuelve 0 resultados si no se cruzan.
+  const sets = [filters.actionTypes, filters.moduleTypes].filter(
+    (types) => types && types.length,
+  );
+  if (sets.length) {
+    params.event_type =
+      sets.reduce((acc, cur) => acc.filter((t) => cur.includes(t))).join(",") ||
+      "__ninguno__";
+  }
+  if (filters.ordering) params.ordering = filters.ordering;
   if (filters.from) params.from = filters.from;
   if (filters.to) params.to = filters.to;
   return params;
@@ -419,7 +439,27 @@ export default function Auditoria() {
   const set = (key) => (event) =>
     setDraft((prev) => ({ ...prev, [key]: event.target.value }));
 
+  const setAction = (event) => {
+    const label = event.target.value;
+    const entry = actionOptions.find((o) => o.label === label);
+    setDraft((prev) => ({
+      ...prev,
+      action: label,
+      actionTypes: entry ? entry.types : [],
+    }));
+  };
+
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
+
+  // Opciones de acción agrupadas a partir de los event_type del backend.
+  const actionOptions = [];
+  options.event_types.forEach((et) => {
+    const { label } = actionMeta(et);
+    let entry = actionOptions.find((o) => o.label === label);
+    if (!entry) actionOptions.push((entry = { label, types: [] }));
+    entry.types.push(et);
+  });
+  actionOptions.sort((a, b) => a.label.localeCompare(b.label, "es"));
 
   const kpis = (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -541,6 +581,54 @@ export default function Auditoria() {
                     {subject}
                   </option>
                 ))}
+              </select>
+              <i
+                className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
+                aria-hidden="true"
+              />
+            </div>
+          </div>
+
+          <div className="min-w-0">
+            <label htmlFor="aud-accion" className={labelCls}>
+              <i className="fa-solid fa-bolt text-[#B3200E]/80" aria-hidden="true" />
+              Acción
+            </label>
+            <div className="relative">
+              <select
+                id="aud-accion"
+                value={draft.action}
+                onChange={setAction}
+                className={`${inputCls} appearance-none pr-9`}
+              >
+                <option value="">Todas las acciones</option>
+                {actionOptions.map((option) => (
+                  <option key={option.label} value={option.label}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <i
+                className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
+                aria-hidden="true"
+              />
+            </div>
+          </div>
+
+          <div className="min-w-0">
+            <label htmlFor="aud-orden" className={labelCls}>
+              <i className="fa-solid fa-arrow-down-a-z text-[#B3200E]/80" aria-hidden="true" />
+              Orden
+            </label>
+            <div className="relative">
+              <select
+                id="aud-orden"
+                value={draft.ordering}
+                onChange={set("ordering")}
+                className={`${inputCls} appearance-none pr-9`}
+              >
+                <option value="">Más recientes</option>
+                <option value="actor">Nombre (A–Z)</option>
               </select>
               <i
                 className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"

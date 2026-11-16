@@ -403,9 +403,11 @@ class AuditLogListView(generics.ListAPIView):
     """RF-ADM-07: consulta paginada de auditoría (solo administradores).
 
     Filtros opcionales: actor (UUID de usuario), q (texto libre sobre nombre/
-    email del actor, event_type, resource y payload), event_type, resource,
-    subject (materia = nombre del curso de los grupos del profesor) y rango
-    de fechas from/to (AAAA-MM-DD, inclusivo por día en America/Bogota).
+    email del actor, event_type, resource y payload), event_type (uno o
+    varios separados por coma), resource, subject (materia = nombre del curso
+    de los grupos del profesor) y rango de fechas from/to (AAAA-MM-DD,
+    inclusivo por día en America/Bogota). Con ordering=actor se ordena
+    alfabéticamente por nombre del actor; por defecto, más recientes primero.
 
     Los eventos de inicio/cierre de sesión (login_success, logout) se siguen
     registrando por seguridad, pero NO se muestran aquí: saturan la vista.
@@ -461,7 +463,9 @@ class AuditLogListView(generics.ListAPIView):
         )
         params = self.request.query_params
         if params.get("event_type"):
-            qs = qs.filter(event_type=params["event_type"])
+            event_types = [t for t in params["event_type"].split(",") if t]
+            if event_types:
+                qs = qs.filter(event_type__in=event_types)
         if params.get("resource"):
             qs = qs.filter(resource=params["resource"])
         if params.get("actor"):
@@ -509,6 +513,8 @@ class AuditLogListView(generics.ListAPIView):
                     {key: "Formato de fecha inválido, usa AAAA-MM-DD."}
                 )
             qs = qs.filter(**{f"created_at__{lookup}": _day_bounds(day, end=end)})
+        if params.get("ordering") == "actor":
+            qs = qs.order_by("actor_full_name", "-created_at")
         return qs
 
     def list(self, request, *args, **kwargs):

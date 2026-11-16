@@ -1099,6 +1099,44 @@ class AuditLogEndpointTests(TestCase):
             [row["resource"] for row in resp.data["results"]], ["group:c"]
         )
 
+    def test_filters_by_several_event_types(self):
+        self._log(self.professor, "group_created", "group:1")
+        self._log(self.professor, "class_updated", "class:1")
+        self._log(self.professor, "qr_rotated", "session:1")
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get(
+            "/api/attendance/audit-logs/",
+            {"event_type": "group_created,class_updated"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            sorted(row["event_type"] for row in resp.data["results"]),
+            ["class_updated", "group_created"],
+        )
+
+    def test_orders_by_actor_name(self):
+        ana, _, _ = _make_prof_group(email="alu1@ut.edu.co")
+        zoe, prof_zoe, _ = _make_prof_group(email="zoe9@ut.edu.co")
+        prof_zoe.first_name = "Zoe"
+        prof_zoe.last_name = "Ruiz"
+        prof_zoe.save()
+        self._log(ana, "group_created", "group:a")
+        self._log(zoe, "group_created", "group:z")
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get("/api/attendance/audit-logs/", {"ordering": "actor"})
+        self.assertEqual(
+            [row["actor_name"] for row in resp.data["results"]],
+            ["Ana Perez", "Zoe Ruiz"],
+        )
+        # Por defecto, más recientes primero.
+        resp = client.get("/api/attendance/audit-logs/")
+        self.assertEqual(
+            [row["actor_name"] for row in resp.data["results"]],
+            ["Zoe Ruiz", "Ana Perez"],
+        )
+
 
 class ReportClassIdLimitTests(TestCase):
     def _client(self, email):
