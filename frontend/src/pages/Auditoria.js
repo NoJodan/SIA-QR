@@ -382,7 +382,14 @@ export default function Auditoria() {
       setRows(data.results || []);
       setCount(data.count || 0);
       setStats(data.stats || null);
-      setOptions(data.options || { event_types: [], subjects: [] });
+      // options parcial ({}) o con claves no-array no debe romper los selects.
+      const rawOptions = data.options || {};
+      setOptions({
+        event_types: Array.isArray(rawOptions.event_types)
+          ? rawOptions.event_types
+          : [],
+        subjects: Array.isArray(rawOptions.subjects) ? rawOptions.subjects : [],
+      });
       setSearched(true);
     } catch (err) {
       if (current !== seq.current) return;
