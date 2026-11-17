@@ -1119,6 +1119,19 @@ class AuditLogEndpointTests(TestCase):
             [row["resource"] for row in resp.data["results"]], ["group:c"]
         )
 
+    def test_sentinel_event_type_returns_no_results(self):
+        # El frontend envía __ninguno__ cuando la intersección acción ∩
+        # módulo queda vacía: debe responder 200 con 0 filas, no un error.
+        self._log(self.professor, "group_created", "group:1")
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get(
+            "/api/attendance/audit-logs/", {"event_type": "__ninguno__"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 0)
+        self.assertEqual(resp.data["stats"]["total"], 0)
+
     def test_filters_and_options_do_not_merge_calculo_1_and_2(self):
         prof1, _, group1 = _make_prof_group(email="c1x@ut.edu.co")
         prof2, _, group2 = _make_prof_group(email="c2y@ut.edu.co")

@@ -322,7 +322,7 @@ function DateRangePicker({ from, to, onChange }) {
   );
 }
 
-const emptyFilters = {
+export const emptyFilters = {
   q: "",
   actor: "",
   subject: "",
@@ -335,7 +335,7 @@ const emptyFilters = {
   to: "",
 };
 
-const buildParams = (filters) => {
+export const buildParams = (filters) => {
   const params = {};
   if (filters.q.trim()) params.q = filters.q.trim();
   if (filters.actor) params.actor = filters.actor;
