@@ -1132,6 +1132,39 @@ class AuditLogEndpointTests(TestCase):
         self.assertEqual(resp.data["count"], 0)
         self.assertEqual(resp.data["stats"]["total"], 0)
 
+    def test_event_type_filter_trims_and_caps_values(self):
+        self._log(self.professor, "group_created", "group:1")
+        self._log(self.professor, "class_updated", "class:1")
+        client = APIClient()
+        client.force_login(self.admin)
+        # Un espacio tras la coma no descarta el segundo valor.
+        resp = client.get(
+            "/api/attendance/audit-logs/",
+            {"event_type": " group_created ,  class_updated "},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            sorted(row["event_type"] for row in resp.data["results"]),
+            ["class_updated", "group_created"],
+        )
+        # Tope de 50 valores: los primeros 50 se conservan y el resto se
+        # ignora (group_created queda fuera del tope -> 0 resultados).
+        over = ",".join(f"fake_{i}" for i in range(50)) + ",group_created"
+        resp = client.get("/api/attendance/audit-logs/", {"event_type": over})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 0)
+        # Dentro del tope el comportamiento no cambia.
+        within = "group_created," + ",".join(f"fake_{i}" for i in range(60))
+        resp = client.get("/api/attendance/audit-logs/", {"event_type": within})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 1)
+        # Valor gigante: se acota y la consulta sigue respondiendo 200.
+        resp = client.get(
+            "/api/attendance/audit-logs/", {"event_type": "x" * 5000}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 0)
+
     def test_filters_and_options_do_not_merge_calculo_1_and_2(self):
         prof1, _, group1 = _make_prof_group(email="c1x@ut.edu.co")
         prof2, _, group2 = _make_prof_group(email="c2y@ut.edu.co")
