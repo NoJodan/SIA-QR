@@ -1046,11 +1046,15 @@ class AuditLogEndpointTests(TestCase):
     def test_options_expose_event_types_and_subjects(self):
         _, _, mat1 = _make_prof_group(email="alu1@ut.edu.co")
         _, _, mat2 = _make_prof_group(email="blu2@ut.edu.co")
-        _, _, calc = _make_prof_group(email="clc3@ut.edu.co")
+        _, _, calc1 = _make_prof_group(email="clc3@ut.edu.co")
+        _, _, calc2 = _make_prof_group(email="dlf4@ut.edu.co")
+        # Cuatro grafías distintas de dos materias: sin normalización ni
+        # deduplicación saldrían cuatro opciones en lugar de dos.
         for group, name in (
             (mat1, "Matematicas"),
-            (mat2, "Matematicas"),
-            (calc, "Calculo 1"),
+            (mat2, "matematicas"),
+            (calc1, "Cálculo 1"),
+            (calc2, "Calculo 1"),
         ):
             group.course.name = name
             group.course.save()
@@ -1065,10 +1069,26 @@ class AuditLogEndpointTests(TestCase):
             resp.data["options"]["event_types"],
             ["attendance_marked", "class_updated", "group_created"],
         )
-        # "Curso QA" es el del profesor creado en setUp.
+        # "Curso QA" es el del profesor creado en setUp: 4 grafías -> 2
+        # opciones + esa, y la grafía mostrada es determinista (L2).
         self.assertEqual(
             resp.data["options"]["subjects"],
             ["Calculo 1", "Curso QA", "Matematicas"],
+        )
+        # Las opciones siguen completas al filtrar: no se derivan del
+        # queryset filtrado.
+        resp = client.get(
+            "/api/attendance/audit-logs/",
+            {"subject": "MATEMATICAS", "event_type": "group_created"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp.data["options"]["subjects"],
+            ["Calculo 1", "Curso QA", "Matematicas"],
+        )
+        self.assertEqual(
+            resp.data["options"]["event_types"],
+            ["attendance_marked", "class_updated", "group_created"],
         )
 
     def test_filters_by_subject_ignoring_case_and_accents(self):
