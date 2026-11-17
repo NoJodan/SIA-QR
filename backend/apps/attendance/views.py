@@ -386,8 +386,9 @@ def _normalize_subject(name):
 def _subject_options():
     """Materias distintas de los cursos, deduplicadas sin importar tildes/mayúsculas.
 
-    De cada grafía se conserva la más usada (empate: la primera vista) y el
-    listado va ordenado por la forma normalizada.
+    De cada grafía se conserva la más usada y, con el mismo uso, la primera
+    alfabética, para que la opción no cambie entre requests; el listado va
+    ordenado por la forma normalizada.
     """
     from collections import Counter
 
@@ -396,7 +397,13 @@ def _subject_options():
     spellings = {}
     for name in AcademicGroup.objects.values_list("course__name", flat=True):
         spellings.setdefault(_normalize_subject(name), Counter())[name] += 1
-    return [spellings[key].most_common(1)[0][0] for key in sorted(spellings)]
+
+    def _pick(counter):
+        # most_common empata por orden de llegada y values_list no tiene
+        # order_by: el desempate se resuelve aquí, de forma explícita.
+        return sorted(counter.items(), key=lambda item: (-item[1], item[0]))[0][0]
+
+    return [_pick(spellings[key]) for key in sorted(spellings)]
 
 
 class AuditLogListView(generics.ListAPIView):
