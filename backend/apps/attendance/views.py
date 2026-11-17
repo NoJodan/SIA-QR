@@ -463,7 +463,14 @@ class AuditLogListView(generics.ListAPIView):
         )
         params = self.request.query_params
         if params.get("event_type"):
-            event_types = [t for t in params["event_type"].split(",") if t]
+            # Trim por valor (un espacio tras la coma no descarta el resto) y
+            # tope de 50 valores de 100 chars: acota la cláusula IN a lo que
+            # la UI puede mandar (11 acciones) sin cambiar resultados reales.
+            event_types = [
+                t.strip()[:100]
+                for t in params["event_type"].split(",")
+                if t.strip()
+            ][:50]
             if event_types:
                 qs = qs.filter(event_type__in=event_types)
         if params.get("resource"):
