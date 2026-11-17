@@ -1116,25 +1116,40 @@ class AuditLogEndpointTests(TestCase):
         )
 
     def test_orders_by_actor_name(self):
-        ana, _, _ = _make_prof_group(email="alu1@ut.edu.co")
-        zoe, prof_zoe, _ = _make_prof_group(email="zoe9@ut.edu.co")
+        # Nombre y correo en orden opuesto: si se ordenara por email, Ana
+        # (zoe9@) saldría después de Zoe (ana1@) y el test fallaría.
+        ana, _, _ = _make_prof_group(email="zoe9@ut.edu.co")
+        zoe, prof_zoe, _ = _make_prof_group(email="ana1@ut.edu.co")
         prof_zoe.first_name = "Zoe"
         prof_zoe.last_name = "Ruiz"
         prof_zoe.save()
         self._log(ana, "group_created", "group:a")
         self._log(zoe, "group_created", "group:z")
+        # Admin sin perfil: su nombre completo cae al correo (fallback).
+        self._log(self.admin, "admin_clear_users", "users:all")
         client = APIClient()
         client.force_login(self.admin)
         resp = client.get("/api/attendance/audit-logs/", {"ordering": "actor"})
-        self.assertEqual(
-            [row["actor_name"] for row in resp.data["results"]],
-            ["Ana Perez", "Zoe Ruiz"],
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 3)
+        # Sin perfil el fallback es el correo, que no compite con los nombres.
+        professors = [
+            row["actor_name"]
+            for row in resp.data["results"]
+            if row["actor_role"] == "ROLE_PROFESSOR"
+        ]
+        self.assertEqual(professors, ["Ana Perez", "Zoe Ruiz"])
+        admin_row = next(
+            row
+            for row in resp.data["results"]
+            if row["actor_role"] == "ROLE_ADMIN"
         )
+        self.assertEqual(admin_row["actor_name"], "auditadmin@ut.edu.co")
         # Por defecto, más recientes primero.
         resp = client.get("/api/attendance/audit-logs/")
         self.assertEqual(
             [row["actor_name"] for row in resp.data["results"]],
-            ["Zoe Ruiz", "Ana Perez"],
+            ["auditadmin@ut.edu.co", "Zoe Ruiz", "Ana Perez"],
         )
 
 
