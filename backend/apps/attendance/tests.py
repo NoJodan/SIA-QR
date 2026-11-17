@@ -1119,6 +1119,32 @@ class AuditLogEndpointTests(TestCase):
             [row["resource"] for row in resp.data["results"]], ["group:c"]
         )
 
+    def test_filters_and_options_do_not_merge_calculo_1_and_2(self):
+        prof1, _, group1 = _make_prof_group(email="c1x@ut.edu.co")
+        prof2, _, group2 = _make_prof_group(email="c2y@ut.edu.co")
+        group1.course.name = "Calculo 1"
+        group1.course.save()
+        group2.course.name = "Calculo 2"
+        group2.course.save()
+        self._log(prof1, "group_created", "group:c1")
+        self._log(prof2, "group_created", "group:c2")
+        client = APIClient()
+        client.force_login(self.admin)
+        # Filtrar por "calculo 1" excluye el curso "Calculo 2".
+        resp = client.get("/api/attendance/audit-logs/", {"subject": "calculo 1"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            [row["resource"] for row in resp.data["results"]], ["group:c1"]
+        )
+        # Y "Calculo 2" sigue siendo filtro propio, no se deduplicó.
+        resp = client.get("/api/attendance/audit-logs/", {"subject": "Calculo 2"})
+        self.assertEqual(
+            [row["resource"] for row in resp.data["results"]], ["group:c2"]
+        )
+        # En las opciones aparecen como dos entradas distintas.
+        self.assertIn("Calculo 1", resp.data["options"]["subjects"])
+        self.assertIn("Calculo 2", resp.data["options"]["subjects"])
+
     def test_filters_by_several_event_types(self):
         self._log(self.professor, "group_created", "group:1")
         self._log(self.professor, "class_updated", "class:1")
