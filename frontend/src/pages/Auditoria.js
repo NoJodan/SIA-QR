@@ -322,12 +322,35 @@ function DateRangePicker({ from, to, onChange }) {
   );
 }
 
-const emptyFilters = { q: "", actor: "", from: "", to: "" };
+export const emptyFilters = {
+  q: "",
+  actor: "",
+  subject: "",
+  action: "",
+  actionTypes: [],
+  module: "",
+  moduleTypes: [],
+  ordering: "",
+  from: "",
+  to: "",
+};
 
-const buildParams = (filters) => {
+export const buildParams = (filters) => {
   const params = {};
   if (filters.q.trim()) params.q = filters.q.trim();
   if (filters.actor) params.actor = filters.actor;
+  if (filters.subject) params.subject = filters.subject;
+  // Acción y módulo se combinan por intersección de event_types; el centinela
+  // __ninguno__ devuelve 0 resultados si no se cruzan.
+  const sets = [filters.actionTypes, filters.moduleTypes].filter(
+    (types) => types && types.length,
+  );
+  if (sets.length) {
+    params.event_type =
+      sets.reduce((acc, cur) => acc.filter((t) => cur.includes(t))).join(",") ||
+      "__ninguno__";
+  }
+  if (filters.ordering) params.ordering = filters.ordering;
   if (filters.from) params.from = filters.from;
   if (filters.to) params.to = filters.to;
   return params;
@@ -336,6 +359,7 @@ const buildParams = (filters) => {
 export default function Auditoria() {
   const [draft, setDraft] = useState(emptyFilters);
   const [applied, setApplied] = useState(emptyFilters);
+  const [showMore, setShowMore] = useState(false);
   const [page, setPage] = useState(1);
   const [rows, setRows] = useState([]);
   const [count, setCount] = useState(0);
@@ -344,6 +368,7 @@ export default function Auditoria() {
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
   const [professors, setProfessors] = useState([]);
+  const [options, setOptions] = useState({ event_types: [], subjects: [] });
   const seq = useRef(0);
 
   const run = useCallback(async (filters, pageNum) => {
@@ -357,6 +382,14 @@ export default function Auditoria() {
       setRows(data.results || []);
       setCount(data.count || 0);
       setStats(data.stats || null);
+      // options parcial ({}) o con claves no-array no debe romper los selects.
+      const rawOptions = data.options || {};
+      setOptions({
+        event_types: Array.isArray(rawOptions.event_types)
+          ? rawOptions.event_types
+          : [],
+        subjects: Array.isArray(rawOptions.subjects) ? rawOptions.subjects : [],
+      });
       setSearched(true);
     } catch (err) {
       if (current !== seq.current) return;
@@ -377,7 +410,7 @@ export default function Auditoria() {
 
   // Profesores del select: reutiliza filters.professors del endpoint de
   // estadísticas (trae user_id, el valor que espera ?actor=). Si falla, el
-  // select queda solo con "Todos los usuarios".
+  // select queda solo con "Todos los profesores".
   useEffect(() => {
     let alive = true;
     getStats({ period: "1d" })
@@ -416,7 +449,47 @@ export default function Auditoria() {
   const set = (key) => (event) =>
     setDraft((prev) => ({ ...prev, [key]: event.target.value }));
 
+  const setAction = (event) => {
+    const label = event.target.value;
+    const entry = actionOptions.find((o) => o.label === label);
+    setDraft((prev) => ({
+      ...prev,
+      action: label,
+      actionTypes: entry ? entry.types : [],
+    }));
+  };
+
+  const setModule = (event) => {
+    const label = event.target.value;
+    const entry = moduleOptions.find((o) => o.label === label);
+    setDraft((prev) => ({
+      ...prev,
+      module: label,
+      moduleTypes: entry ? entry.types : [],
+    }));
+  };
+
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
+
+  // Opciones de acción agrupadas a partir de los event_type del backend.
+  const actionOptions = [];
+  options.event_types.forEach((et) => {
+    const { label } = actionMeta(et);
+    let entry = actionOptions.find((o) => o.label === label);
+    if (!entry) actionOptions.push((entry = { label, types: [] }));
+    entry.types.push(et);
+  });
+  actionOptions.sort((a, b) => a.label.localeCompare(b.label, "es"));
+
+  // Opciones de módulo agrupadas igual que las de acción.
+  const moduleOptions = [];
+  options.event_types.forEach((et) => {
+    const { label, icon } = moduleMeta(et);
+    let entry = moduleOptions.find((o) => o.label === label);
+    if (!entry) moduleOptions.push((entry = { label, icon, types: [] }));
+    entry.types.push(et);
+  });
+  moduleOptions.sort((a, b) => a.label.localeCompare(b.label, "es"));
 
   const kpis = (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -476,7 +549,7 @@ export default function Auditoria() {
       )}
 
       <section className={cardCls}>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-3">
           <div className="min-w-0">
             <label htmlFor="aud-q" className={labelCls}>
               <i className="fa-solid fa-magnifying-glass text-[#B3200E]/80" aria-hidden="true" />
@@ -486,14 +559,14 @@ export default function Auditoria() {
               id="aud-q"
               value={draft.q}
               onChange={(value) => setDraft((prev) => ({ ...prev, q: value }))}
-              placeholder="Buscar por usuario, acción o detalle…"
+              placeholder="Buscar por profesor, acción o detalle…"
             />
           </div>
 
           <div className="min-w-0">
             <label htmlFor="aud-usuario" className={labelCls}>
               <i className="fa-solid fa-user text-[#B3200E]/80" aria-hidden="true" />
-              Usuario
+              Profesor
             </label>
             <div className="relative">
               <select
@@ -502,7 +575,7 @@ export default function Auditoria() {
                 onChange={set("actor")}
                 className={`${inputCls} appearance-none pr-9`}
               >
-                <option value="">Todos los usuarios</option>
+                <option value="">Todos los profesores</option>
                 {professors.length > 0 && (
                   <optgroup label="Profesores">
                     {professors.map((professor) => (
@@ -533,6 +606,110 @@ export default function Auditoria() {
           </div>
         </div>
 
+        {showMore && (
+          <div id="aud-more-filters" className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="min-w-0">
+              <label htmlFor="aud-materia" className={labelCls}>
+                <i className="fa-solid fa-book-open text-[#B3200E]/80" aria-hidden="true" />
+                Materia
+              </label>
+              <div className="relative">
+                <select
+                  id="aud-materia"
+                  value={draft.subject}
+                  onChange={set("subject")}
+                  className={`${inputCls} appearance-none pr-9`}
+                >
+                  <option value="">Todas las materias</option>
+                  {options.subjects.map((subject) => (
+                    <option key={subject} value={subject}>
+                      {subject}
+                    </option>
+                  ))}
+                </select>
+                <i
+                  className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <label htmlFor="aud-accion" className={labelCls}>
+                <i className="fa-solid fa-bolt text-[#B3200E]/80" aria-hidden="true" />
+                Acción
+              </label>
+              <div className="relative">
+                <select
+                  id="aud-accion"
+                  value={draft.action}
+                  onChange={setAction}
+                  className={`${inputCls} appearance-none pr-9`}
+                >
+                  <option value="">Todas las acciones</option>
+                  {actionOptions.map((option) => (
+                    <option key={option.label} value={option.label}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <i
+                  className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <label htmlFor="aud-modulo" className={labelCls}>
+                <i className="fa-solid fa-layer-group text-[#B3200E]/80" aria-hidden="true" />
+                Módulo
+              </label>
+              <div className="relative">
+                <select
+                  id="aud-modulo"
+                  value={draft.module}
+                  onChange={setModule}
+                  className={`${inputCls} appearance-none pr-9`}
+                >
+                  <option value="">Todos los módulos</option>
+                  {moduleOptions.map((option) => (
+                    <option key={option.label} value={option.label}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <i
+                  className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <label htmlFor="aud-orden" className={labelCls}>
+                <i className="fa-solid fa-arrow-down-a-z text-[#B3200E]/80" aria-hidden="true" />
+                Orden
+              </label>
+              <div className="relative">
+                <select
+                  id="aud-orden"
+                  value={draft.ordering}
+                  onChange={set("ordering")}
+                  className={`${inputCls} appearance-none pr-9`}
+                >
+                  <option value="">Más recientes</option>
+                  <option value="actor">Nombre (A–Z)</option>
+                </select>
+                <i
+                  className="fa-solid fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" onClick={handleFiltrar} disabled={loading} className={primaryBtnCls}>
             <i
@@ -544,6 +721,16 @@ export default function Auditoria() {
           <button type="button" onClick={handleLimpiar} disabled={loading} className={secondaryBtnCls}>
             <i className="fa-solid fa-eraser" aria-hidden="true" />
             Limpiar
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowMore((v) => !v)}
+            aria-expanded={showMore}
+            aria-controls="aud-more-filters"
+            className={secondaryBtnCls}
+          >
+            <i className="fa-solid fa-sliders" aria-hidden="true" />
+            {showMore ? "Menos filtros" : "Más filtros"}
           </button>
         </div>
       </section>

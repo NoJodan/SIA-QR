@@ -1043,6 +1043,207 @@ class AuditLogEndpointTests(TestCase):
         self.assertIsNone(denied["actor_name"])
         self.assertIsNone(denied["actor_email"])
 
+    def test_options_expose_event_types_and_subjects(self):
+        _, _, mat1 = _make_prof_group(email="alu1@ut.edu.co")
+        _, _, mat2 = _make_prof_group(email="blu2@ut.edu.co")
+        _, _, calc1 = _make_prof_group(email="clc3@ut.edu.co")
+        _, _, calc2 = _make_prof_group(email="dlf4@ut.edu.co")
+        # Cuatro grafías distintas de dos materias: sin normalización ni
+        # deduplicación saldrían cuatro opciones en lugar de dos.
+        for group, name in (
+            (mat1, "Matematicas"),
+            (mat2, "matematicas"),
+            (calc1, "Cálculo 1"),
+            (calc2, "Calculo 1"),
+        ):
+            group.course.name = name
+            group.course.save()
+        for event_type in ("group_created", "class_updated", "attendance_marked"):
+            self._log(self.professor, event_type, "x:1")
+        self._log(self.professor, "login_success", "user:1")
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get("/api/attendance/audit-logs/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp.data["options"]["event_types"],
+            ["attendance_marked", "class_updated", "group_created"],
+        )
+        # "Curso QA" es el del profesor creado en setUp: 4 grafías -> 2
+        # opciones + esa, y la grafía mostrada es determinista (L2).
+        self.assertEqual(
+            resp.data["options"]["subjects"],
+            ["Calculo 1", "Curso QA", "Matematicas"],
+        )
+        # Las opciones siguen completas al filtrar: no se derivan del
+        # queryset filtrado.
+        resp = client.get(
+            "/api/attendance/audit-logs/",
+            {"subject": "MATEMATICAS", "event_type": "group_created"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp.data["options"]["subjects"],
+            ["Calculo 1", "Curso QA", "Matematicas"],
+        )
+        self.assertEqual(
+            resp.data["options"]["event_types"],
+            ["attendance_marked", "class_updated", "group_created"],
+        )
+
+    def test_filters_by_subject_ignoring_case_and_accents(self):
+        prof_a, _, group_a = _make_prof_group(email="alu1@ut.edu.co")
+        prof_b, _, group_b = _make_prof_group(email="blu2@ut.edu.co")
+        prof_c, _, group_c = _make_prof_group(email="clc3@ut.edu.co")
+        for group, name in (
+            (group_a, "Matematicas"),
+            (group_b, "matematicas"),
+            (group_c, "Cálculo 1"),
+        ):
+            group.course.name = name
+            group.course.save()
+        self._log(prof_a, "group_created", "group:a")
+        self._log(prof_b, "group_created", "group:b")
+        self._log(prof_c, "group_created", "group:c")
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get("/api/attendance/audit-logs/", {"subject": "MATEMATICAS"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            sorted(row["resource"] for row in resp.data["results"]),
+            ["group:a", "group:b"],
+        )
+        # "Cálculo 1" se encuentra sin tilde ni mayúscula.
+        resp = client.get("/api/attendance/audit-logs/", {"subject": "calculo 1"})
+        self.assertEqual(
+            [row["resource"] for row in resp.data["results"]], ["group:c"]
+        )
+
+    def test_sentinel_event_type_returns_no_results(self):
+        # El frontend envía __ninguno__ cuando la intersección acción ∩
+        # módulo queda vacía: debe responder 200 con 0 filas, no un error.
+        self._log(self.professor, "group_created", "group:1")
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get(
+            "/api/attendance/audit-logs/", {"event_type": "__ninguno__"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 0)
+        self.assertEqual(resp.data["stats"]["total"], 0)
+
+    def test_event_type_filter_trims_and_caps_values(self):
+        self._log(self.professor, "group_created", "group:1")
+        self._log(self.professor, "class_updated", "class:1")
+        client = APIClient()
+        client.force_login(self.admin)
+        # Un espacio tras la coma no descarta el segundo valor.
+        resp = client.get(
+            "/api/attendance/audit-logs/",
+            {"event_type": " group_created ,  class_updated "},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            sorted(row["event_type"] for row in resp.data["results"]),
+            ["class_updated", "group_created"],
+        )
+        # Tope de 50 valores: los primeros 50 se conservan y el resto se
+        # ignora (group_created queda fuera del tope -> 0 resultados).
+        over = ",".join(f"fake_{i}" for i in range(50)) + ",group_created"
+        resp = client.get("/api/attendance/audit-logs/", {"event_type": over})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 0)
+        # Dentro del tope el comportamiento no cambia.
+        within = "group_created," + ",".join(f"fake_{i}" for i in range(60))
+        resp = client.get("/api/attendance/audit-logs/", {"event_type": within})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 1)
+        # Valor gigante: se acota y la consulta sigue respondiendo 200.
+        resp = client.get(
+            "/api/attendance/audit-logs/", {"event_type": "x" * 5000}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 0)
+
+    def test_filters_and_options_do_not_merge_calculo_1_and_2(self):
+        prof1, _, group1 = _make_prof_group(email="c1x@ut.edu.co")
+        prof2, _, group2 = _make_prof_group(email="c2y@ut.edu.co")
+        group1.course.name = "Calculo 1"
+        group1.course.save()
+        group2.course.name = "Calculo 2"
+        group2.course.save()
+        self._log(prof1, "group_created", "group:c1")
+        self._log(prof2, "group_created", "group:c2")
+        client = APIClient()
+        client.force_login(self.admin)
+        # Filtrar por "calculo 1" excluye el curso "Calculo 2".
+        resp = client.get("/api/attendance/audit-logs/", {"subject": "calculo 1"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            [row["resource"] for row in resp.data["results"]], ["group:c1"]
+        )
+        # Y "Calculo 2" sigue siendo filtro propio, no se deduplicó.
+        resp = client.get("/api/attendance/audit-logs/", {"subject": "Calculo 2"})
+        self.assertEqual(
+            [row["resource"] for row in resp.data["results"]], ["group:c2"]
+        )
+        # En las opciones aparecen como dos entradas distintas.
+        self.assertIn("Calculo 1", resp.data["options"]["subjects"])
+        self.assertIn("Calculo 2", resp.data["options"]["subjects"])
+
+    def test_filters_by_several_event_types(self):
+        self._log(self.professor, "group_created", "group:1")
+        self._log(self.professor, "class_updated", "class:1")
+        self._log(self.professor, "qr_rotated", "session:1")
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get(
+            "/api/attendance/audit-logs/",
+            {"event_type": "group_created,class_updated"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            sorted(row["event_type"] for row in resp.data["results"]),
+            ["class_updated", "group_created"],
+        )
+
+    def test_orders_by_actor_name(self):
+        # Nombre y correo en orden opuesto: si se ordenara por email, Ana
+        # (zoe9@) saldría después de Zoe (ana1@) y el test fallaría.
+        ana, _, _ = _make_prof_group(email="zoe9@ut.edu.co")
+        zoe, prof_zoe, _ = _make_prof_group(email="ana1@ut.edu.co")
+        prof_zoe.first_name = "Zoe"
+        prof_zoe.last_name = "Ruiz"
+        prof_zoe.save()
+        self._log(ana, "group_created", "group:a")
+        self._log(zoe, "group_created", "group:z")
+        # Admin sin perfil: su nombre completo cae al correo (fallback).
+        self._log(self.admin, "admin_clear_users", "users:all")
+        client = APIClient()
+        client.force_login(self.admin)
+        resp = client.get("/api/attendance/audit-logs/", {"ordering": "actor"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 3)
+        # Sin perfil el fallback es el correo, que no compite con los nombres.
+        professors = [
+            row["actor_name"]
+            for row in resp.data["results"]
+            if row["actor_role"] == "ROLE_PROFESSOR"
+        ]
+        self.assertEqual(professors, ["Ana Perez", "Zoe Ruiz"])
+        admin_row = next(
+            row
+            for row in resp.data["results"]
+            if row["actor_role"] == "ROLE_ADMIN"
+        )
+        self.assertEqual(admin_row["actor_name"], "auditadmin@ut.edu.co")
+        # Por defecto, más recientes primero.
+        resp = client.get("/api/attendance/audit-logs/")
+        self.assertEqual(
+            [row["actor_name"] for row in resp.data["results"]],
+            ["auditadmin@ut.edu.co", "Zoe Ruiz", "Ana Perez"],
+        )
+
 
 class ReportClassIdLimitTests(TestCase):
     def _client(self, email):

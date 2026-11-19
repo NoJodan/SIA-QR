@@ -12,27 +12,39 @@ export const invalidateGroupsCache = () => {
 };
 
 const unwrap = (data) => (Array.isArray(data) ? { results: data, count: data.length } : data);
-const params = (search, page, pageSize, status) => {
+const params = (search, page, pageSize, status, ordering) => {
   const p = {};
   if (search) p.search = search;
   if (page) p.page = page;
   if (pageSize) p.page_size = pageSize;
   if (status) p.status = status;
+  if (ordering) p.ordering = ordering;
   return p;
 };
 
-export const getMyGroups = (search = "", page = 1) =>
-  api.get("/api/academic/my-groups/", { params: params(search, page) }).then((r) => unwrap(r.data));
-export const createMyGroup = (name, groupNumber) =>
-  api.post("/api/academic/my-groups/", { name, group_number: groupNumber }).then((r) => {
-    invalidateGroupsCache();
-    return r.data;
-  });
-export const updateMyGroup = (groupId, name, groupNumber) =>
-  api.patch(`/api/academic/my-groups/${groupId}/`, { name, group_number: groupNumber }).then((r) => {
-    invalidateGroupsCache();
-    return r.data;
-  });
+export const getMyGroups = (search = "", page = 1, ordering = "") =>
+  api
+    .get("/api/academic/my-groups/", { params: params(search, page, null, null, ordering) })
+    .then((r) => unwrap(r.data));
+export const createMyGroup = (name, groupNumber, semester, programId = null) =>
+  api
+    .post("/api/academic/my-groups/", { name, group_number: groupNumber, semester, program: programId ?? null })
+    .then((r) => {
+      invalidateGroupsCache();
+      return r.data;
+    });
+export const updateMyGroup = (groupId, name, groupNumber, semester, programId = null) =>
+  api
+    .patch(`/api/academic/my-groups/${groupId}/`, {
+      name,
+      group_number: groupNumber,
+      semester,
+      program: programId ?? null,
+    })
+    .then((r) => {
+      invalidateGroupsCache();
+      return r.data;
+    });
 export const deleteMyGroup = (groupId) =>
   api.delete(`/api/academic/my-groups/${groupId}/`).then((r) => {
     invalidateGroupsCache();
@@ -52,8 +64,10 @@ export const deleteGroupClass = (groupId, classId) =>
   api.delete(`/api/academic/groups/${groupId}/classes/${classId}/`).then((r) => r.data);
 
 // Admin: solo lectura de cursos + edición de clases
-export const adminGetGroups = (search = "", page = 1) =>
-  api.get("/api/academic/admin/groups/", { params: params(search, page) }).then((r) => unwrap(r.data));
+export const adminGetGroups = (search = "", page = 1, ordering = "") =>
+  api
+    .get("/api/academic/admin/groups/", { params: params(search, page, null, null, ordering) })
+    .then((r) => unwrap(r.data));
 export const adminGetGroup = (groupId) =>
   api.get(`/api/academic/admin/groups/${groupId}/`).then((r) => r.data);
 export const adminGetGroupClasses = (groupId, search = "", page = 1, status = "") =>
@@ -91,3 +105,15 @@ export const rotateCurrentSession = (groupId, classId) =>
       if (err?.response) return { data: err.response.data, status: err.response.status };
       throw err;
     });
+
+// Programas: GET abierto a cualquier autenticado (select de CourseForm);
+// page_size 50 (máximo del backend) para que el select vea todos.
+export const getPrograms = (search = "", page = 1) =>
+  api
+    .get("/api/academic/programs/", { params: params(search, page, 50) })
+    .then((r) => unwrap(r.data));
+// CRUD solo admin (POST/PATCH/DELETE).
+export const adminCreateProgram = (data) => api.post("/api/academic/programs/", data).then((r) => r.data);
+export const adminUpdateProgram = (id, data) =>
+  api.patch(`/api/academic/programs/${id}/`, data).then((r) => r.data);
+export const adminDeleteProgram = (id) => api.delete(`/api/academic/programs/${id}/`).then((r) => r.data);

@@ -11,6 +11,8 @@ from apps.academic.views import (
     InstantClassCreateView,
     MyGroupDetailView,
     MyGroupsListView,
+    ProgramDetailUpdateView,
+    ProgramListCreateView,
     ScheduledClassDetailView,
     ScheduledClassListCreateView,
 )
@@ -53,6 +55,10 @@ urlpatterns = [
     ),
     path("admin/groups/", AdminGroupsListView.as_view(), name="admin-groups"),
     path("admin/groups/<uuid:group_id>/", AdminGroupDetailView.as_view(), name="admin-group-detail"),
+    # Programas: GET abierto a autenticados (select del profesor), POST admin;
+    # PATCH/DELETE solo admin en programs/<id>/.
+    path("programs/", ProgramListCreateView.as_view(), name="programs"),
+    path("programs/<uuid:program_id>/", ProgramDetailUpdateView.as_view(), name="program-detail"),
     path(
         "admin/groups/<uuid:group_id>/classes/",
         AdminClassListView.as_view(),

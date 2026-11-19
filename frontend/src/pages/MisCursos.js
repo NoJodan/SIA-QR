@@ -16,6 +16,7 @@ export default function MisCursos({ onSelectGroup }) {
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [order, setOrder] = useState("name");
   const [count, setCount] = useState(0);
   const debounced = useDebounce(search, 300);
   const seqRef = useRef(0);
@@ -26,7 +27,7 @@ export default function MisCursos({ onSelectGroup }) {
     seqRef.current = seq;
     setLoading(true);
     setError("");
-    getMyGroups(s, p)
+    getMyGroups(s, p, order)
       .then((data) => {
         if (seq !== seqRef.current) return;
         setGroups(data.results || []);
@@ -43,18 +44,18 @@ export default function MisCursos({ onSelectGroup }) {
   useEffect(() => {
     load(debounced, page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debounced, page]);
+  }, [debounced, page, order]);
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
-  const handleCreate = async (name, groupNumber) => {
-    const created = await createMyGroup(name, groupNumber);
+  const handleCreate = async (name, groupNumber, semester, programId) => {
+    const created = await createMyGroup(name, groupNumber, semester, programId);
     setGroups((prev) => [...prev, created]);
     setShowForm(false);
   };
 
-  const handleUpdate = async (id, name, groupNumber) => {
-    const updated = await updateMyGroup(id, name, groupNumber);
+  const handleUpdate = async (id, name, groupNumber, semester, programId) => {
+    const updated = await updateMyGroup(id, name, groupNumber, semester, programId);
     setGroups((prev) => prev.map((g) => (g.id === id ? updated : g)));
     setEditingId(null);
   };
@@ -120,8 +121,19 @@ export default function MisCursos({ onSelectGroup }) {
         </div>
       </section>
 
-      <div className="mb-4">
-        <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Buscar curso..." />
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex-1">
+          <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Buscar curso..." />
+        </div>
+        <select
+          aria-label="Orden alfabético"
+          value={order}
+          onChange={(e) => { setOrder(e.target.value); setPage(1); }}
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
+        >
+          <option value="name">A–Z</option>
+          <option value="-name">Z–A</option>
+        </select>
       </div>
 
       {error && (
@@ -190,8 +202,12 @@ export default function MisCursos({ onSelectGroup }) {
                   <CourseForm
                     initialName={g.course?.name || ""}
                     initialGroup={Number(g.group_code) || 1}
+                    initialSemester={g.semester || 1}
+                    initialProgramId={g.course?.program ?? null}
                     submitLabel="Guardar"
-                    onSubmit={(name, groupNumber) => handleUpdate(g.id, name, groupNumber)}
+                    onSubmit={(name, groupNumber, semester, programId) =>
+                      handleUpdate(g.id, name, groupNumber, semester, programId)
+                    }
                     onCancel={() => setEditingId(null)}
                   />
                 </div>
@@ -209,6 +225,14 @@ export default function MisCursos({ onSelectGroup }) {
                       >
                         <h3 className="text-lg font-bold text-slate-900 break-words group-hover:text-[#B3200E]">
                           {g.course?.name} <span className="text-sm font-semibold text-slate-500">· Grupo {g.group_code}</span>
+                          <span className="ml-2 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
+                            Semestre {g.semester || 1}
+                          </span>
+                          {g.course?.program_name && (
+                            <span className="ml-2 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
+                              {g.course.program_name}
+                            </span>
+                          )}
                         </h3>
                       </button>
                       <p className="mt-0.5 text-sm text-slate-500">

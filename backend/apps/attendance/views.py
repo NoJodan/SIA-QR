@@ -1,4 +1,5 @@
 import hashlib
+import unicodedata
 import uuid
 
 from django.db import IntegrityError, transaction
@@ -376,18 +377,53 @@ class MarkAttendanceView(Auth401Mixin, APIView):
         )
 
 
+def _normalize_subject(name):
+    """Clave de materia sin mayúsculas, tildes ni espacios de más."""
+    text = unicodedata.normalize("NFKD", str(name or "")).encode("ascii", "ignore").decode()
+    return " ".join(text.casefold().split())
+
+
+def _subject_options():
+    """Materias distintas de los cursos, deduplicadas sin importar tildes/mayúsculas.
+
+    De cada grafía se conserva la más usada y, con el mismo uso, la primera
+    alfabética, para que la opción no cambie entre requests; el listado va
+    ordenado por la forma normalizada.
+    """
+    from collections import Counter
+
+    from apps.academic.models import AcademicGroup
+
+    spellings = {}
+    for name in AcademicGroup.objects.values_list("course__name", flat=True):
+        spellings.setdefault(_normalize_subject(name), Counter())[name] += 1
+
+    def _pick(counter):
+        # most_common empata por orden de llegada y values_list no tiene
+        # order_by: el desempate se resuelve aquí, de forma explícita.
+        return sorted(counter.items(), key=lambda item: (-item[1], item[0]))[0][0]
+
+    return [_pick(spellings[key]) for key in sorted(spellings)]
+
+
 class AuditLogListView(generics.ListAPIView):
     """RF-ADM-07: consulta paginada de auditoría (solo administradores).
 
     Filtros opcionales: actor (UUID de usuario), q (texto libre sobre nombre/
-    email del actor, event_type, resource y payload), event_type, resource y
-    rango de fechas from/to (AAAA-MM-DD, inclusivo por día en America/Bogota).
+    email del actor, event_type, resource y payload), event_type (uno o
+    varios separados por coma), resource, subject (materia = nombre del curso
+    de los grupos del profesor) y rango de fechas from/to (AAAA-MM-DD,
+    inclusivo por día en America/Bogota). Con ordering=actor se ordena
+    alfabéticamente por nombre del actor; por defecto, más recientes primero.
 
     Los eventos de inicio/cierre de sesión (login_success, logout) se siguen
     registrando por seguridad, pero NO se muestran aquí: saturan la vista.
 
     La respuesta añade `stats` (total, professors, administrators,
-    last_activity) calculados sobre el queryset ya filtrado, sin paginar.
+    last_activity) calculados sobre el queryset ya filtrado, sin paginar, y
+    `options` (event_types y subjects) para poblar los selects, calculado
+    siempre sobre el histórico completo para que las opciones no
+    desaparezcan al filtrar.
     """
 
     authentication_classes = _AUTH
@@ -434,7 +470,16 @@ class AuditLogListView(generics.ListAPIView):
         )
         params = self.request.query_params
         if params.get("event_type"):
-            qs = qs.filter(event_type=params["event_type"])
+            # Trim por valor (un espacio tras la coma no descarta el resto) y
+            # tope de 50 valores de 100 chars: acota la cláusula IN a lo que
+            # la UI puede mandar (11 acciones) sin cambiar resultados reales.
+            event_types = [
+                t.strip()[:100]
+                for t in params["event_type"].split(",")
+                if t.strip()
+            ][:50]
+            if event_types:
+                qs = qs.filter(event_type__in=event_types)
         if params.get("resource"):
             qs = qs.filter(resource=params["resource"])
         if params.get("actor"):
@@ -443,6 +488,20 @@ class AuditLogListView(generics.ListAPIView):
             except (ValueError, TypeError, AttributeError):
                 raise ValidationError({"actor": "UUID inválido."})
             qs = qs.filter(actor_id=actor_id)
+        subject = (params.get("subject") or "").strip()
+        if subject:
+            from apps.academic.models import AcademicGroup
+
+            key = _normalize_subject(subject)
+            actor_ids = {
+                user_id
+                for name, user_id in AcademicGroup.objects.values_list(
+                    "course__name", "professor__user_id"
+                )
+                if _normalize_subject(name) == key
+            }
+            # Materia inexistente -> set() vacío -> 0 resultados.
+            qs = qs.filter(actor_id__in=actor_ids)
         q = (params.get("q") or "").strip()
         if q:
             # payload__icontains en PostgreSQL castea el JSON a texto (LIKE).
@@ -468,6 +527,8 @@ class AuditLogListView(generics.ListAPIView):
                     {key: "Formato de fecha inválido, usa AAAA-MM-DD."}
                 )
             qs = qs.filter(**{f"created_at__{lookup}": _day_bounds(day, end=end)})
+        if params.get("ordering") == "actor":
+            qs = qs.order_by("actor_full_name", "-created_at")
         return qs
 
     def list(self, request, *args, **kwargs):
@@ -487,4 +548,14 @@ class AuditLogListView(generics.ListAPIView):
                     last_activity=Max("created_at"),
                 )
             )
+            response.data["options"] = {
+                "event_types": sorted(
+                    AuditLog.objects.exclude(
+                        event_type__in=("login_success", "logout")
+                    )
+                    .values_list("event_type", flat=True)
+                    .distinct()
+                ),
+                "subjects": _subject_options(),
+            }
         return response

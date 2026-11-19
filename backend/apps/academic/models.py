@@ -1,5 +1,5 @@
 import uuid
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 
 
@@ -20,11 +20,39 @@ class ClassStatus(models.TextChoices):
     CANCELLED = "CANCELLED", "Cancelada"
 
 
+class ProgramArea(models.TextChoices):
+    PRESENCIAL = "Presencial", "Presencial"
+    IDEAD = "IDEAD", "IDEAD"
+
+
+class Program(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=150)
+    code = models.CharField(
+        max_length=4,
+        unique=True,
+        validators=[
+            RegexValidator(r"^\d{4}$", message="El código debe tener 4 dígitos (0000–9999).")
+        ],
+        error_messages={"unique": "Ese código ya está registrado."},
+    )
+    area = models.CharField(max_length=20, choices=ProgramArea.choices)
+
+    class Meta:
+        db_table = "programs"
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+
 class Course(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     code = models.CharField(max_length=20, unique=True)
     name = models.CharField(max_length=150)
     description = models.TextField(blank=True, null=True)
+    program = models.ForeignKey(
+        Program, on_delete=models.RESTRICT, related_name="courses", db_column="program_id", null=True, blank=True
+    )
 
     class Meta:
         db_table = "courses"
@@ -41,6 +69,7 @@ class AcademicGroup(models.Model):
     )
     group_code = models.CharField(max_length=10)
     term_period = models.CharField(max_length=20)
+    semester = models.PositiveSmallIntegerField(default=1, validators=[MinValueValidator(1), MaxValueValidator(12)])
 
     class Meta:
         db_table = "academic_groups"

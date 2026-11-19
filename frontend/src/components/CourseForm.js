@@ -1,10 +1,35 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { getPrograms } from "../services/academic";
 
-export default function CourseForm({ initialName = "", initialGroup = 1, submitLabel = "Guardar", onSubmit, onCancel }) {
+export default function CourseForm({
+  initialName = "",
+  initialGroup = 1,
+  initialSemester = 1,
+  initialProgramId = null,
+  submitLabel = "Guardar",
+  onSubmit,
+  onCancel,
+}) {
   const [name, setName] = useState(initialName);
   const [group, setGroup] = useState(initialGroup);
+  const [semester, setSemester] = useState(initialSemester);
+  const [program, setProgram] = useState(initialProgramId == null ? "" : String(initialProgramId));
+  const [programs, setPrograms] = useState([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Carga los programas del admin; si falla solo queda el placeholder.
+  useEffect(() => {
+    let alive = true;
+    getPrograms()
+      .then((data) => {
+        if (alive) setPrograms(data.results || []);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -22,13 +47,26 @@ export default function CourseForm({ initialName = "", initialGroup = 1, submitL
       setError("El número de grupo debe estar entre 1 y 10.");
       return;
     }
+    const semesterNumber = Number(semester);
+    if (!Number.isInteger(semesterNumber) || semesterNumber < 1 || semesterNumber > 12) {
+      setError("El semestre debe estar entre 1 y 12.");
+      return;
+    }
+    // El backend exige programa: sin elegir, no se crea ni se guarda.
+    if (!program) {
+      setError("Debes asignar un programa, un grupo y un semestre para crear el curso.");
+      return;
+    }
     setError("");
     setSaving(true);
     try {
-      await onSubmit(clean, groupNumber);
+      await onSubmit(clean, groupNumber, semesterNumber, program);
     } catch (err) {
       const data = err?.response?.data;
-      setError((data && (data.name?.[0] || data.group_number?.[0] || data.detail)) || "No se pudo guardar el curso.");
+      setError(
+        (data && (data.name?.[0] || data.group_number?.[0] || data.semester?.[0] || data.program?.[0] || data.detail)) ||
+          "No se pudo guardar el curso."
+      );
     } finally {
       setSaving(false);
     }
@@ -58,6 +96,43 @@ export default function CourseForm({ initialName = "", initialGroup = 1, submitL
           {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
             <option key={n} value={n}>
               Grupo {String(n).padStart(2, "0")}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label htmlFor="course-semester" className="mb-1 block text-sm font-medium text-slate-700">
+          Semestre
+        </label>
+        <select
+          id="course-semester"
+          value={semester}
+          onChange={(e) => setSemester(e.target.value)}
+          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
+        >
+          {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+            <option key={n} value={n}>
+              Semestre {n}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label htmlFor="course-program" className="mb-1 block text-sm font-medium text-slate-700">
+          Programa
+        </label>
+        <select
+          id="course-program"
+          value={program}
+          onChange={(e) => setProgram(e.target.value)}
+          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-[#B3200E] focus:outline-none focus:ring-2 focus:ring-[#B3200E]/20"
+        >
+          <option value="" disabled>
+            Selecciona un programa…
+          </option>
+          {programs.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
             </option>
           ))}
         </select>
